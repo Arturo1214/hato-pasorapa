@@ -1,0 +1,117 @@
+<div class="login-shell">
+  <button
+    mat-icon-button
+    class="theme-toggle"
+    aria-label="Cambiar tema"
+    (click)="themeService.toggleTheme()"
+  >
+    <mat-icon>{{ themeService.currentTheme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
+
+  <div class="container-fluid m-0 p-0 h-screen">
+    <div class="row h-screen m-0">
+      <section class="col-12 col-lg-5 login-panel login-container">
+        <div class="login-panel__inner">
+          <div class="brand-block">
+            <div class="brand-mark">H</div>
+            <div>
+              <strong>Hato</strong>
+              <p class="m-0 text-light">Operación local conectada al backend</p>
+            </div>
+          </div>
+
+          <div class="hero-copy">
+            <p class="eyebrow">bo.pasorapa.hato</p>
+            <h1 class="font-xxl text-bold">
+              Gestión operativa <br>
+              <span class="text-primary">para Pasorapa Hato</span>
+            </h1>
+            <p class="font-md text-light">
+              Base Angular limpia, lista para construir módulos, catálogos y flujos conectados al
+              backend sin depender de Keycloak.
+            </p>
+          </div>
+
+          <div class="feature-list">
+            <div class="feature-item">
+              <mat-icon class="text-success">verified_user</mat-icon>
+              <div>
+                <p class="m-0 feature-title">Autenticación propia</p>
+                <p class="m-0 font-xs">Formulario directo contra tu API REST.</p>
+              </div>
+            </div>
+
+            <div class="feature-item">
+              <mat-icon class="text-info">dashboard_customize</mat-icon>
+              <div>
+                <p class="m-0 feature-title">Base reutilizable</p>
+                <p class="m-0 font-xs">Tema, layout, utilidades SCSS y navegación inicial.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="col-12 col-lg-7 login-form-area">
+        <mat-card class="login-card surface-panel">
+          <div class="login-card__header">
+            <p class="eyebrow">Acceso</p>
+            <h2 class="m-0 font-xl text-primary">Iniciar sesión</h2>
+            <p class="m-0">
+              El login queda preparado para consumir `POST /api/auth/login`. Ajusta el endpoint y
+              el shape de respuesta según tu backend real.
+            </p>
+          </div>
+
+          <form [formGroup]="form" class="login-form" (ngSubmit)="submit()">
+            <mat-form-field appearance="outline">
+              <mat-label>Usuario o correo</mat-label>
+              <input matInput formControlName="username" autocomplete="username">
+              <mat-icon matSuffix>person</mat-icon>
+              @if (form.controls.username.invalid && form.controls.username.touched) {
+                <mat-error>El usuario es obligatorio.</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Contraseña</mat-label>
+              <input
+                matInput
+                type="password"
+                formControlName="password"
+                autocomplete="current-password"
+              >
+              <mat-icon matSuffix>lock</mat-icon>
+              @if (form.controls.password.invalid && form.controls.password.touched) {
+                <mat-error>La contraseña es obligatoria.</mat-error>
+              }
+            </mat-form-field>
+
+            @if (loginError()) {
+              <div class="container-border rounded alert-box">
+                <mat-icon class="text-error">error</mat-icon>
+                <div>
+                  <strong>No se pudo iniciar sesión.</strong>
+                  <p class="m-0 font-xs">
+                    Verifica la URL del backend o adapta el contrato del servicio de autenticación.
+                  </p>
+                </div>
+              </div>
+            }
+
+            <button
+              matButton="filled"
+              color="primary"
+              class="submit-button"
+              type="submit"
+              [disabled]="authService.loading()"
+            >
+              <mat-icon>login</mat-icon>
+              {{ authService.loading() ? 'VALIDANDO...' : 'INGRESAR' }}
+            </button>
+          </form>
+        </mat-card>
+      </section>
+    </div>
+  </div>
+</div>

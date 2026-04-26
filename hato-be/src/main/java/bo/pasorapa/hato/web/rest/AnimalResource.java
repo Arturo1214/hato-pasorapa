@@ -1,0 +1,112 @@
+package bo.pasorapa.hato.web.rest;
+
+import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.service.AnimalQueryService;
+import bo.pasorapa.hato.service.AnimalService;
+import bo.pasorapa.hato.service.dto.AnimalCriteria;
+import bo.pasorapa.hato.service.dto.AnimalRequest;
+import bo.pasorapa.hato.service.mapper.AnimalMapper;
+import bo.pasorapa.hato.web.util.AnimalCriteriaDoc;
+import bo.pasorapa.hato.web.util.CriteriaBinder;
+import bo.pasorapa.hato.web.util.PageRequestDoc;
+import bo.pasorapa.hato.web.util.PaginationBinder;
+import bo.pasorapa.hato.web.util.ResponseUtil;
+import jakarta.annotation.security.RolesAllowed;
+import jakarta.validation.Valid;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
+import org.eclipse.microprofile.openapi.annotations.Operation;
+
+@Path("/api/animals")
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
+@RolesAllowed({"ADMIN", "GANADERO"})
+public class AnimalResource {
+
+    private final AnimalService animalService;
+    private final AnimalQueryService animalQueryService;
+    private final AnimalMapper animalMapper;
+
+    public AnimalResource(AnimalService animalService, AnimalQueryService animalQueryService, AnimalMapper animalMapper) {
+        this.animalService = animalService;
+        this.animalQueryService = animalQueryService;
+        this.animalMapper = animalMapper;
+    }
+
+    @POST
+    @RolesAllowed("ADMIN")
+    public Response create(@Valid AnimalRequest request, @Context UriInfo uriInfo) {
+        var result = animalMapper.toResponse(animalService.create(request));
+        return Response.created(uriInfo.getAbsolutePathBuilder().path(String.valueOf(result.id())).build())
+                .entity(result)
+                .build();
+    }
+
+    @PUT
+    @Path("/{id}")
+    @RolesAllowed("ADMIN")
+    public Response update(@PathParam("id") Long id, @Valid AnimalRequest request) {
+        return Response.ok(animalMapper.toResponse(animalService.update(id, request))).build();
+    }
+
+    @DELETE
+    @Path("/{id}")
+    @RolesAllowed("ADMIN")
+    public Response delete(@PathParam("id") Long id) {
+        animalService.delete(id);
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Operation(
+            summary = "Listar animales con filtros y paginación",
+            description = """
+                    Filtros estilo field.operator.
+                    Ejemplos:
+                    - ?id.greaterThan=10
+                    - ?tag.contains=BO-00
+                    - ?category.equals=COW&active.equals=true
+                    - ?admissionDate.greaterThanOrEqual=2024-01-01
+                    Paginación:
+                    - ?page=0&size=20&sort=code,asc
+                    """
+    )
+    public Response getAll(
+            @jakarta.ws.rs.BeanParam AnimalCriteriaDoc criteriaDoc,
+            @jakarta.ws.rs.BeanParam PageRequestDoc pageDoc,
+            @Context UriInfo uriInfo
+    ) {
+        var hints = new CriteriaBinder.BinderHints()
+                .registerEnum("category", AnimalCategory.class);
+        AnimalCriteria criteria = CriteriaBinder.bind(uriInfo, AnimalCriteria.class, hints);
+        var pageable = PaginationBinder.bind(uriInfo);
+
+        var page = animalQueryService.findByCriteriaPaged(criteria, pageable).map(animalMapper::toResponse);
+        return Response.ok(page).build();
+    }
+
+    @GET
+    @Path("/count")
+    public Response count(@Context UriInfo uriInfo) {
+        var hints = new CriteriaBinder.BinderHints()
+                .registerEnum("category", AnimalCategory.class);
+        AnimalCriteria criteria = CriteriaBinder.bind(uriInfo, AnimalCriteria.class, hints);
+        return Response.ok(animalQueryService.countByCriteria(criteria)).build();
+    }
+
+    @GET
+    @Path("/{id}")
+    public Response getOne(@PathParam("id") Long id) {
+        return ResponseUtil.wrapOrNotFound(animalQueryService.findOne(id).map(animalMapper::toResponse));
+    }
+}

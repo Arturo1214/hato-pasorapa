@@ -1,0 +1,35 @@
+<section class="home-grid">
+  <mat-card class="surface-panel hero-card">
+    <p class="eyebrow">Proyecto base</p>
+    <h2>Hato FE ya está listo para crecer</h2>
+    <p>
+      Se dejó una estructura inicial con autenticación propia, layout principal, tema Material,
+      utilidades SCSS y una pantalla de login conectable al backend.
+    </p>
+
+    <div class="hero-actions">
+      <button matButton="filled">Crear primer módulo</button>
+      <button matButton="outlined">Definir endpoints</button>
+    </div>
+  </mat-card>
+
+  <mat-card class="surface-panel info-card">
+    <div class="info-card__icon">
+      <mat-icon>dns</mat-icon>
+    </div>
+    <div>
+      <h3>Configuración actual</h3>
+      <p class="m-0">Dominio: {{ appConfig.config().domain }}</p>
+      <p class="m-0">API base: {{ appConfig.config().apiBaseUrl }}</p>
+    </div>
+  </mat-card>
+
+  <mat-card class="surface-panel checklist-card">
+    <h3>Siguiente paso técnico</h3>
+    <ul>
+      <li>Ajustar `AuthService` al contrato real del backend.</li>
+      <li>Crear features por dominio dentro de `src/app/features`.</li>
+      <li>Agregar interceptores, guards y manejo de permisos según necesidad.</li>
+    </ul>
+  </mat-card>
+</section>

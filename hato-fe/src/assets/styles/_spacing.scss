@@ -1,0 +1,169 @@
+@use 'sass:map';
+@use 'sass:meta';
+@use 'sass:math';
+
+$space-base: 4px;
+$spacers: (
+  0: 0,
+  1: $space-base,
+  2: $space-base * 2,
+  3: $space-base * 3,
+  4: $space-base * 4,
+  5: $space-base * 5,
+  6: $space-base * 6,
+  8: $space-base * 8,
+  10: $space-base * 10,
+  12: $space-base * 12,
+  16: $space-base * 16,
+  auto: auto,
+);
+
+$breakpoints: (
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+  xxl: 1400px,
+);
+
+$grid-columns: 12;
+$grid-gutter-width: 1.5rem;
+
+@mixin media-up($breakpoint) {
+  @if map.has-key($breakpoints, $breakpoint) {
+    @media (min-width: map.get($breakpoints, $breakpoint)) {
+      @content;
+    }
+  } @else {
+    @content;
+  }
+}
+
+$utilities: (
+  p: padding,
+  pt: padding-top,
+  pb: padding-bottom,
+  pl: padding-left,
+  pr: padding-right,
+  px: ('padding-left', 'padding-right'),
+  py: ('padding-top', 'padding-bottom'),
+  m: margin,
+  mt: margin-top,
+  mb: margin-bottom,
+  ml: margin-left,
+  mr: margin-right,
+  mx: ('margin-left', 'margin-right'),
+  my: ('margin-top', 'margin-bottom'),
+  gap: gap,
+  g: gap,
+);
+
+@each $class, $property in $utilities {
+  @each $size-name, $size-value in $spacers {
+    .#{$class}-#{$size-name} {
+      @if meta.type-of($property) == 'list' {
+        @each $prop in $property {
+          #{$prop}: $size-value !important;
+        }
+      } @else {
+        #{$property}: $size-value !important;
+      }
+    }
+  }
+}
+
+@each $breakpoint, $width in $breakpoints {
+  @include media-up($breakpoint) {
+    @each $class, $property in $utilities {
+      @each $size-name, $size-value in $spacers {
+        .#{$class}-#{$breakpoint}-#{$size-name} {
+          @if meta.type-of($property) == 'list' {
+            @each $prop in $property {
+              #{$prop}: $size-value !important;
+            }
+          } @else {
+            #{$property}: $size-value !important;
+          }
+        }
+      }
+    }
+  }
+}
+
+.container,
+.container-fluid {
+  width: 100%;
+  padding-right: calc($grid-gutter-width * 0.5);
+  padding-left: calc($grid-gutter-width * 0.5);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: calc($grid-gutter-width * -1);
+  margin-right: calc($grid-gutter-width * -0.5);
+  margin-left: calc($grid-gutter-width * -0.5);
+
+  > * {
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-right: calc($grid-gutter-width * 0.5);
+    padding-left: calc($grid-gutter-width * 0.5);
+    margin-top: $grid-gutter-width;
+  }
+}
+
+.col {
+  flex: 1 0 0%;
+}
+
+@for $i from 1 through $grid-columns {
+  .col-#{$i} {
+    flex: 0 0 auto;
+    width: math.percentage(math.div($i, $grid-columns));
+  }
+}
+
+@each $breakpoint, $width in $breakpoints {
+  @include media-up($breakpoint) {
+    .col-#{$breakpoint} {
+      flex: 1 0 0%;
+    }
+
+    @for $i from 1 through $grid-columns {
+      .col-#{$breakpoint}-#{$i} {
+        flex: 0 0 auto;
+        width: math.percentage(math.div($i, $grid-columns));
+      }
+    }
+  }
+}
+
+.d-flex,
+.flex {
+  display: flex !important;
+}
+
+.flex-col {
+  flex-direction: column !important;
+}
+
+.items-center {
+  align-items: center !important;
+}
+
+.justify-between {
+  justify-content: space-between !important;
+}
+
+.justify-center {
+  justify-content: center !important;
+}
+
+.h-screen {
+  min-height: 100vh !important;
+}

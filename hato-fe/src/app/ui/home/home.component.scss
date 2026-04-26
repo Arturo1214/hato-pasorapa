@@ -1,0 +1,75 @@
+.home-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(12, 1fr);
+}
+
+.hero-card,
+.info-card,
+.checklist-card {
+  border-radius: 24px;
+  padding: 24px;
+}
+
+.hero-card {
+  grid-column: span 8;
+}
+
+.info-card,
+.checklist-card {
+  grid-column: span 4;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mat-sys-primary);
+}
+
+.hero-card h2,
+.info-card h3,
+.checklist-card h3 {
+  margin-top: 0;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.info-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.info-card__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: var(--mat-sys-primary-container);
+}
+
+.checklist-card ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.checklist-card li + li {
+  margin-top: 10px;
+}
+
+@media (max-width: 991px) {
+  .hero-card,
+  .info-card,
+  .checklist-card {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,0 +1,32 @@
+<header class="header-shell">
+  <mat-toolbar class="app-header surface-panel">
+    <div class="left-header">
+      <button mat-icon-button color="primary" class="menu-button" (click)="toggleSidebar.emit()">
+        <mat-icon>menu</mat-icon>
+      </button>
+
+      <div class="page-meta">
+        <p class="eyebrow">bo.pasorapa.hato</p>
+        <h1 class="title">{{ routeData().title }}</h1>
+        <p class="subtitle">{{ routeData().subtitle }}</p>
+      </div>
+    </div>
+
+    <div class="right-header">
+      <div class="user-chip">
+        <span class="user-chip__label">Sesión</span>
+        <strong>{{ greeting() }}</strong>
+      </div>
+
+      <button mat-icon-button matTooltip="Cambiar tema" (click)="themeService.toggleTheme()">
+        <mat-icon>{{
+          themeService.currentTheme() === 'dark' ? 'light_mode' : 'dark_mode'
+        }}</mat-icon>
+      </button>
+
+      <button mat-icon-button color="warn" matTooltip="Cerrar sesión" (click)="authService.logout()">
+        <mat-icon>logout</mat-icon>
+      </button>
+    </div>
+  </mat-toolbar>
+</header>

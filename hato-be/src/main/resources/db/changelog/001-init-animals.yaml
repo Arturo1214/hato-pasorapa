@@ -1,0 +1,101 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-animals
+      author: codex
+      changes:
+        - createTable:
+            tableName: animals
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: code
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: tag
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: category
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: admission_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: weight_kg
+                  type: NUMERIC(10,2)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_category_active
+            columns:
+              - column:
+                  name: category
+              - column:
+                  name: active
+        - insert:
+            tableName: animals
+            columns:
+              - column:
+                  name: code
+                  value: HAT-001
+              - column:
+                  name: tag
+                  value: BO-0001
+              - column:
+                  name: category
+                  value: COW
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: admission_date
+                  valueComputed: "DATE '2024-01-10'"
+              - column:
+                  name: weight_kg
+                  valueNumeric: 420.50
+        - insert:
+            tableName: animals
+            columns:
+              - column:
+                  name: code
+                  value: HAT-002
+              - column:
+                  name: tag
+                  value: BO-0002
+              - column:
+                  name: category
+                  value: BULL
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: admission_date
+                  valueComputed: "DATE '2024-03-20'"
+              - column:
+                  name: weight_kg
+                  valueNumeric: 610.00

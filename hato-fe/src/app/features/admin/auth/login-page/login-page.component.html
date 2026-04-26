@@ -1,0 +1,57 @@
+<div class="auth-shell">
+  <button
+    mat-icon-button
+    class="theme-toggle"
+    aria-label="Cambiar tema"
+    (click)="themeService.toggleTheme()"
+  >
+    <mat-icon>{{ themeService.currentTheme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+  </button>
+
+  <mat-card class="auth-card surface-panel">
+    <p class="eyebrow">Acceso seguro</p>
+    <h1>Iniciar sesión</h1>
+    <p class="support-copy">
+      Entrá con tu usuario o correo y una contraseña válida. {{ allowedRolesMessage }}
+    </p>
+
+    <form [formGroup]="form" class="auth-form" (ngSubmit)="submit()">
+      <mat-form-field appearance="outline">
+        <mat-label>Usuario o correo *</mat-label>
+        <input matInput formControlName="username" autocomplete="username" required />
+        <mat-icon matSuffix>person</mat-icon>
+        <mat-hint>Usá tu usuario registrado o tu correo.</mat-hint>
+        <app-form-errors [control]="form.controls.username" [messages]="messages.username" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Contraseña *</mat-label>
+        <input
+          matInput
+          type="password"
+          formControlName="password"
+          autocomplete="current-password"
+          required
+        />
+        <mat-icon matSuffix>lock</mat-icon>
+        <mat-hint>La contraseña distingue mayúsculas y números.</mat-hint>
+        <app-form-errors [control]="form.controls.password" [messages]="messages.password" />
+      </mat-form-field>
+
+      @if (feedbackMessage()) {
+        <div class="feedback-box" role="alert">
+          <mat-icon>error</mat-icon>
+          <span>{{ feedbackMessage() }}</span>
+        </div>
+      }
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || authService.loading()">
+        {{ authService.loading() ? 'Validando…' : 'Ingresar' }}
+      </button>
+    </form>
+
+    <a class="helper-link" routerLink="/admin/bootstrap">
+      ¿Todavía no existe un administrador? Ejecutá el bootstrap inicial.
+    </a>
+  </mat-card>
+</div>

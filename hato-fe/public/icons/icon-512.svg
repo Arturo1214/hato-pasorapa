@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title>Hato icon 512</title>
+  <desc>Ícono instalable grande de Hato para shell offline.</desc>
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <path d="M150 362V150h74v64h64v-64h74v212h-74v-74h-64v74h-74Z" fill="#f8fafc"/>
+</svg>

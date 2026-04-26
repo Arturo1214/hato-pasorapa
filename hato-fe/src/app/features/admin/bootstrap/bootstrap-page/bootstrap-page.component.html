@@ -1,0 +1,51 @@
+<div class="bootstrap-shell">
+  <mat-card class="bootstrap-card surface-panel">
+    <p class="eyebrow">Bootstrap inicial</p>
+    <h1>Crear primer administrador</h1>
+    <p class="support-copy">
+      Esta pantalla solo sirve para el alta inicial. {{ passwordPolicyMessage }}
+    </p>
+
+    <form [formGroup]="form" class="bootstrap-form" (ngSubmit)="submit()">
+      <mat-form-field appearance="outline">
+        <mat-label>Usuario administrador *</mat-label>
+        <input matInput formControlName="username" autocomplete="username" required />
+        <app-form-errors [control]="form.controls.username" [messages]="messages.username" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Correo *</mat-label>
+        <input matInput type="email" formControlName="email" autocomplete="email" required />
+        <mat-hint>Usá un correo real para recuperar acceso y auditoría.</mat-hint>
+        <app-form-errors [control]="form.controls.email" [messages]="messages.email" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Nombre visible *</mat-label>
+        <input matInput formControlName="displayName" required />
+        <mat-hint>Este nombre aparece en encabezados y trazabilidad administrativa.</mat-hint>
+        <app-form-errors [control]="form.controls.displayName" [messages]="messages.displayName" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Contraseña *</mat-label>
+        <input matInput type="password" formControlName="password" autocomplete="new-password" required />
+        <mat-hint>{{ passwordPolicyMessage }}</mat-hint>
+        <app-form-errors [control]="form.controls.password" [messages]="messages.password" />
+      </mat-form-field>
+
+      @if (feedbackMessage()) {
+        <div class="feedback-box" role="alert" aria-live="assertive">
+          <mat-icon>warning</mat-icon>
+          <span>{{ feedbackMessage() }}</span>
+        </div>
+      }
+
+      <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || authService.loading()">
+        {{ authService.loading() ? 'Creando…' : 'Crear administrador' }}
+      </button>
+    </form>
+
+    <a routerLink="/login">Volver al login</a>
+  </mat-card>
+</div>

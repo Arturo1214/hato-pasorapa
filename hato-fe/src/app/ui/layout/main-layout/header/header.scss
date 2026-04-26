@@ -1,0 +1,82 @@
+:host {
+  display: block;
+  padding: 24px 0;
+}
+
+.app-header {
+  min-height: 88px;
+  border-radius: 24px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.left-header,
+.right-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.right-header {
+  margin-left: auto;
+}
+
+.menu-button {
+  display: none;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mat-sys-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin: 6px 0 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.user-chip {
+  display: grid;
+  gap: 2px;
+  min-width: 160px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 55%, transparent 45%);
+}
+
+.user-chip__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+@media (max-width: 767px) {
+  .app-header {
+    align-items: flex-start;
+    padding: 16px;
+  }
+
+  .menu-button {
+    display: inline-flex;
+  }
+
+  .user-chip {
+    display: none;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+  }
+}

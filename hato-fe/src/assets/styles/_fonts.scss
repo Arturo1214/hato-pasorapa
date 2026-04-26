@@ -1,0 +1,59 @@
+@font-face {
+  font-family: 'Manrope';
+  src: url('/assets/fonts/Manrope.ttf') format('truetype');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+  --color-muted: #6b7280;
+}
+
+.text-primary {
+  color: var(--mat-sys-primary) !important;
+}
+
+.text-success {
+  color: var(--color-success) !important;
+}
+
+.text-error {
+  color: var(--color-error) !important;
+}
+
+.text-info {
+  color: var(--color-info) !important;
+}
+
+.text-light {
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.text-bold {
+  font-weight: 700 !important;
+}
+
+.font-xxl {
+  font-size: clamp(2.4rem, 5vw, 3.5rem) !important;
+  line-height: 1 !important;
+}
+
+.font-xl {
+  font-size: 2rem !important;
+  line-height: 1.1 !important;
+}
+
+.font-md {
+  font-size: 1.125rem !important;
+  line-height: 1.5 !important;
+}
+
+.font-xs {
+  font-size: 0.75rem !important;
+  line-height: 1.4 !important;
+}

@@ -1,0 +1,60 @@
+@use '@angular/material' as mat;
+
+@function _high-contrast-value($light, $dark, $theme-type) {
+  @if ($theme-type == light) {
+    @return $light;
+  }
+  @if ($theme-type == dark) {
+    @return $dark;
+  }
+
+  @return light-dark(#{$light}, #{$dark});
+}
+
+@mixin high-contrast-overrides($theme-type) {
+  @include mat.theme-overrides(
+    (
+      primary: _high-contrast-value(#004884, #dbe9ff, $theme-type),
+      on-primary: _high-contrast-value(#ffffff, #001122, $theme-type),
+      tertiary: _high-contrast-value(#006d36, #bcf5c8, $theme-type),
+      on-tertiary: _high-contrast-value(#ffffff, #001c0a, $theme-type),
+      background: _high-contrast-value(#f7fafc, #0e1821, $theme-type),
+      on-background: _high-contrast-value(#0f1720, #e7edf3, $theme-type),
+      surface: _high-contrast-value(#f7fafc, #0e1821, $theme-type),
+      on-surface: _high-contrast-value(#11181f, #ffffff, $theme-type),
+      outline: _high-contrast-value(#4d5a65, #d4dce4, $theme-type),
+      error: _high-contrast-value(#b3261e, #ffb4ab, $theme-type),
+      on-error: _high-contrast-value(#ffffff, #000000, $theme-type),
+    )
+  );
+}
+
+$app-typography: (
+  plain-family: 'Manrope, sans-serif',
+  brand-family: 'Manrope, sans-serif',
+  bold-weight: 700,
+  medium-weight: 500,
+  regular-weight: 400,
+);
+
+$light-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: light,
+      primary: mat.$azure-palette,
+      tertiary: mat.$green-palette,
+    ),
+    typography: $app-typography,
+  )
+);
+
+$dark-theme: mat.define-theme(
+  (
+    color: (
+      theme-type: dark,
+      primary: mat.$azure-palette,
+      tertiary: mat.$green-palette,
+    ),
+    typography: $app-typography,
+  )
+);

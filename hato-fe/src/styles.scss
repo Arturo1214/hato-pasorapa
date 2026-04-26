@@ -1,0 +1,86 @@
+@use '@angular/material' as mat;
+
+@use './assets/styles/_fonts' as fonts;
+@use './assets/styles/_theme-colors' as theme;
+@use './assets/styles/_spacing' as spacing;
+
+@include mat.core();
+
+html {
+  height: 100%;
+  color-scheme: light dark;
+
+  @include mat.all-component-themes(theme.$light-theme);
+  @include mat.color-variants-backwards-compatibility(theme.$light-theme);
+  @include mat.system-level-typography(theme.$light-theme);
+  @include mat.system-level-colors(theme.$light-theme);
+  @include mat.typography-hierarchy(theme.$light-theme);
+  @include theme.high-contrast-overrides(light);
+  font-family: 'Manrope', sans-serif;
+}
+
+html.dark-theme {
+  color-scheme: dark;
+  @include mat.all-component-themes(theme.$dark-theme);
+  @include mat.color-variants-backwards-compatibility(theme.$dark-theme);
+  @include mat.system-level-colors(theme.$dark-theme);
+  @include mat.typography-hierarchy(theme.$dark-theme);
+  @include theme.high-contrast-overrides(dark);
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(48, 124, 172, 0.14), transparent 22rem),
+    linear-gradient(180deg, #f5f8fb 0%, #eef4f8 100%);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+html.dark-theme body {
+  background:
+    radial-gradient(circle at top left, rgba(161, 201, 255, 0.12), transparent 24rem),
+    linear-gradient(180deg, #07131d 0%, #0e1821 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+.sidebar-container {
+  color-scheme: dark;
+
+  @include mat.all-component-themes(theme.$dark-theme);
+  @include mat.system-level-colors(theme.$dark-theme);
+  @include mat.typography-hierarchy(theme.$dark-theme);
+  @include theme.high-contrast-overrides(dark);
+}
+
+.login-container {
+  color-scheme: dark;
+
+  @include mat.all-component-themes(theme.$dark-theme);
+  @include mat.system-level-colors(theme.$dark-theme);
+  @include mat.typography-hierarchy(theme.$dark-theme);
+  @include theme.high-contrast-overrides(dark);
+}
+
+.container-border {
+  border: 1px solid var(--mat-divider-color);
+
+  &.rounded {
+    border-radius: 1rem;
+  }
+}
+
+.surface-panel {
+  background: color-mix(in srgb, var(--mat-sys-surface) 88%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-outline-variant) 55%, transparent 45%);
+  box-shadow: 0 18px 50px rgba(15, 58, 90, 0.08);
+}

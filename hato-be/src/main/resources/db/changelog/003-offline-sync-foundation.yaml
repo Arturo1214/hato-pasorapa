@@ -1,0 +1,108 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-offline-sync-foundation
+      author: openai
+      changes:
+        - addColumn:
+            tableName: animals
+            columns:
+              - column:
+                  name: uuid
+                  type: UUID
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+              - column:
+                  name: last_synced_at
+                  type: TIMESTAMP
+        - sql:
+            dbms: h2
+            sql: UPDATE animals SET uuid = RANDOM_UUID() WHERE uuid IS NULL;
+        - sql:
+            dbms: postgresql
+            sql: UPDATE animals SET uuid = md5(random()::text || clock_timestamp()::text)::uuid WHERE uuid IS NULL;
+        - sql:
+            sql: UPDATE animals SET version = COALESCE(version, 0);
+        - sql:
+            sql: UPDATE animals SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) WHERE updated_at IS NULL;
+        - addNotNullConstraint:
+            tableName: animals
+            columnName: uuid
+            columnDataType: UUID
+        - addNotNullConstraint:
+            tableName: animals
+            columnName: version
+            columnDataType: BIGINT
+        - addNotNullConstraint:
+            tableName: animals
+            columnName: updated_at
+            columnDataType: TIMESTAMP
+        - addUniqueConstraint:
+            tableName: animals
+            columnNames: uuid
+            constraintName: uk_animals_uuid
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_updated_at_uuid
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: uuid
+        - createTable:
+            tableName: sync_operation_receipts
+            columns:
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: entity_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: entity_id
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: classification
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: server_version
+                  type: INTEGER
+              - column:
+                  name: client_version
+                  type: INTEGER
+              - column:
+                  name: reason
+                  type: VARCHAR(255)
+              - column:
+                  name: resolution_hint
+                  type: VARCHAR(80)
+              - column:
+                  name: server_state_json
+                  type: CLOB
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: sync_operation_receipts
+            indexName: idx_sync_operation_receipts_entity
+            columns:
+              - column:
+                  name: entity_type
+              - column:
+                  name: entity_id

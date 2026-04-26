@@ -1,0 +1,48 @@
+<aside class="sidebar-container">
+  <div class="logo-area">
+    <div class="brand-mark">H</div>
+    <div class="brand-copy">
+      <strong>Hato FE</strong>
+      <span>Base Angular 21</span>
+    </div>
+  </div>
+
+  <div class="domain-card">
+    <span class="domain-card__label">Dominio</span>
+    <strong>bo.pasorapa.hato</strong>
+    <p>Frontend base sin lógica de negocio, listo para conectar al backend.</p>
+  </div>
+
+  <mat-divider />
+
+  <mat-nav-list class="nav-list">
+    @for (item of menuItems(); track item.route) {
+      <a
+        mat-list-item
+        [routerLink]="item.route"
+        routerLinkActive="active-link"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="menu-item"
+        (click)="navigate.emit()"
+      >
+        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+        <span matListItemTitle>{{ item.label }}</span>
+        <span matListItemLine>{{ item.description }}</span>
+      </a>
+    }
+  </mat-nav-list>
+
+  <div class="user-profile">
+    <div class="user-avatar">
+      {{ (authService.currentUser()?.displayName || 'H')!.slice(0, 1).toUpperCase() }}
+    </div>
+    <div class="user-info">
+      <p class="user-name">{{ authService.currentUser()?.displayName ?? 'Usuario' }}</p>
+      <p class="user-role">{{ authService.currentUser()?.role ?? 'Sin rol' }}</p>
+    </div>
+
+    <button mat-icon-button color="warn" (click)="authService.logout()" matTooltip="Cerrar sesión">
+      <mat-icon>logout</mat-icon>
+    </button>
+  </div>
+</aside>

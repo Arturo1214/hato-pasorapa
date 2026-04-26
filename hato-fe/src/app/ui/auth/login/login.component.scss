@@ -1,0 +1,129 @@
+.login-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 3;
+}
+
+.login-panel {
+  background:
+    radial-gradient(circle at top left, rgba(117, 174, 244, 0.18), transparent 20rem),
+    linear-gradient(180deg, rgba(8, 24, 36, 0.96) 0%, rgba(8, 20, 31, 0.98) 100%);
+  color: #f8fafc;
+}
+
+.login-panel__inner,
+.login-form-area {
+  min-height: 100vh;
+}
+
+.login-panel__inner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 56px;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand-mark {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #1961a1 0%, #00a756 100%);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.hero-copy {
+  display: grid;
+  gap: 20px;
+  max-width: 480px;
+}
+
+.eyebrow {
+  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.feature-list {
+  display: grid;
+  gap: 18px;
+}
+
+.feature-item {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.feature-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.login-form-area {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.login-card {
+  width: min(100%, 460px);
+  padding: 32px;
+  border-radius: 28px;
+}
+
+.login-card__header,
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.alert-box {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 14px 16px;
+  align-items: start;
+}
+
+.submit-button {
+  min-height: 52px;
+}
+
+@media (max-width: 991px) {
+  .login-panel__inner,
+  .login-form-area {
+    min-height: auto;
+  }
+
+  .login-panel__inner {
+    padding: 48px 24px;
+  }
+
+  .login-form-area {
+    padding: 24px 16px 40px;
+  }
+
+  .login-card {
+    border-radius: 22px;
+    padding: 24px;
+  }
+}

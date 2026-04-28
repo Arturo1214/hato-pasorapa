@@ -44,6 +44,16 @@ docker compose up -d
 docker compose down
 ```
 
+## Credencial inicial de instalación
+
+Liquibase siembra un usuario administrador inicial para arranque/instalación:
+
+- username: `root-admin`
+- password: `RootAdmin9`
+- email: `root-admin@hato.bo`
+
+Usala solo para el primer acceso y cambiala/rotala inmediatamente en ambientes reales.
+
 ## JWT para desarrollo
 
 Se incluyó un endpoint público para emitir tokens de desarrollo:

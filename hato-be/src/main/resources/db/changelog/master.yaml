@@ -21,3 +21,5 @@ databaseChangeLog:
       file: db/changelog/010-offline-conflict-resolution-v2.yaml
   - include:
       file: db/changelog/011-integral-herd-management-v2.yaml
+  - include:
+      file: db/changelog/012-default-admin-seed.yaml

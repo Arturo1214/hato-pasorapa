@@ -1,0 +1,49 @@
+databaseChangeLog:
+  - changeSet:
+      id: 012-seed-default-admin-user
+      author: openai
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - sqlCheck:
+            expectedResult: 0
+            sql: >-
+              SELECT COUNT(*)
+              FROM users
+              WHERE lower(username) = 'root-admin'
+                 OR lower(email) = 'root-admin@hato.bo'
+                 OR (role = 'ADMIN' AND status = 'ACTIVE')
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  value: 9b4c6fe5-df4c-458a-8f73-c6d6d4973c9b
+              - column:
+                  name: username
+                  value: root-admin
+              - column:
+                  name: email
+                  value: root-admin@hato.bo
+              - column:
+                  name: display_name
+                  value: Root Admin
+              - column:
+                  name: password_hash
+                  value: 65536:ABEiM0RVZneImaq7zN3u/w==:YW6RrW/uALg2GQ5A8cowtEhlo1h9Yco4gB1Pq4NxV6c=
+              - column:
+                  name: role
+                  value: ADMIN
+              - column:
+                  name: status
+                  value: ACTIVE
+              - column:
+                  name: version
+                  valueNumeric: 0
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  valueComputed: CURRENT_TIMESTAMP

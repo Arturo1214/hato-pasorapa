@@ -12,6 +12,7 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -34,11 +35,13 @@ class AdminUsersResourceTest {
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            operationLogRepository.deleteAll();
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("root-admin", "root-admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "RootAdmin9"));
             userRepository.persist(buildUser("campo-user", "campo@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "CampoUser9"));
         });

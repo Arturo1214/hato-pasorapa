@@ -22,6 +22,9 @@ public class SyncOperationReceipt {
     @Column(name = "entity_id", nullable = false, length = 80)
     private String entityId;
 
+    @Column(name = "operation_type", length = 40)
+    private String operationType;
+
     @Column(name = "classification", nullable = false, length = 40)
     private String classification;
 
@@ -39,6 +42,9 @@ public class SyncOperationReceipt {
 
     @Column(name = "server_state_json", columnDefinition = "TEXT")
     private String serverStateJson;
+
+    @Column(name = "payload_json", columnDefinition = "TEXT")
+    private String payloadJson;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -82,6 +88,14 @@ public class SyncOperationReceipt {
         this.classification = classification;
     }
 
+    public String getOperationType() {
+        return operationType;
+    }
+
+    public void setOperationType(String operationType) {
+        this.operationType = operationType;
+    }
+
     public Integer getServerVersion() {
         return serverVersion;
     }
@@ -120,6 +134,14 @@ public class SyncOperationReceipt {
 
     public void setServerStateJson(String serverStateJson) {
         this.serverStateJson = serverStateJson;
+    }
+
+    public String getPayloadJson() {
+        return payloadJson;
+    }
+
+    public void setPayloadJson(String payloadJson) {
+        this.payloadJson = payloadJson;
     }
 
     public LocalDateTime getCreatedAt() {

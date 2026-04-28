@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 
 @QuarkusTest
 class AdminFoundationIntegrationTest {
@@ -30,12 +31,13 @@ class AdminFoundationIntegrationTest {
     @Inject
     OperationLogRepository operationLogRepository;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            operationLogRepository.deleteAll();
-            ganaderoRepository.deleteAll();
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
         });
     }
 

@@ -1,0 +1,94 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-animal-health-events-v1
+      author: pasorapa
+      changes:
+        - createTable:
+            tableName: animal_health_events
+            columns:
+              - column:
+                  name: event_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_animal_health_events
+                    nullable: false
+              - column:
+                  name: animal_uuid
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: health_event_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: occurred_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: client_created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notes
+                  type: VARCHAR(500)
+              - column:
+                  name: performed_by_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_channel
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metadata_json
+                  type: CLOB
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: animal_health_events
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_animal_health_events_animal_uuid
+        - addUniqueConstraint:
+            tableName: animal_health_events
+            columnNames: operation_id
+            constraintName: uk_animal_health_events_operation_id
+        - createIndex:
+            tableName: animal_health_events
+            indexName: idx_animal_health_events_animal_occurred_event
+            columns:
+              - column:
+                  name: animal_uuid
+              - column:
+                  name: occurred_at
+              - column:
+                  name: event_id
+        - createIndex:
+            tableName: animal_health_events
+            indexName: idx_animal_health_events_updated_event
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: event_id

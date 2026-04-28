@@ -7,12 +7,16 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record AnimalResponse(
-        Long id,
         UUID uuid,
-        String code,
-        String tag,
+        UUID ownerGanaderoId,
+        UUID motherAnimalUuid,
+        UUID fatherAnimalUuid,
+        String arete,
+        String marca,
+        String tatuaje,
         AnimalCategory category,
         Boolean active,
+        LocalDate birthDate,
         LocalDate admissionDate,
         BigDecimal weightKg,
         LocalDateTime createdAt,

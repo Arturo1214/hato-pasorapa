@@ -1,0 +1,102 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-animal-core-management-v1
+      author: openai
+      changes:
+        - insert:
+            tableName: ganaderos
+            columns:
+              - column:
+                  name: id
+                  value: 00000000-0000-0000-0000-000000000004
+              - column:
+                  name: business_identifier
+                  value: MIG-ANIMAL-OWNER
+              - column:
+                  name: name
+                  value: Migración animal owner
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: version
+                  valueNumeric: 0
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - addColumn:
+            tableName: animals
+            columns:
+              - column:
+                  name: owner_ganadero_id
+                  type: UUID
+              - column:
+                  name: arete
+                  type: VARCHAR(80)
+              - column:
+                  name: marca
+                  type: VARCHAR(80)
+              - column:
+                  name: tatuaje
+                  type: VARCHAR(80)
+              - column:
+                  name: arete_normalized
+                  type: VARCHAR(80)
+              - column:
+                  name: marca_normalized
+                  type: VARCHAR(80)
+              - column:
+                  name: tatuaje_normalized
+                  type: VARCHAR(80)
+        - sql:
+            sql: |
+              UPDATE animals
+              SET owner_ganadero_id = '00000000-0000-0000-0000-000000000004'
+              WHERE owner_ganadero_id IS NULL;
+        - sql:
+            sql: |
+              UPDATE animals
+              SET arete = COALESCE(arete, tag),
+                  marca = COALESCE(marca, code)
+              WHERE arete IS NULL OR marca IS NULL;
+        - sql:
+            sql: |
+              UPDATE animals
+              SET arete_normalized = CASE WHEN arete IS NULL THEN NULL ELSE lower(trim(arete)) END,
+                  marca_normalized = CASE WHEN marca IS NULL THEN NULL ELSE lower(trim(marca)) END,
+                  tatuaje_normalized = CASE WHEN tatuaje IS NULL THEN NULL ELSE lower(trim(tatuaje)) END;
+        - addNotNullConstraint:
+            tableName: animals
+            columnName: owner_ganadero_id
+            columnDataType: UUID
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: owner_ganadero_id
+            referencedTableName: ganaderos
+            referencedColumnNames: id
+            constraintName: fk_animals_owner_ganadero
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_owner_ganadero
+            columns:
+              - column:
+                  name: owner_ganadero_id
+        - addUniqueConstraint:
+            tableName: animals
+            columnNames: arete_normalized
+            constraintName: uk_animals_arete_normalized
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_marca_normalized
+            columns:
+              - column:
+                  name: marca_normalized
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_tatuaje_normalized
+            columns:
+              - column:
+                  name: tatuaje_normalized

@@ -1,0 +1,130 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-admin-notifications-v1
+      author: opencode
+      changes:
+        - createTable:
+            tableName: admin_notifications
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: body
+                  type: VARCHAR(2000)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: targeting_mode
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: include_user_ids_json
+                  type: VARCHAR(4000)
+              - column:
+                  name: exclude_user_ids_json
+                  type: VARCHAR(4000)
+              - column:
+                  name: recipient_count
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: published_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: admin_notification_recipients
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: notification_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: recipient_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: admin_notification_recipients
+            baseColumnNames: notification_id
+            constraintName: fk_admin_notification_recipients_notification
+            referencedTableName: admin_notifications
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: admin_notifications
+            baseColumnNames: created_by_user_id
+            constraintName: fk_admin_notifications_created_by_user
+            referencedTableName: users
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: admin_notification_recipients
+            baseColumnNames: recipient_user_id
+            constraintName: fk_admin_notification_recipients_user
+            referencedTableName: users
+            referencedColumnNames: id
+        - addUniqueConstraint:
+            tableName: admin_notification_recipients
+            columnNames: notification_id, recipient_user_id
+            constraintName: uk_admin_notification_recipient_once
+        - createIndex:
+            tableName: admin_notifications
+            indexName: idx_admin_notifications_updated_id
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: id
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_pull
+            columns:
+              - column:
+                  name: recipient_user_id
+              - column:
+                  name: updated_at
+              - column:
+                  name: notification_id

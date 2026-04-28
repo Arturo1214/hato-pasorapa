@@ -7,6 +7,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -24,10 +25,13 @@ class AuthResourceTest {
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("admin", "admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "Admin123"));
             userRepository.persist(buildUser("ganadero", "ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
             userRepository.persist(buildUser("bloqueado", "blocked@hato.bo", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));
@@ -49,6 +53,7 @@ class AuthResourceTest {
                 .then()
                 .statusCode(200)
                 .body("accessToken", org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankOrNullString()))
+                .body("expiresInSeconds", equalTo(28800))
                 .body("user.username", equalTo("admin"))
                 .body("user.role", equalTo("ADMIN"))
                 .body("user.status", equalTo("ACTIVE"));

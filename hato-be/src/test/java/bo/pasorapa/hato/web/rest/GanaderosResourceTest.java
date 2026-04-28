@@ -9,9 +9,12 @@ import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -32,17 +35,24 @@ class GanaderosResourceTest {
     GanaderoRepository ganaderoRepository;
 
     @Inject
+    AnimalRepository animalRepository;
+
+    @Inject
+    AnimalEventRepository animalEventRepository;
+
+    @Inject
     OperationLogRepository operationLogRepository;
 
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            operationLogRepository.deleteAll();
-            ganaderoRepository.deleteAll();
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("root-admin", Role.ADMIN, "RootAdmin9"));
         });
     }

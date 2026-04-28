@@ -1,0 +1,99 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-animal-images-local-storage-v1
+      author: opencode
+      changes:
+        - createTable:
+            tableName: animal_images
+            columns:
+              - column:
+                  name: image_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: animal_uuid
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uk_animal_images_operation_id
+              - column:
+                  name: file_name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mime_type
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: size_bytes
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: checksum_sha256
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: relative_path
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: thumbnail_ref
+                  type: VARCHAR(512)
+              - column:
+                  name: captured_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_channel
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: animal_images
+            baseColumnNames: animal_uuid
+            constraintName: fk_animal_images_animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            onDelete: CASCADE
+        - createIndex:
+            tableName: animal_images
+            indexName: idx_animal_images_animal_captured_image
+            columns:
+              - column:
+                  name: animal_uuid
+              - column:
+                  name: captured_at
+              - column:
+                  name: image_id
+        - createIndex:
+            tableName: animal_images
+            indexName: idx_animal_images_updated_image
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: image_id

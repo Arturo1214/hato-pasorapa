@@ -3,6 +3,7 @@ package bo.pasorapa.hato.web.rest;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.service.AnimalQueryService;
 import bo.pasorapa.hato.service.AnimalService;
+import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.dto.AnimalCriteria;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
 import bo.pasorapa.hato.service.mapper.AnimalMapper;
@@ -25,6 +26,7 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
+import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 
 @Path("/api/animals")
@@ -47,23 +49,23 @@ public class AnimalResource {
     @RolesAllowed("ADMIN")
     public Response create(@Valid AnimalRequest request, @Context UriInfo uriInfo) {
         var result = animalMapper.toResponse(animalService.create(request));
-        return Response.created(uriInfo.getAbsolutePathBuilder().path(String.valueOf(result.id())).build())
+        return Response.created(uriInfo.getAbsolutePathBuilder().path(String.valueOf(result.uuid())).build())
                 .entity(result)
                 .build();
     }
 
     @PUT
-    @Path("/{id}")
+    @Path("/{uuid}")
     @RolesAllowed("ADMIN")
-    public Response update(@PathParam("id") Long id, @Valid AnimalRequest request) {
-        return Response.ok(animalMapper.toResponse(animalService.update(id, request))).build();
+    public Response update(@PathParam("uuid") UUID uuid, @Valid AnimalRequest request) {
+        return Response.ok(animalMapper.toResponse(animalService.update(uuid, request))).build();
     }
 
     @DELETE
-    @Path("/{id}")
+    @Path("/{uuid}")
     @RolesAllowed("ADMIN")
-    public Response delete(@PathParam("id") Long id) {
-        animalService.delete(id);
+    public Response delete(@PathParam("uuid") UUID uuid) {
+        animalService.delete(uuid);
         return Response.noContent().build();
     }
 
@@ -74,11 +76,11 @@ public class AnimalResource {
                     Filtros estilo field.operator.
                     Ejemplos:
                     - ?id.greaterThan=10
-                    - ?tag.contains=BO-00
+                    - ?visible.contains=AR-100
                     - ?category.equals=COW&active.equals=true
                     - ?admissionDate.greaterThanOrEqual=2024-01-01
                     Paginación:
-                    - ?page=0&size=20&sort=code,asc
+                    - ?page=0&size=20&sort=updatedAt,desc
                     """
     )
     public Response getAll(
@@ -86,9 +88,7 @@ public class AnimalResource {
             @jakarta.ws.rs.BeanParam PageRequestDoc pageDoc,
             @Context UriInfo uriInfo
     ) {
-        var hints = new CriteriaBinder.BinderHints()
-                .registerEnum("category", AnimalCategory.class);
-        AnimalCriteria criteria = CriteriaBinder.bind(uriInfo, AnimalCriteria.class, hints);
+        AnimalCriteria criteria = bindCriteria(uriInfo);
         var pageable = PaginationBinder.bind(uriInfo);
 
         var page = animalQueryService.findByCriteriaPaged(criteria, pageable).map(animalMapper::toResponse);
@@ -98,15 +98,23 @@ public class AnimalResource {
     @GET
     @Path("/count")
     public Response count(@Context UriInfo uriInfo) {
-        var hints = new CriteriaBinder.BinderHints()
-                .registerEnum("category", AnimalCategory.class);
-        AnimalCriteria criteria = CriteriaBinder.bind(uriInfo, AnimalCriteria.class, hints);
+        AnimalCriteria criteria = bindCriteria(uriInfo);
         return Response.ok(animalQueryService.countByCriteria(criteria)).build();
     }
 
     @GET
-    @Path("/{id}")
-    public Response getOne(@PathParam("id") Long id) {
-        return ResponseUtil.wrapOrNotFound(animalQueryService.findOne(id).map(animalMapper::toResponse));
+    @Path("/{uuid}")
+    public Response getOne(@PathParam("uuid") UUID uuid) {
+        return ResponseUtil.wrapOrNotFound(animalQueryService.findOne(uuid).map(animalMapper::toResponse));
+    }
+
+    private AnimalCriteria bindCriteria(UriInfo uriInfo) {
+        var hints = new CriteriaBinder.BinderHints()
+                .registerEnum("category", AnimalCategory.class);
+        try {
+            return CriteriaBinder.bind(uriInfo, AnimalCriteria.class, hints);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException("ANIMAL_INVALID_FILTER", exception.getMessage(), Response.Status.BAD_REQUEST);
+        }
     }
 }

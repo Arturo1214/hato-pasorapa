@@ -6,12 +6,13 @@ import bo.pasorapa.hato.service.filter.filters.EnumFilter;
 import bo.pasorapa.hato.service.filter.filters.LocalDateFilter;
 import bo.pasorapa.hato.service.filter.filters.LongFilter;
 import bo.pasorapa.hato.service.filter.filters.StringFilter;
+import bo.pasorapa.hato.service.filter.filters.UuidFilter;
 
 public class AnimalCriteria {
 
     private LongFilter id;
-    private StringFilter code;
-    private StringFilter tag;
+    private StringFilter visible;
+    private UuidFilter ownerGanaderoId;
     private EnumFilter<AnimalCategory> category;
     private BooleanFilter active;
     private LocalDateFilter admissionDate;
@@ -24,20 +25,20 @@ public class AnimalCriteria {
         this.id = id;
     }
 
-    public StringFilter getCode() {
-        return code;
+    public StringFilter getVisible() {
+        return visible;
     }
 
-    public void setCode(StringFilter code) {
-        this.code = code;
+    public void setVisible(StringFilter visible) {
+        this.visible = visible;
     }
 
-    public StringFilter getTag() {
-        return tag;
+    public UuidFilter getOwnerGanaderoId() {
+        return ownerGanaderoId;
     }
 
-    public void setTag(StringFilter tag) {
-        this.tag = tag;
+    public void setOwnerGanaderoId(UuidFilter ownerGanaderoId) {
+        this.ownerGanaderoId = ownerGanaderoId;
     }
 
     public EnumFilter<AnimalCategory> getCategory() {
@@ -64,4 +65,3 @@ public class AnimalCriteria {
         this.admissionDate = admissionDate;
     }
 }
-

@@ -13,13 +13,13 @@ public class AnimalCriteriaDoc {
     @Parameter(description = "Filtra ids mayores a un valor")
     String idGreaterThan;
 
-    @QueryParam("code.contains")
-    @Parameter(description = "Filtra por coincidencia parcial en code")
-    String codeContains;
+    @QueryParam("visible.contains")
+    @Parameter(description = "Filtra por coincidencia parcial en arete, marca o tatuaje")
+    String visibleContains;
 
-    @QueryParam("tag.contains")
-    @Parameter(description = "Filtra por coincidencia parcial en tag")
-    String tagContains;
+    @QueryParam("ownerGanaderoId.equals")
+    @Parameter(description = "Filtra por UUID exacto del ganadero actual")
+    String ownerGanaderoIdEquals;
 
     @QueryParam("category.equals")
     @Parameter(description = "Filtra por categoría: COW, BULL, CALF, HEIFER")
@@ -37,4 +37,3 @@ public class AnimalCriteriaDoc {
     @Parameter(description = "Fecha máxima de ingreso en formato ISO yyyy-MM-dd")
     String admissionDateLessThanOrEqual;
 }
-

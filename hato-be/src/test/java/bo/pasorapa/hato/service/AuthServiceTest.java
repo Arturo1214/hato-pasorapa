@@ -7,6 +7,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.security.PasswordHasher;
@@ -29,10 +30,13 @@ class AuthServiceTest {
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("admin", Role.ADMIN, UserStatus.ACTIVE, "Admin123"));
             userRepository.persist(buildUser("inactive", Role.GANADERO, UserStatus.INACTIVE, "Ganadero9"));
             userRepository.persist(buildUser("blocked", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));

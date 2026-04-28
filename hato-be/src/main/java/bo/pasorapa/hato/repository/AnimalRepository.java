@@ -23,6 +23,10 @@ public class AnimalRepository implements PanacheRepositoryBase<Animal, Long> {
         return find("tag", tag).firstResultOptional();
     }
 
+    public Optional<Animal> findByNormalizedArete(String normalizedArete) {
+        return find("areteNormalized", normalizedArete.toLowerCase()).firstResultOptional();
+    }
+
     public List<Animal> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorUuid, int limitPlusOne) {
         if (cursorUpdatedAt == null) {
             return find("from Animal order by updatedAt asc, uuid asc").page(0, limitPlusOne).list();

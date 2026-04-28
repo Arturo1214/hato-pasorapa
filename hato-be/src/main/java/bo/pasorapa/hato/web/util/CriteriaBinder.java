@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 public final class CriteriaBinder {
@@ -42,9 +43,10 @@ public final class CriteriaBinder {
 
     private static final Map<Class<?>, Function<String, ?>> DEFAULT_PARSERS = Map.ofEntries(
             Map.entry(Long.class, Long::valueOf),
-            Map.entry(Boolean.class, Boolean::valueOf),
+            Map.entry(Boolean.class, CriteriaBinder::parseStrictBoolean),
             Map.entry(String.class, value -> value),
-            Map.entry(LocalDate.class, value -> LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE))
+            Map.entry(LocalDate.class, value -> LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE)),
+            Map.entry(UUID.class, UUID::fromString)
     );
 
     public static <C> C bind(UriInfo uriInfo, Class<C> criteriaClass, BinderHints hints) {
@@ -159,6 +161,9 @@ public final class CriteriaBinder {
         if (StringFilter.class.isAssignableFrom(filterType)) {
             return String.class;
         }
+        if (bo.pasorapa.hato.service.filter.filters.UuidFilter.class.isAssignableFrom(filterType)) {
+            return UUID.class;
+        }
         if (LocalDateFilter.class.isAssignableFrom(filterType)) {
             return LocalDate.class;
         }
@@ -195,6 +200,16 @@ public final class CriteriaBinder {
             }
         }
         return targetClass.getMethod(methodName, argType);
+    }
+
+    private static Boolean parseStrictBoolean(String raw) {
+        if ("true".equalsIgnoreCase(raw)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(raw)) {
+            return false;
+        }
+        throw new IllegalArgumentException("Valor booleano inválido '" + raw + "'. Usá true o false.");
     }
 
     private static void callSetter(Object target, String fieldName, Object value) throws Exception {

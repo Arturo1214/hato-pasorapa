@@ -9,6 +9,7 @@ import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
+import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -33,12 +34,13 @@ class AdminDashboardResourceTest {
     @Inject
     PasswordHasher passwordHasher;
 
+    @Inject
+    IntegrationDatabaseCleaner integrationDatabaseCleaner;
+
     @BeforeEach
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
-            operationLogRepository.deleteAll();
-            ganaderoRepository.deleteAll();
-            userRepository.deleteAll();
+            integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("root-admin", Role.ADMIN, UserStatus.ACTIVE, "RootAdmin9"));
             userRepository.persist(buildUser("admin-baja", Role.ADMIN, UserStatus.INACTIVE, "AdminBaja9"));
             userRepository.persist(buildUser("ganadero-activo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));

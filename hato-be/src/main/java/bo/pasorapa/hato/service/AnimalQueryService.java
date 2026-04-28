@@ -10,11 +10,13 @@ import bo.pasorapa.hato.service.page.PageUtil;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @ApplicationScoped
 public class AnimalQueryService {
@@ -25,8 +27,8 @@ public class AnimalQueryService {
         this.animalRepository = animalRepository;
     }
 
-    public Optional<Animal> findOne(Long id) {
-        return animalRepository.findByIdOptional(id);
+    public Optional<Animal> findOne(UUID uuid) {
+        return animalRepository.findByUuid(uuid);
     }
 
     public long countByCriteria(AnimalCriteria criteria) {
@@ -69,12 +71,28 @@ public class AnimalQueryService {
         }
 
         QueryUtil.addPredicateRange(predicates, cb, root, "id", criteria.getId());
-        QueryUtil.addPredicateString(predicates, cb, root, "code", criteria.getCode());
-        QueryUtil.addPredicateString(predicates, cb, root, "tag", criteria.getTag());
+        addVisiblePredicate(predicates, cb, root, criteria);
+        QueryUtil.addPredicate(predicates, cb, root.get("ownerGanadero").get("id"), criteria.getOwnerGanaderoId());
         QueryUtil.addPredicateEnum(predicates, cb, root, "category", criteria.getCategory());
         QueryUtil.addPredicate(predicates, cb, root, "active", criteria.getActive());
         QueryUtil.addPredicateRange(predicates, cb, root, "admissionDate", criteria.getAdmissionDate());
         return predicates;
     }
-}
 
+    private void addVisiblePredicate(List<Predicate> predicates, CriteriaBuilder cb, Root<Animal> root, AnimalCriteria criteria) {
+        if (criteria.getVisible() == null) {
+            return;
+        }
+
+        Predicate visibleMatch = cb.or(
+                combineVisibleFieldPredicates(cb, root.get("arete"), criteria),
+                combineVisibleFieldPredicates(cb, root.get("marca"), criteria),
+                combineVisibleFieldPredicates(cb, root.get("tatuaje"), criteria)
+        );
+        predicates.add(visibleMatch);
+    }
+
+    private Predicate combineVisibleFieldPredicates(CriteriaBuilder cb, Path<String> field, AnimalCriteria criteria) {
+        return QueryUtil.combinePredicatesAnd(cb, QueryUtil.buildPredicatesForStringFilter(cb, field, criteria.getVisible()));
+    }
+}

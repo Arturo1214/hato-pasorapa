@@ -8,6 +8,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -34,6 +36,28 @@ public class Animal {
     @Column(name = "tag", nullable = false, unique = true, length = 50)
     private String tag;
 
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "owner_ganadero_id", nullable = false)
+    private Ganadero ownerGanadero;
+
+    @Column(name = "arete", length = 80)
+    private String arete;
+
+    @Column(name = "marca", length = 80)
+    private String marca;
+
+    @Column(name = "tatuaje", length = 80)
+    private String tatuaje;
+
+    @Column(name = "arete_normalized", length = 80, unique = true)
+    private String areteNormalized;
+
+    @Column(name = "marca_normalized", length = 80)
+    private String marcaNormalized;
+
+    @Column(name = "tatuaje_normalized", length = 80)
+    private String tatuajeNormalized;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false, length = 30)
     private AnimalCategory category;
@@ -59,6 +83,15 @@ public class Animal {
 
     @Column(name = "last_synced_at")
     private LocalDateTime lastSyncedAt;
+
+    @Column(name = "mother_animal_uuid")
+    private UUID motherAnimalUuid;
+
+    @Column(name = "father_animal_uuid")
+    private UUID fatherAnimalUuid;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
 
     @PrePersist
     void prePersist() {
@@ -112,6 +145,62 @@ public class Animal {
 
     public void setTag(String tag) {
         this.tag = tag;
+    }
+
+    public Ganadero getOwnerGanadero() {
+        return ownerGanadero;
+    }
+
+    public void setOwnerGanadero(Ganadero ownerGanadero) {
+        this.ownerGanadero = ownerGanadero;
+    }
+
+    public String getArete() {
+        return arete;
+    }
+
+    public void setArete(String arete) {
+        this.arete = arete;
+    }
+
+    public String getMarca() {
+        return marca;
+    }
+
+    public void setMarca(String marca) {
+        this.marca = marca;
+    }
+
+    public String getTatuaje() {
+        return tatuaje;
+    }
+
+    public void setTatuaje(String tatuaje) {
+        this.tatuaje = tatuaje;
+    }
+
+    public String getAreteNormalized() {
+        return areteNormalized;
+    }
+
+    public void setAreteNormalized(String areteNormalized) {
+        this.areteNormalized = areteNormalized;
+    }
+
+    public String getMarcaNormalized() {
+        return marcaNormalized;
+    }
+
+    public void setMarcaNormalized(String marcaNormalized) {
+        this.marcaNormalized = marcaNormalized;
+    }
+
+    public String getTatuajeNormalized() {
+        return tatuajeNormalized;
+    }
+
+    public void setTatuajeNormalized(String tatuajeNormalized) {
+        this.tatuajeNormalized = tatuajeNormalized;
     }
 
     public AnimalCategory getCategory() {
@@ -176,5 +265,29 @@ public class Animal {
 
     public void setLastSyncedAt(LocalDateTime lastSyncedAt) {
         this.lastSyncedAt = lastSyncedAt;
+    }
+
+    public UUID getMotherAnimalUuid() {
+        return motherAnimalUuid;
+    }
+
+    public void setMotherAnimalUuid(UUID motherAnimalUuid) {
+        this.motherAnimalUuid = motherAnimalUuid;
+    }
+
+    public UUID getFatherAnimalUuid() {
+        return fatherAnimalUuid;
+    }
+
+    public void setFatherAnimalUuid(UUID fatherAnimalUuid) {
+        this.fatherAnimalUuid = fatherAnimalUuid;
+    }
+
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        this.birthDate = birthDate;
     }
 }

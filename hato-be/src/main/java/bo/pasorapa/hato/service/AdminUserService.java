@@ -17,6 +17,7 @@ import bo.pasorapa.hato.service.error.BusinessException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -70,25 +71,19 @@ public class AdminUserService {
 
     @Transactional
     public MutationResult<AdminUserResponse> updateStatus(UUID userId, AdminUserStatusUpdateRequest request, UUID operationId, UUID performedByUserId) {
-        OperationLog existingOperation = operationLogRepository.findByOperationId(operationId).orElse(null);
-        if (existingOperation != null && existingOperation.getResourceId() != null) {
-            return new MutationResult<>(toResponse(findUser(existingOperation.getResourceId())), true);
-        }
+        MutationResult<User> mutation = updateUserStatus(userId, request.status(), operationId, performedByUserId, "ADMIN_USER_STATUS_UPDATED", false);
+        return new MutationResult<>(toResponse(mutation.data()), mutation.replayed());
+    }
 
-        User user = findUser(userId);
-        user.setStatus(request.status());
-        userRepository.persist(user);
-        userRepository.flush();
-
-        persistOperation(operationId, "ADMIN_USER_STATUS_UPDATED", user.getId(), performedByUserId);
-
-        return new MutationResult<>(toResponse(user), false);
+    @Transactional
+    public MutationResult<User> syncUpdateStatus(UUID userId, UserStatus status, UUID operationId, UUID performedByUserId) {
+        return updateUserStatus(userId, status, operationId, performedByUserId, "SYNC_USER_STATUS_UPDATED", true);
     }
 
     @Transactional
     public MutationResult<ActionMessageResponse> updatePassword(UUID userId, AdminUserPasswordUpdateRequest request, UUID operationId, UUID performedByUserId) {
         OperationLog existingOperation = operationLogRepository.findByOperationId(operationId).orElse(null);
-        if (existingOperation != null) {
+        if (existingOperation != null && existingOperation.getResourceId() != null) {
             return new MutationResult<>(new ActionMessageResponse("Contraseña actualizada correctamente."), true);
         }
 
@@ -100,6 +95,30 @@ public class AdminUserService {
         persistOperation(operationId, "ADMIN_USER_PASSWORD_UPDATED", user.getId(), performedByUserId);
 
         return new MutationResult<>(new ActionMessageResponse("Contraseña actualizada correctamente."), false);
+    }
+
+    private MutationResult<User> updateUserStatus(
+            UUID userId,
+            UserStatus status,
+            UUID operationId,
+            UUID performedByUserId,
+            String action,
+            boolean synced) {
+        OperationLog existingOperation = operationLogRepository.findByOperationId(operationId).orElse(null);
+        if (existingOperation != null && existingOperation.getResourceId() != null) {
+            return new MutationResult<>(findUser(existingOperation.getResourceId()), true);
+        }
+
+        User user = findUser(userId);
+        user.setStatus(status);
+        if (synced) {
+            user.setLastSyncedAt(LocalDateTime.now());
+        }
+        userRepository.persist(user);
+        userRepository.flush();
+
+        persistOperation(operationId, action, user.getId(), performedByUserId);
+        return new MutationResult<>(user, false);
     }
 
     private User findUser(UUID userId) {

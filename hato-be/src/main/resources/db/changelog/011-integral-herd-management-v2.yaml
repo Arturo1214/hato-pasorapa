@@ -1,0 +1,295 @@
+databaseChangeLog:
+  - changeSet:
+      id: 011-integral-herd-management-v2
+      author: openai
+      changes:
+        - createTable:
+            tableName: herd_lots
+            columns:
+              - column:
+                  name: lot_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR(500)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: herd_lots
+            indexName: idx_herd_lots_updated_id
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: lot_id
+        - createTable:
+            tableName: herd_lot_assignments
+            columns:
+              - column:
+                  name: assignment_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: animal_uuid
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lot_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: from_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: to_date
+                  type: DATE
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: herd_lot_assignments
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_herd_lot_assignment_animal
+        - addForeignKeyConstraint:
+            baseTableName: herd_lot_assignments
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_lot_assignment_lot
+        - createIndex:
+            tableName: herd_lot_assignments
+            indexName: idx_herd_lot_assignments_animal_dates
+            columns:
+              - column:
+                  name: animal_uuid
+              - column:
+                  name: from_date
+              - column:
+                  name: to_date
+        - createIndex:
+            tableName: herd_lot_assignments
+            indexName: idx_herd_lot_assignments_updated_id
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: assignment_id
+        - createTable:
+            tableName: herd_productivity_ledger
+            columns:
+              - column:
+                  name: entry_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: animal_uuid
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: lot_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: period_key
+                  type: VARCHAR(7)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metric_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metric_value
+                  type: DECIMAL(14,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: identity_key
+                  type: VARCHAR(220)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: herd_productivity_ledger
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_herd_productivity_animal
+        - addForeignKeyConstraint:
+            baseTableName: herd_productivity_ledger
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_productivity_lot
+        - createIndex:
+            tableName: herd_productivity_ledger
+            indexName: idx_herd_productivity_updated_id
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: entry_id
+        - createTable:
+            tableName: herd_cost_ledger
+            columns:
+              - column:
+                  name: entry_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: lot_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: period_key
+                  type: VARCHAR(7)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: category
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount
+                  type: DECIMAL(14,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: VARCHAR(12)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: identity_key
+                  type: VARCHAR(220)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: herd_cost_ledger
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_cost_lot
+        - createIndex:
+            tableName: herd_cost_ledger
+            indexName: idx_herd_cost_updated_id
+            columns:
+              - column:
+                  name: updated_at
+              - column:
+                  name: entry_id

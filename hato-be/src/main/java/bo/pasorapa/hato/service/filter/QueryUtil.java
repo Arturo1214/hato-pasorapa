@@ -24,8 +24,17 @@ public final class QueryUtil {
             String fieldName,
             F filter
     ) {
+        addPredicate(predicates, cb, root.get(fieldName), filter);
+    }
+
+    public static <T extends Serializable, F extends Filter<T>> void addPredicate(
+            List<Predicate> predicates,
+            CriteriaBuilder cb,
+            Path<T> field,
+            F filter
+    ) {
         if (filter != null) {
-            predicates.add(combinePredicatesAnd(cb, buildPredicatesForFilter(cb, root.get(fieldName), filter)));
+            predicates.add(combinePredicatesAnd(cb, buildPredicatesForFilter(cb, field, filter)));
         }
     }
 
@@ -131,4 +140,3 @@ public final class QueryUtil {
         return cb.and(predicates.toArray(new Predicate[0]));
     }
 }
-

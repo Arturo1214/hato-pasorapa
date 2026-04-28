@@ -1,13 +1,11 @@
-import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
-import { inject, Injectable, signal } from '@angular/core';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { computed, inject, Injectable } from '@angular/core';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
-import { createRetryPolicy, type RetryPolicy } from '../../../../core/offline/retry-policy';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
-import { mapOfflineConflict } from '../../../../core/offline/conflict-mapper';
-import { type OfflineOperationEnvelope } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
+import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { type Observable, firstValueFrom, from } from 'rxjs';
 
 export interface GanaderoItem {
@@ -45,9 +43,8 @@ export interface GanaderosServiceDependencies {
   offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
   store: OfflineStoreService;
   metricsStore: SyncMetricsStore;
-  retryPolicy: RetryPolicy;
   now: () => string;
-  windowRef: Pick<Window, 'addEventListener'>;
+  windowRef: Pick<Window, 'dispatchEvent'>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -58,24 +55,17 @@ export class GanaderosService {
   private offlineStatus: OfflineStatusService = inject(OfflineStatusService);
   private store: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
   private metricsStore: SyncMetricsStore = inject(SyncMetricsStore);
-  private retryPolicy: RetryPolicy = createRetryPolicy();
   private now: () => string = () => new Date().toISOString();
-  private windowRef: Pick<Window, 'addEventListener'> | undefined = globalThis.window;
-  private readonly syncStateWritable = signal<GanaderosSyncState>({
-    pending: 0,
-    syncing: false,
-    lastSyncAt: null,
-    lastMessage: null,
-    manualRefreshRequired: false,
-  });
+  private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
+  readonly syncState = computed<GanaderosSyncState>(() => ({
+    pending: this.metricsStore.metrics().pending,
+    syncing: this.metricsStore.metrics().syncing,
+    lastSyncAt: this.metricsStore.metrics().lastSyncAt,
+    lastMessage: this.metricsStore.metrics().lastMessage,
+    manualRefreshRequired: this.metricsStore.metrics().manualRefreshRequired,
+  }));
 
-  readonly syncState = this.syncStateWritable.asReadonly();
-
-  constructor() {
-    this.windowRef?.addEventListener('online', () => {
-      void this.replayQueuedMutations();
-    });
-  }
+  constructor() {}
 
   configureForTesting(dependencies: Partial<GanaderosServiceDependencies>) {
     this.http = dependencies.http ?? this.http;
@@ -86,7 +76,6 @@ export class GanaderosService {
     }
     this.store = dependencies.store ?? this.store;
     this.metricsStore = dependencies.metricsStore ?? this.metricsStore;
-    this.retryPolicy = dependencies.retryPolicy ?? this.retryPolicy;
     this.now = dependencies.now ?? this.now;
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
@@ -104,7 +93,10 @@ export class GanaderosService {
   }
 
   private async listGanaderosInternal(active?: boolean) {
-    if (!this.offlineStatus.isOnline()) {
+    const hasPendingGanaderoOperations = await this.hasPendingGanaderoOperations();
+    await this.refreshPendingState();
+
+    if (!this.offlineStatus.isOnline() || hasPendingGanaderoOperations) {
       return this.listGanaderoSnapshots(active);
     }
 
@@ -116,6 +108,7 @@ export class GanaderosService {
     );
 
     await Promise.all(response.ganaderos.map((ganadero) => this.saveGanaderoSnapshot(ganadero)));
+    await this.refreshPendingState();
     return response.ganaderos;
   }
 
@@ -129,6 +122,7 @@ export class GanaderosService {
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
+    await this.store.reassignOperationEntityId(operation.operationId, operation.operationId);
     const pendingId = `pending:${operation.operationId}`;
     await this.saveGanaderoSnapshot({
       id: pendingId,
@@ -139,14 +133,14 @@ export class GanaderosService {
       createdAt: now,
       updatedAt: now,
       lastSyncedAt: null,
-    });
+    }, operation.operationId);
     await this.refreshPendingState({ lastMessage: 'Alta de ganadero encolada. Se enviará al reconectar.' });
 
     if (this.offlineStatus.isOnline()) {
-      await this.replayQueuedMutations();
+      triggerManualSync(this.windowRef);
       return {
-        outcome: 'synced',
-        message: 'Ganadero sincronizado correctamente.',
+        outcome: 'queued',
+        message: 'Alta de ganadero encolada. Se disparó la sincronización automática.',
       } satisfies GanaderoMutationFeedback;
     }
 
@@ -158,22 +152,23 @@ export class GanaderosService {
 
   private async enqueueStatusUpdate(id: string, active: boolean) {
     const now = this.now();
+    const canonicalEntityId = this.toCanonicalEntityId(id);
     await this.store.enqueueOperation({
       entityType: 'GANADERO',
-      entityId: id,
+      entityId: canonicalEntityId,
       opType: 'STATUS_UPDATE',
       payload: { active },
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
-    await this.applyOptimisticStatus(id, active, now);
+    await this.applyOptimisticStatus(canonicalEntityId, active, now);
     await this.refreshPendingState({ lastMessage: 'Cambio de estado encolado. Se enviará al reconectar.' });
 
     if (this.offlineStatus.isOnline()) {
-      await this.replayQueuedMutations();
+      triggerManualSync(this.windowRef);
       return {
-        outcome: 'synced',
-        message: 'Estado del ganadero sincronizado correctamente.',
+        outcome: 'queued',
+        message: 'Cambio de estado encolado. Se disparó la sincronización automática.',
       } satisfies GanaderoMutationFeedback;
     }
 
@@ -183,99 +178,19 @@ export class GanaderosService {
     } satisfies GanaderoMutationFeedback;
   }
 
-  private async replayQueuedMutations() {
-    if (!this.offlineStatus.isOnline()) {
-      return;
-    }
-
-    const operations = (await this.store.listEligibleOperations(this.now())).filter(
-      (operation) => operation.entityType === 'GANADERO'
-    );
-
-    if (!operations.length) {
-      await this.refreshPendingState();
-      return;
-    }
-
-    this.syncStateWritable.update((state) => ({ ...state, syncing: true }));
-
-    for (const operation of operations) {
-      await this.store.markInFlight(operation.operationId);
-
-      try {
-        if (operation.opType === 'CREATE') {
-          const response = await firstValueFrom(
-            this.http.post<GanaderoItem>(`${this.appConfig.config().apiBaseUrl}/admin/ganaderos`, operation.payload, {
-              headers: this.buildMutationHeaders(operation.operationId),
-            })
-          );
-          await this.store.deleteSnapshot('GANADERO', `pending:${operation.operationId}`);
-          await this.saveGanaderoSnapshot(response);
-        }
-
-        if (operation.opType === 'STATUS_UPDATE') {
-          const response = await firstValueFrom(
-            this.http.put<GanaderoItem>(
-              `${this.appConfig.config().apiBaseUrl}/admin/ganaderos/${operation.entityId}/status`,
-              { active: operation.payload['active'] },
-              { headers: this.buildMutationHeaders(operation.operationId) }
-            )
-          );
-          await this.saveGanaderoSnapshot(response);
-        }
-
-        await this.store.markAcked(operation.operationId);
-      } catch (error) {
-        await this.handleReplayError(operation, error);
-      }
-    }
-
-    await this.refreshPendingState({ lastSyncAt: this.now() });
-    this.syncStateWritable.update((state) => ({ ...state, syncing: false }));
-  }
-
-  private async handleReplayError(operation: OfflineOperationEnvelope, error: unknown) {
-    if (error instanceof HttpErrorResponse && error.status === 409) {
-      const conflict = mapOfflineConflict(error);
-      await this.store.markConflict(
-        operation.operationId,
-        { code: conflict.code, message: conflict.message },
-        {
-          serverVersion: 0,
-          reason: conflict.message,
-          resolutionHint: conflict.resolutionHint,
-        }
-      );
-      await this.refreshPendingState({
-        lastMessage: conflict.message,
-        manualRefreshRequired: conflict.manualRefreshRequired,
-      });
-      return;
-    }
-
-    const retryDecision = this.retryPolicy.schedule(operation.attempts + 1, this.now());
-    if (retryDecision.shouldRetry && retryDecision.nextAttemptAt) {
-      await this.store.markRetryScheduled(
-        operation.operationId,
-        {
-          code: 'TRANSIENT_SYNC_ERROR',
-          message: 'La sincronización de ganaderos falló temporalmente. Se reintentará automáticamente.',
-        },
-        retryDecision.nextAttemptAt
-      );
-      return;
-    }
-
-    await this.store.markDeadLetter(operation.operationId, {
-      code: 'RETRY_LIMIT_EXCEEDED',
-      message: 'Se agotó la política de retry para este cambio de ganadero.',
-    });
-  }
-
   private async listGanaderoSnapshots(active?: boolean) {
     const snapshots = await this.store.listSnapshots('GANADERO');
     const ganaderos = snapshots.map((snapshot) => snapshot.payload as unknown as GanaderoItem);
     return active === undefined ? ganaderos : ganaderos.filter((ganadero) => ganadero.active === active);
+  }
+
+  private async hasPendingGanaderoOperations() {
+    const outbox = await this.store.listOutbox();
+    return outbox.some(
+      (operation) =>
+        operation.entityType === 'GANADERO' &&
+        (operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight')
+    );
   }
 
   private async applyOptimisticStatus(id: string, active: boolean, now: string) {
@@ -293,30 +208,27 @@ export class GanaderosService {
     });
   }
 
-  private async saveGanaderoSnapshot(ganadero: GanaderoItem) {
+  private async saveGanaderoSnapshot(ganadero: GanaderoItem, entityId = ganadero.id) {
     await this.store.saveSnapshot({
-      key: `GANADERO:${ganadero.id}`,
+      key: `GANADERO:${entityId}`,
       entityType: 'GANADERO',
-      entityId: ganadero.id,
+      entityId,
       payload: { ...ganadero },
       updatedAt: ganadero.updatedAt,
       version: ganadero.version,
     });
   }
 
+  private toCanonicalEntityId(id: string) {
+    return id.startsWith('pending:') ? id.replace('pending:', '') : id;
+  }
+
   private async refreshPendingState(overrides: Partial<GanaderosSyncState> = {}) {
     const pending = await this.store.countPendingOperations();
-    this.metricsStore.update({
-      pending,
-      success: 0,
-      failed: 0,
-      lastSyncAt: overrides.lastSyncAt ?? this.syncStateWritable().lastSyncAt,
-    });
-    this.syncStateWritable.update((state) => ({
-      ...state,
+    this.metricsStore.patch({
       pending,
       ...overrides,
-    }));
+    });
   }
 
   private buildMutationHeaders(operationId?: string) {

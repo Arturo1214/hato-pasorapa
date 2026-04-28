@@ -4,6 +4,8 @@ export interface ApplicationRuntimeConfig {
   appName: string;
   domain: string;
   apiBaseUrl: string;
+  offlineConflictResolutionV2: boolean;
+  offlineBackupV1Enabled: boolean;
 }
 
 @Injectable({
@@ -11,10 +13,12 @@ export interface ApplicationRuntimeConfig {
 })
 export class ApplicationConfigService {
   private readonly runtimeConfig = signal<ApplicationRuntimeConfig>({
-    appName: 'Hato FE',
-    domain: 'bo.pasorapa.hato',
-    apiBaseUrl: '/api',
-  });
+      appName: 'Hato FE',
+      domain: 'bo.pasorapa.hato',
+      apiBaseUrl: '/api',
+      offlineConflictResolutionV2: true,
+      offlineBackupV1Enabled: true,
+    });
 
   readonly config = this.runtimeConfig.asReadonly();
 

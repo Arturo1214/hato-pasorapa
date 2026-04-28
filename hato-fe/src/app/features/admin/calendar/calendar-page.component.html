@@ -1,0 +1,80 @@
+<section class="admin-page">
+  <header class="page-header">
+    <h1>Calendario</h1>
+    <p>Agenda offline/local-first derivada de snapshots existentes. V1 sin push remota, sin motor experto y sin estado cross-device.</p>
+  </header>
+
+  <mat-card appearance="outlined" class="summary-card">
+    <div class="badge-row">
+      <span>Upcoming: {{ counts().byStatus.upcoming }}</span>
+      <span>Hoy: {{ counts().byStatus.due_today }}</span>
+      <span>Atrasadas: {{ counts().byStatus.overdue }}</span>
+      <strong>Total: {{ counts().total }}</strong>
+    </div>
+
+    @if (stale()) {
+      <p class="state-message">La agenda estaba stale y se recompone localmente.</p>
+    }
+    @if (loading()) {
+      <p class="state-message">Actualizando agenda local…</p>
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <div class="toolbar-row">
+      <div class="toolbar-group">
+        <button mat-stroked-button type="button" (click)="useRange('today')">Día</button>
+        <button mat-stroked-button type="button" (click)="useRange('next_7_days')">Semana</button>
+        <button mat-stroked-button type="button" (click)="useRange('next_30_days')">Mes</button>
+      </div>
+      <button mat-flat-button color="primary" type="button" (click)="refresh()">Refresh manual</button>
+    </div>
+
+    <div class="toolbar-row">
+      <div class="toolbar-group">
+        <button mat-button type="button" (click)="setHorizon(1)">Horizonte 1d</button>
+        <button mat-button type="button" (click)="setHorizon(3)">Horizonte 3d</button>
+        <button mat-button type="button" (click)="setHorizon(7)">Horizonte 7d</button>
+      </div>
+      <div class="toolbar-group">
+        <button mat-button type="button" (click)="toggleNotifications()">
+          {{ preferences().notificationsEnabled ? 'Browser notifications ON' : 'Browser notifications OFF' }}
+        </button>
+        <button mat-button type="button" (click)="snooze()">Silenciar local 3h</button>
+        <button mat-button type="button" (click)="clearSnooze()">Quitar silencio</button>
+      </div>
+    </div>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Timeline {{ range() === 'today' ? 'día' : range() === 'next_7_days' ? 'semana' : 'mes' }}</h2>
+
+    @if (isEmpty()) {
+      <p class="state-message">No hay ítems visibles para la ventana seleccionada.</p>
+    } @else {
+      <ul class="timeline-list">
+        @for (item of timeline(); track item.id) {
+          <li class="timeline-item" [attr.data-status]="item.status">
+            <strong>{{ item.title }}</strong>
+            <span>{{ item.animalLabel ?? item.animalUuid }}</span>
+            <span>{{ item.dueAt }}</span>
+            <span>{{ item.status }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Alertas in-app</h2>
+    @if (inAppAlerts().length === 0) {
+      <p class="state-message">No hay alertas in-app activas.</p>
+    } @else {
+      <ul class="timeline-list">
+        @for (item of inAppAlerts(); track item.id) {
+          <li class="timeline-item" [attr.data-status]="item.status">{{ item.title }} · {{ item.status }}</li>
+        }
+      </ul>
+    }
+  </mat-card>
+</section>

@@ -24,11 +24,14 @@
         [routerLinkActiveOptions]="{ exact: true }"
         class="menu-item"
         (click)="navigate.emit()"
-      >
-        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-        <span matListItemTitle>{{ item.label }}</span>
-        <span matListItemLine>{{ item.description }}</span>
-      </a>
+        >
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+          @if (item.badge) {
+            <span class="menu-badge" [attr.data-severity]="item.severity">{{ item.badge }}</span>
+          }
+          <span matListItemLine>{{ item.description }}</span>
+        </a>
     }
   </mat-nav-list>
 

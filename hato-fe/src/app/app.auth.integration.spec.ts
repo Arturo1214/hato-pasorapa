@@ -15,6 +15,7 @@ import {
   type SessionUser,
 } from './core/auth/data-access/auth.service';
 import { AdminDashboardService } from './features/admin/dashboard/data-access/admin-dashboard.service';
+import { AnimalsService } from './features/admin/animals/data-access/animals.service';
 import { AdminUsersService } from './features/admin/users/data-access/admin-users.service';
 import { GanaderosService } from './features/admin/ganaderos/data-access/ganaderos.service';
 
@@ -22,9 +23,13 @@ class AuthServiceStub {
   readonly loading = signal(false);
   private readonly currentUserState = signal<SessionUser | null>(null);
   private readonly accessToken = signal<string | null>(null);
+  private readonly offlineSessionStatus = signal<'active' | 'reauth_required' | 'expired'>('reauth_required');
 
   readonly isAuthenticated = computed(
-    () => !!this.accessToken() && this.currentUserState()?.status === 'ACTIVE'
+    () =>
+      !!this.accessToken() &&
+      this.currentUserState()?.status === 'ACTIVE' &&
+      this.offlineSessionStatus() === 'active'
   );
   readonly currentUser = this.currentUserState.asReadonly();
 
@@ -41,6 +46,7 @@ class AuthServiceStub {
   logout() {
     this.accessToken.set(null);
     this.currentUserState.set(null);
+    this.offlineSessionStatus.set('reauth_required');
   }
 
   hasRole(role: 'ADMIN' | 'GANADERO') {
@@ -51,13 +57,27 @@ class AuthServiceStub {
     return this.accessToken();
   }
 
+  getOfflineSessionStatus() {
+    return this.offlineSessionStatus();
+  }
+
+  refreshOfflineSession() {
+    return this.offlineSessionStatus();
+  }
+
   setGuest() {
     this.accessToken.set(null);
     this.currentUserState.set(null);
+    this.offlineSessionStatus.set('reauth_required');
+  }
+
+  setSessionStatus(status: 'active' | 'reauth_required' | 'expired') {
+    this.offlineSessionStatus.set(status);
   }
 
   private persistSession(role: 'ADMIN' | 'GANADERO') {
     this.accessToken.set('token-value');
+    this.offlineSessionStatus.set('active');
     this.currentUserState.set({
       id: 'user-id',
       username: role === 'ADMIN' ? 'admin' : 'ganadero',
@@ -105,6 +125,21 @@ describe('admin auth integration flow', () => {
               }),
           },
         },
+        {
+          provide: AnimalsService,
+          useValue: {
+            listAnimals: () => of([]),
+            createAnimal: () => of({ outcome: 'queued', message: 'Alta de animal encolada.' }),
+            updateAnimal: () => of({ outcome: 'queued', message: 'Actualización de animal encolada.' }),
+            syncState: signal({
+              pending: 0,
+              syncing: false,
+              lastSyncAt: null,
+              lastMessage: null,
+              manualRefreshRequired: false,
+            }),
+          },
+        },
         { provide: AdminUsersService, useValue: { listUsers: () => of([]) } },
         { provide: GanaderosService, useValue: { listGanaderos: () => of([]) } },
       ],
@@ -118,7 +153,8 @@ describe('admin auth integration flow', () => {
     const { harness, router } = await configure();
 
     await harness.navigateByUrl('/admin/dashboard');
-    expect(router.url).toBe('/login');
+    expect(router.url).toContain('/login');
+    expect(router.url).toContain('session=reauth_required');
 
     const usernameInput = harness.routeNativeElement?.querySelector(
       'input[formcontrolname="username"]'
@@ -136,9 +172,6 @@ describe('admin auth integration flow', () => {
     await harness.fixture.whenStable();
     harness.detectChanges();
 
-    expect(router.url).toBe('/');
-
-    await harness.navigateByUrl('/admin/dashboard');
     expect(router.url).toBe('/admin/dashboard');
     expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
   });
@@ -179,5 +212,46 @@ describe('admin auth integration flow', () => {
     expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
     expect(harness.routeNativeElement?.textContent).toContain('Usuarios');
     expect(harness.routeNativeElement?.textContent).toContain('Ganaderos');
+  });
+
+  it('should allow GANADERO sessions to access animales through the protected shell', async () => {
+    const { harness, router } = await configure();
+
+    await harness.navigateByUrl('/login');
+
+    const usernameInput = harness.routeNativeElement?.querySelector(
+      'input[formcontrolname="username"]'
+    ) as HTMLInputElement;
+    const passwordInput = harness.routeNativeElement?.querySelector(
+      'input[formcontrolname="password"]'
+    ) as HTMLInputElement;
+    const form = harness.routeNativeElement?.querySelector('form') as HTMLFormElement;
+
+    usernameInput.value = 'ganadero';
+    usernameInput.dispatchEvent(new Event('input'));
+    passwordInput.value = 'Ganadero123';
+    passwordInput.dispatchEvent(new Event('input'));
+    form.dispatchEvent(new Event('submit'));
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+
+    await harness.navigateByUrl('/admin/animales');
+
+    expect(router.url).toBe('/admin/animales');
+    expect(harness.routeNativeElement?.textContent).toContain('Animales');
+    expect(harness.routeNativeElement?.textContent).toContain('Nueva ficha animal');
+  });
+
+  it('should redirect expired sessions to login with differentiated context before any protected sync flow resumes', async () => {
+    const { harness, authService, router } = await configure();
+
+    authService.setGuest();
+    authService.setSessionStatus('expired');
+
+    await harness.navigateByUrl('/admin/dashboard');
+    expect(router.url).toContain('/login');
+    expect(router.url).toContain('session=expired');
+    expect(router.url).toContain('returnUrl=%2Fadmin%2Fdashboard');
+    expect(harness.routeNativeElement?.textContent).toContain('Tu sesión offline expiró.');
   });
 });

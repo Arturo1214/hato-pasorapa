@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { ADMIN_ONLY_ROLES } from './core/auth/auth-rules';
+import { ADMIN_ONLY_ROLES, ALLOWED_ROLES } from './core/auth/auth-rules';
 import { authGuard, guestGuard } from './core/auth/guards/auth.guard';
 import { roleGuard } from './core/auth/guards/role.guard';
 import { PublicLayout } from './ui/layout/public-layout/public-layout';
@@ -27,6 +27,28 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'admin/reportes',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/reporting/admin-reporting-page.component').then(
+            (m) => m.AdminReportingPageComponent
+          ),
+      },
+      {
+        path: 'admin/decision-support',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/decision-support/admin-decision-support-page.component')
+            .then((m) => m.AdminDecisionSupportPageComponent)
+            .catch(() => import('./features/admin/reporting/admin-reporting-page.component').then((m) => m.AdminReportingPageComponent)),
+      },
+      {
+        path: 'admin/backups',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/backup/backup-page.component').then((m) => m.BackupPageComponent),
+      },
+      {
         path: 'admin/usuarios',
         canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
         loadComponent: () =>
@@ -40,6 +62,52 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/admin/ganaderos/ganaderos-page.component').then(
             (m) => m.GanaderosPageComponent
+          ),
+      },
+      {
+        path: 'admin/conflictos',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/conflicts/conflict-resolution-page.component').then(
+            (m) => m.ConflictResolutionPageComponent
+          ),
+      },
+      {
+        path: 'admin/sync-observability',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/sync-observability/sync-observability.component').then((m) => m.SyncObservabilityComponent),
+      },
+      {
+        path: 'admin/animales',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animals-page.component').then(
+            (m) => m.AnimalsPageComponent
+          ),
+      },
+      {
+        path: 'admin/visitas-veterinarias',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/vet-visits/vet-visits-page.component').then(
+            (m) => m.VetVisitsPageComponent
+          ),
+      },
+      {
+        path: 'admin/calendario',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/calendar/calendar-page.component').then(
+            (m) => m.CalendarPageComponent
+          ),
+      },
+      {
+        path: 'admin/notificaciones',
+        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/notifications/notification-inbox.page').then(
+            (m) => m.NotificationInboxPageComponent
           ),
       },
     ],

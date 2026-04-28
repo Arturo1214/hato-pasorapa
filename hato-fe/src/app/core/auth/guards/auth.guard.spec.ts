@@ -11,13 +11,14 @@ describe('authGuard', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: () => true,
+            getOfflineSessionStatus: () => 'active',
             currentUser: () => ({ status: 'ACTIVE' }),
           },
         },
         {
           provide: Router,
           useValue: {
-            createUrlTree: (commands: string[]) => commands.join('/'),
+            createUrlTree: (commands: string[], extras?: { queryParams?: Record<string, string> }) => ({ commands, extras }),
           },
         },
       ],
@@ -34,20 +35,29 @@ describe('authGuard', () => {
           provide: AuthService,
           useValue: {
             isAuthenticated: () => true,
+            getOfflineSessionStatus: () => 'expired',
             currentUser: () => ({ status: 'BLOCKED' }),
           },
         },
         {
           provide: Router,
           useValue: {
-            createUrlTree: (commands: string[]) => commands.join('/'),
+            createUrlTree: (commands: string[], extras?: { queryParams?: Record<string, string> }) => ({ commands, extras }),
           },
         },
       ],
     });
 
-    const result = TestBed.runInInjectionContext(() => authGuard({} as never, {} as never));
-    expect(result).toBe('/login');
+    const result = TestBed.runInInjectionContext(() => authGuard({} as never, { url: '/admin/dashboard' } as never));
+    expect(result).toEqual({
+      commands: ['/login'],
+      extras: {
+        queryParams: {
+          session: 'expired',
+          returnUrl: '/admin/dashboard',
+        },
+      },
+    });
   });
 });
 

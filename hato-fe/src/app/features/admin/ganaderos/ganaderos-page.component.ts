@@ -33,8 +33,14 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
 
       <mat-card appearance="outlined">
         <p>Estado de sync: {{ syncSummary() }}</p>
+        @if (syncState().syncing) {
+          <p>Sincronizando cambios offline…</p>
+        }
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
+        }
+        @if (syncState().lastMessage) {
+          <p>{{ syncState().lastMessage }}</p>
         }
         @if (syncState().manualRefreshRequired) {
           <p>Necesitás refrescar manualmente la lista para resolver el conflicto remoto.</p>

@@ -7,6 +7,7 @@ import { InMemoryOfflinePersistenceAdapter } from '../../../../core/offline/offl
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
+import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
 import { AdminUsersService, type ManagedUser } from './admin-users.service';
 
 describe('AdminUsersService', () => {
@@ -135,15 +136,10 @@ describe('AdminUsersService', () => {
     await expect(store.listOutbox()).resolves.toEqual([]);
   });
 
-  it('should enqueue user status changes offline and replay them on reconnect', async () => {
-    let online = false;
-    const updatedUser = createManagedUser({ status: 'INACTIVE', version: 2, updatedAt: '2026-04-26T10:05:00.000Z' });
-    const put = vi.fn().mockImplementation((_url: string, _body: unknown, options: { headers: HttpHeaders }) => {
-      expect(options.headers.get('X-Operation-Id')).toBe('operation-user-status-1');
-      return of(updatedUser);
-    });
-    const get = vi.fn(() => of({ users: [updatedUser] }));
-    const { service, store, fireOnline } = setup({ online, http: { get: get as never, put: put as never } });
+  it('should enqueue user status changes online and delegate replay to the global sync orchestrator', async () => {
+    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
+    const put = vi.fn();
+    const { service, store } = setup({ online: true, http: { put: put as never } });
     await store.saveSnapshot({
       key: 'USER:user-1',
       entityType: 'USER',
@@ -155,19 +151,14 @@ describe('AdminUsersService', () => {
 
     await expect(firstValueFrom(service.updateStatus('user-1', 'INACTIVE'))).resolves.toEqual({
       outcome: 'queued',
-      message: 'Cambio de estado encolado. Se enviará al reconectar.',
+      message: 'Cambio de estado encolado. Se disparó la sincronización automática.',
     });
     await expect(firstValueFrom(service.listUsers())).resolves.toEqual([
       createManagedUser({ status: 'INACTIVE', version: 1, updatedAt: '2026-04-26T10:05:00.000Z' }),
     ]);
 
-    online = true;
-    service.configureForTesting({ offlineStatus: { isOnline: () => online } as never });
-    await fireOnline();
-    await vi.waitFor(async () => expect(await store.countPendingOperations()).toBe(0));
-
-    await expect(firstValueFrom(service.listUsers())).resolves.toEqual([updatedUser]);
-    expect(service.syncState().pending).toBe(0);
-    expect(service.syncState().lastSyncAt).toBe('2026-04-26T10:05:00.000Z');
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(put).not.toHaveBeenCalled();
+    expect(service.syncState().pending).toBe(1);
   });
 });

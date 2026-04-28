@@ -2,15 +2,25 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from '../data-access/auth.service';
 
-export const authGuard: CanActivateFn = () => {
+export const authGuard: CanActivateFn = (_route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
+  const sessionStatus = authService.getOfflineSessionStatus();
 
-  if (authService.isAuthenticated() && authService.currentUser()?.status === 'ACTIVE') {
+  if (
+    sessionStatus === 'active' &&
+    authService.isAuthenticated() &&
+    authService.currentUser()?.status === 'ACTIVE'
+  ) {
     return true;
   }
 
-  return router.createUrlTree(['/login']);
+  return router.createUrlTree(['/login'], {
+    queryParams: {
+      session: sessionStatus,
+      returnUrl: state.url,
+    },
+  });
 };
 
 export const guestGuard: CanActivateFn = () => {

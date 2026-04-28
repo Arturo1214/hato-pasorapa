@@ -179,6 +179,21 @@ describe('AdminUsersPageComponent', () => {
     expect(serviceMock.listUsers).toHaveBeenCalledTimes(2);
   });
 
+  it('should show central sync progress and the latest post-sync message for admin users', async () => {
+    const serviceMock = createServiceMock();
+    serviceMock.syncState.set({
+      pending: 0,
+      syncing: true,
+      lastSyncAt: '2026-04-26T10:10:00.000Z',
+      lastMessage: 'Sincronización central en curso.',
+      manualRefreshRequired: false,
+    });
+    const { fixture } = await configure(serviceMock);
+
+    expect(fixture.nativeElement.textContent).toContain('Sincronizando cambios offline…');
+    expect(fixture.nativeElement.textContent).toContain('Sincronización central en curso.');
+  });
+
   it('should disable sensitive submit buttons while offline and explain they remain online only', async () => {
     const serviceMock = createServiceMock();
     const { fixture } = await configure(serviceMock, {

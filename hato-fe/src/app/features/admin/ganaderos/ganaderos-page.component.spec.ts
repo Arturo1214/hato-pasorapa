@@ -130,4 +130,19 @@ describe('GanaderosPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Alta de ganadero encolada. Se enviará al reconectar.');
   });
+
+  it('should show central sync progress and the latest post-sync message for ganaderos', async () => {
+    const serviceMock = createServiceMock();
+    serviceMock.syncState.set({
+      pending: 0,
+      syncing: true,
+      lastSyncAt: '2026-04-26T10:12:00.000Z',
+      lastMessage: 'Sincronización central en curso.',
+      manualRefreshRequired: false,
+    });
+    const { fixture } = await configure(serviceMock);
+
+    expect(fixture.nativeElement.textContent).toContain('Sincronizando cambios offline…');
+    expect(fixture.nativeElement.textContent).toContain('Sincronización central en curso.');
+  });
 });

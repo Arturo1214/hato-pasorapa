@@ -1,0 +1,76 @@
+<section class="sync-observability-page">
+  <header class="page-header">
+    <h1>Observabilidad de sync</h1>
+    <p>Runtime local + histórico agregado del backend con el mismo diccionario operativo.</p>
+  </header>
+
+  <mat-card appearance="outlined">
+    <h2>Ciclo actual</h2>
+    <p>Trigger: {{ runtime().cycle.trigger ?? 'Sin ciclo todavía' }}</p>
+    <p>Inicio: {{ runtime().cycle.startedAt ?? 'Sin dato' }}</p>
+    <p>Fin: {{ runtime().cycle.finishedAt ?? 'En progreso' }}</p>
+    <p>Total ms: {{ runtime().cycle.totalDurationMs ?? 'N/D' }}</p>
+    <p>Push ms: {{ runtime().cycle.pushDurationMs ?? 'N/D' }}</p>
+    <p>Pull ms: {{ runtime().cycle.pullDurationMs ?? 'N/D' }}</p>
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Ventana histórica</h2>
+    <div class="controls-row">
+      @for (window of windows(); track window) {
+        <button mat-button type="button" [attr.data-window]="window" (click)="useWindow(window)">
+          {{ window }}
+        </button>
+      }
+    </div>
+    <p>Ventana seleccionada: {{ selectedWindow() }}</p>
+    @if (loading()) {
+      <p>Cargando histórico agregado…</p>
+    }
+    @if (error()) {
+      <p>{{ error() }}</p>
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Cola pendiente</h2>
+    @for (entry of queueEntries(); track entry[0]) {
+      <p>{{ entry[0] }}: {{ entry[1] }}</p>
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Conflictos y top razones</h2>
+    <p>Abiertos: {{ runtime().conflicts.open }}</p>
+    <p>Bloqueadas: {{ runtime().conflicts.blockedOperations }}</p>
+    @if (!topReasons().length) {
+      <p>Sin razones rankeadas todavía.</p>
+    } @else {
+      @for (reason of topReasons(); track reason.reason) {
+        <p>{{ reason.reason }} · {{ reason.count }}</p>
+      }
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Health por entidad</h2>
+    @if (!entityHealthEntries().length) {
+      <p>No hay entidades observables todavía.</p>
+    } @else {
+      @for (entry of entityHealthEntries(); track entry[0]) {
+        <p>{{ entry[0] }} · stale={{ entry[1].stale ? 'sí' : 'no' }} · lastSuccess={{ entry[1].lastSuccessAt ?? 'N/D' }}</p>
+      }
+    }
+  </mat-card>
+
+  <mat-card appearance="outlined">
+    <h2>Recientes</h2>
+    @if (!recentIssues().length) {
+      <p>Sin errores/conflictos recientes.</p>
+    } @else {
+      @for (issue of recentIssues(); track issue.operationId + issue.createdAt) {
+        <p>{{ issue.entityType }} · {{ issue.status }} · {{ issue.reason }}</p>
+      }
+    }
+  </mat-card>
+</section>

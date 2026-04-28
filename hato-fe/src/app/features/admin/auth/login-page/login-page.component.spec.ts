@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
@@ -10,6 +10,7 @@ import { LoginPageComponent } from './login-page.component';
 describe('LoginPageComponent', () => {
   let fixture: ComponentFixture<LoginPageComponent>;
   let component: LoginPageComponent;
+  let router: Router;
 
   const installStorageMock = () => {
     Object.defineProperty(globalThis, 'localStorage', {
@@ -42,11 +43,22 @@ describe('LoginPageComponent', () => {
             login: () => of({ success: false, error: { code: 'INVALID_CREDENTIALS', message: 'Usuario o contraseña inválidos.' } }),
           },
         },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({}),
+            },
+            queryParamMap: of(convertToParamMap({})),
+          },
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoginPageComponent);
     component = fixture.componentInstance;
+    router = TestBed.inject(Router);
+    vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
     fixture.detectChanges();
   });
 
@@ -69,5 +81,122 @@ describe('LoginPageComponent', () => {
   it('should explain that the hardened login only works with ADMIN and GANADERO roles', () => {
     expect(component.allowedRolesMessage).toBe('Solo existen roles ADMIN y GANADERO.');
     expect(fixture.nativeElement.textContent).toContain(component.allowedRolesMessage);
+  });
+
+  it('should render differentiated copy for expired and reauth_required session states', async () => {
+    await TestBed.resetTestingModule();
+    installStorageMock();
+
+    await TestBed.configureTestingModule({
+      imports: [LoginPageComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api' }) },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            loading: () => false,
+            login: () => of({ success: true, error: null }),
+          },
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({ session: 'expired', returnUrl: '/admin/dashboard' }),
+            },
+            queryParamMap: of(convertToParamMap({ session: 'expired', returnUrl: '/admin/dashboard' })),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const expiredFixture = TestBed.createComponent(LoginPageComponent);
+    expiredFixture.detectChanges();
+    expect(expiredFixture.nativeElement.textContent).toContain('Tu sesión offline expiró.');
+
+    await TestBed.resetTestingModule();
+    installStorageMock();
+
+    await TestBed.configureTestingModule({
+      imports: [LoginPageComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api' }) },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            loading: () => false,
+            login: () => of({ success: true, error: null }),
+          },
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({ session: 'reauth_required', returnUrl: '/admin/animales' }),
+            },
+            queryParamMap: of(convertToParamMap({ session: 'reauth_required', returnUrl: '/admin/animales' })),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const reauthFixture = TestBed.createComponent(LoginPageComponent);
+    reauthFixture.detectChanges();
+    expect(reauthFixture.nativeElement.textContent).toContain('requiere reautenticación');
+  });
+
+  it('should return to the protected flow after a successful reauthentication login', async () => {
+    await TestBed.resetTestingModule();
+    installStorageMock();
+
+    await TestBed.configureTestingModule({
+      imports: [LoginPageComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api' }) },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            loading: () => false,
+            login: () => of({ success: true, error: null }),
+          },
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({ session: 'reauth_required', returnUrl: '/admin/dashboard' }),
+            },
+            queryParamMap: of(convertToParamMap({ session: 'reauth_required', returnUrl: '/admin/dashboard' })),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const successFixture = TestBed.createComponent(LoginPageComponent);
+    const successRouter = TestBed.inject(Router);
+    const navigateByUrlSpy = vi.spyOn(successRouter, 'navigateByUrl').mockResolvedValue(true);
+
+    successFixture.componentInstance.form.setValue({ username: 'admin', password: 'Admin123' });
+    successFixture.componentInstance.submit();
+
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/admin/dashboard');
   });
 });

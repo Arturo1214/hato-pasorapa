@@ -12,6 +12,7 @@ import { provideRouter, withViewTransitions } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideServiceWorker } from '@angular/service-worker';
 import { initializeApplicationRuntime } from './app.initializers';
+import { AuthService } from './core/auth/data-access/auth.service';
 import { routes } from './app.routes';
 import { ApplicationConfigService } from './core/config/application-config.service';
 import {
@@ -19,6 +20,10 @@ import {
   createServiceWorkerRegistrationOptions,
 } from './core/offline/pwa-shell';
 import { SyncOrchestratorService } from './core/offline/sync-orchestrator.service';
+import { CalendarAlertsStore } from './features/admin/calendar/data-access/calendar-alerts.store';
+import { AdminConflictResolutionStore } from './features/admin/conflicts/data-access/admin-conflict-resolution.store';
+import { NotificationInboxStore } from './features/admin/notifications/data-access/notification-inbox.store';
+import { AdminReportingStore } from './features/admin/reporting/data-access/admin-reporting.store';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -40,7 +45,15 @@ export const appConfig: ApplicationConfig = {
       useFactory: () => new SyncOrchestratorService(),
     },
     provideAppInitializer(() => {
-      return initializeApplicationRuntime(inject(ApplicationConfigService), inject(SyncOrchestratorService))();
-    }),
-  ],
-};
+        return initializeApplicationRuntime(
+          inject(ApplicationConfigService),
+          inject(AuthService),
+          inject(SyncOrchestratorService),
+          inject(CalendarAlertsStore),
+          inject(AdminConflictResolutionStore),
+          inject(NotificationInboxStore),
+          inject(AdminReportingStore)
+        )();
+      }),
+    ],
+  };

@@ -1,14 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ALLOWED_ROLES_MESSAGE } from '../../../../core/auth/auth-rules';
-import { AuthService } from '../../../../core/auth/data-access/auth.service';
+import { AuthService, type OfflineSessionStatus } from '../../../../core/auth/data-access/auth.service';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
 import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-errors.component';
 
@@ -32,10 +33,31 @@ import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-erro
 export class LoginPageComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly queryParamMap = toSignal(this.route.queryParamMap, {
+    initialValue: this.route.snapshot.queryParamMap,
+  });
   readonly authService = inject(AuthService);
   readonly themeService = inject(ThemeService);
   readonly feedbackMessage = signal<string | null>(null);
   readonly allowedRolesMessage = ALLOWED_ROLES_MESSAGE;
+  private readonly sessionContext = computed<OfflineSessionStatus | null>(() =>
+    parseSessionContext(this.queryParamMap().get('session'))
+  );
+  private readonly returnUrl = computed(() => this.queryParamMap().get('returnUrl') || '/');
+  readonly sessionMessage = computed(() => {
+    const sessionContext = this.sessionContext();
+
+    if (sessionContext === 'expired') {
+      return 'Tu sesión offline expiró. Volvé a iniciar sesión antes de sincronizar o entrar a la app.';
+    }
+
+    if (sessionContext === 'reauth_required') {
+      return 'Este dispositivo requiere reautenticación antes de continuar con la sincronización.';
+    }
+
+    return null;
+  });
 
   readonly form = this.formBuilder.nonNullable.group({
     username: ['', [Validators.required]],
@@ -61,7 +83,15 @@ export class LoginPageComponent {
         return;
       }
 
-      void this.router.navigate(['/']);
+      void this.router.navigateByUrl(this.returnUrl());
     });
   }
+}
+
+function parseSessionContext(value: string | null): OfflineSessionStatus | null {
+  if (value === 'active' || value === 'reauth_required' || value === 'expired') {
+    return value;
+  }
+
+  return null;
 }

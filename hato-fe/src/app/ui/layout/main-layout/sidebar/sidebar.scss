@@ -71,6 +71,25 @@
   border-left: 4px solid transparent;
 }
 
+.menu-badge {
+  margin-left: auto;
+  min-width: 1.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(117, 174, 244, 0.2);
+}
+
+.menu-badge[data-severity='overdue'] {
+  background: rgba(239, 68, 68, 0.22);
+}
+
+.menu-badge[data-severity='due_today'] {
+  background: rgba(245, 158, 11, 0.24);
+}
+
 .active-link {
   background: rgba(161, 201, 255, 0.12);
   border-left-color: #75aef4;

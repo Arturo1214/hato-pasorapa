@@ -34,8 +34,14 @@ import { OfflineStatusService } from '../../../core/offline/offline-status.servi
 
       <mat-card appearance="outlined">
         <p>Estado de sync: {{ syncSummary() }}</p>
+        @if (syncState().syncing) {
+          <p>Sincronizando cambios offline…</p>
+        }
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
+        }
+        @if (syncState().lastMessage) {
+          <p>{{ syncState().lastMessage }}</p>
         }
         @if (sensitiveActionsOnlineOnly()) {
           <p>Las altas de usuarios y resets de contraseña se resuelven solo online.</p>

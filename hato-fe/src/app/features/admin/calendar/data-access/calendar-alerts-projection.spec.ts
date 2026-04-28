@@ -1,0 +1,170 @@
+import type { OfflineSnapshotRecord } from '../../../../core/offline/offline-types';
+import { projectCalendarAlerts, selectCalendarTimeline } from './calendar-alerts-projection';
+
+describe('calendar alerts projection', () => {
+  const animalSnapshot: OfflineSnapshotRecord = {
+    key: 'ANIMAL:animal-1',
+    entityType: 'ANIMAL',
+    entityId: 'animal-1',
+    updatedAt: '2026-04-27T08:00:00.000Z',
+    version: 1,
+    payload: {
+      uuid: 'animal-1',
+      ownerGanaderoId: 'gan-1',
+      arete: 'BO-001',
+      marca: null,
+      tatuaje: null,
+      category: 'COW',
+      active: true,
+      admissionDate: '2026-04-01T00:00:00.000Z',
+      weightKg: 420,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: '2026-04-27T08:00:00.000Z',
+      version: 1,
+      lastSyncedAt: null,
+    },
+  };
+
+  it('should derive a stable agenda from health reproduction and operational snapshots', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-04-27T10:00:00.000Z',
+      preferences: { horizonDays: 3, notificationsEnabled: true, snoozedUntil: null },
+      healthEvents: [
+        snapshot('ANIMAL_HEALTH_EVENT', 'health-1', {
+          id: 'health-1',
+          animalUuid: 'animal-1',
+          healthEventType: 'VACCINATION',
+          notes: 'Refuerzo abril',
+          metadata: { nextDueAt: '2026-04-28T09:00:00.000Z' },
+        }),
+      ],
+      reproductionEvents: [
+        snapshot('ANIMAL_REPRODUCTION_EVENT', 'repro-1', {
+          id: 'repro-1',
+          animalUuid: 'animal-1',
+          reproductionEventType: 'BIRTH',
+          notes: 'Parto esperado',
+          metadata: { birthDate: '2026-04-27T13:00:00.000Z' },
+        }),
+      ],
+      animalEvents: [
+        snapshot('ANIMAL_EVENT', 'event-1', {
+          id: 'event-1',
+          animalUuid: 'animal-1',
+          type: 'TRANSFERRED',
+          occurredAt: '2026-04-27T16:00:00.000Z',
+          notes: 'Traslado de lote',
+          metadata: {},
+        }),
+      ],
+    });
+
+    expect(state.items).toHaveLength(3);
+    expect(state.items.map((item) => item.sourceType)).toEqual([
+      'ANIMAL_REPRODUCTION_EVENT',
+      'ANIMAL_EVENT',
+      'ANIMAL_HEALTH_EVENT',
+    ]);
+    expect(state.counts.total).toBe(3);
+    expect(state.counts.byStatus).toEqual({ overdue: 0, due_today: 2, upcoming: 1 });
+  });
+
+  it('should exclude records without a valid due date and classify overdue due_today and upcoming windows', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-04-27T10:00:00.000Z',
+      preferences: { horizonDays: 3, notificationsEnabled: false, snoozedUntil: null },
+      healthEvents: [
+        snapshot('ANIMAL_HEALTH_EVENT', 'health-overdue', {
+          id: 'health-overdue',
+          animalUuid: 'animal-1',
+          healthEventType: 'DEWORMING',
+          metadata: { nextDueAt: '2026-04-25T09:00:00.000Z' },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'health-invalid', {
+          id: 'health-invalid',
+          animalUuid: 'animal-1',
+          healthEventType: 'DEWORMING',
+          metadata: { nextDueAt: 'invalid-date' },
+        }),
+      ],
+      reproductionEvents: [
+        snapshot('ANIMAL_REPRODUCTION_EVENT', 'repro-missing', {
+          id: 'repro-missing',
+          animalUuid: 'animal-1',
+          reproductionEventType: 'SERVICE',
+          metadata: {},
+        }),
+      ],
+      animalEvents: [
+        snapshot('ANIMAL_EVENT', 'event-today', {
+          id: 'event-today',
+          animalUuid: 'animal-1',
+          type: 'OBSERVATION',
+          occurredAt: '2026-04-27T12:00:00.000Z',
+          metadata: {},
+        }),
+      ],
+    });
+
+    expect(state.items).toHaveLength(2);
+    expect(state.windows.overdue).toHaveLength(1);
+    expect(state.windows.due_today).toHaveLength(1);
+    expect(state.windows.upcoming).toHaveLength(0);
+  });
+
+  it('should keep deterministic ordering and filter timeline by day week and month ranges', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-04-27T10:00:00.000Z',
+      preferences: { horizonDays: 7, notificationsEnabled: false, snoozedUntil: null },
+      healthEvents: [
+        snapshot('ANIMAL_HEALTH_EVENT', 'same-a', {
+          id: 'same-a',
+          animalUuid: 'animal-1',
+          healthEventType: 'VACCINATION',
+          metadata: { nextDueAt: '2026-05-01T09:00:00.000Z' },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'same-b', {
+          id: 'same-b',
+          animalUuid: 'animal-1',
+          healthEventType: 'DEWORMING',
+          metadata: { nextDueAt: '2026-05-01T09:00:00.000Z' },
+        }),
+      ],
+      reproductionEvents: [],
+      animalEvents: [
+        snapshot('ANIMAL_EVENT', 'month-only', {
+          id: 'month-only',
+          animalUuid: 'animal-1',
+          type: 'OBSERVATION',
+          occurredAt: '2026-05-20T09:00:00.000Z',
+          metadata: {},
+        }),
+      ],
+    });
+
+    expect(state.items.map((item) => item.sourceId)).toEqual(['same-a', 'same-b', 'month-only']);
+    expect(selectCalendarTimeline(state, 'today', '2026-04-27T10:00:00.000Z')).toEqual([]);
+    expect(selectCalendarTimeline(state, 'next_7_days', '2026-04-27T10:00:00.000Z').map((item) => item.sourceId)).toEqual([
+      'same-a',
+      'same-b',
+    ]);
+    expect(selectCalendarTimeline(state, 'next_30_days', '2026-04-27T10:00:00.000Z').map((item) => item.sourceId)).toEqual([
+      'same-a',
+      'same-b',
+      'month-only',
+    ]);
+  });
+});
+
+function snapshot(entityType: OfflineSnapshotRecord['entityType'], entityId: string, payload: Record<string, unknown>): OfflineSnapshotRecord {
+  return {
+    key: `${entityType}:${entityId}`,
+    entityType,
+    entityId,
+    updatedAt: '2026-04-27T10:00:00.000Z',
+    payload,
+  };
+}

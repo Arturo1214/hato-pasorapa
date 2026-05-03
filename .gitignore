@@ -8,3 +8,5 @@ apps/api/target/
 .env
 infra/compose/.env
 .atl/
+/images/
+hato-be/databasechangelog.csv

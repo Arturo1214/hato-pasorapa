@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hato}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: ${TZ:-America/La_Paz}
+    ports:
+      - "${DEV_DB_PORT:-5434}:5432"
+    volumes:
+      - hato_dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  be:
+    build:
+      context: ../..
+      dockerfile: infraestructure/dev/Dockerfile.be
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HTTP_PORT: ${QUARKUS_HTTP_PORT:-8080}
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hato}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASS: ${POSTGRES_PASSWORD:-postgres}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AUTH_LEGACY_TOKEN_ENABLED: ${AUTH_LEGACY_TOKEN_ENABLED:-false}
+      HATO_STORAGE_ANIMAL_IMAGES_ENABLED: ${HATO_STORAGE_ANIMAL_IMAGES_ENABLED:-true}
+      HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR: ${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}
+      HATO_STORAGE_ANIMAL_IMAGES_MAX_BYTES: ${HATO_STORAGE_ANIMAL_IMAGES_MAX_BYTES:-2097152}
+      HATO_STORAGE_ANIMAL_IMAGES_MIME_ALLOWLIST: ${HATO_STORAGE_ANIMAL_IMAGES_MIME_ALLOWLIST:-image/jpeg,image/png}
+    ports:
+      - "${DEV_API_PORT:-8081}:8080"
+    volumes:
+      - "${HATO_IMAGES_HOST_PATH}:${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/q/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  fe:
+    build:
+      context: ../..
+      dockerfile: infraestructure/dev/Dockerfile.fe
+    restart: unless-stopped
+    depends_on:
+      be:
+        condition: service_healthy
+    ports:
+      - "${DEV_WEB_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  hato_dev_postgres_data:

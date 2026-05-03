@@ -70,6 +70,18 @@ export class AdminNotificationsService {
     });
   }
 
+  markRecipientAsRead(recipientId: string): Observable<void> {
+    return this.http.patch<void>(`${this.appConfig.config().apiBaseUrl}/notifications/recipients/${recipientId}/read`, {}, {
+      headers: this.buildHeaders(),
+    });
+  }
+
+  markAllAsRead(): Observable<void> {
+    return this.http.patch<void>(`${this.appConfig.config().apiBaseUrl}/notifications/recipients/read`, {}, {
+      headers: this.buildHeaders(),
+    });
+  }
+
   listActiveGanaderoRecipients(): Observable<AdminNotificationRecipientOption[]> {
     return this.http
       .get<ActiveUsersResponse>(`${this.appConfig.config().apiBaseUrl}/admin/users?status=ACTIVE`, {

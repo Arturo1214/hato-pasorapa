@@ -13,10 +13,15 @@
 }
 
 .auth-card {
-  width: min(100%, 28rem);
-  padding: 1.5rem;
+  width: min(100%, 34rem);
+  padding: 2rem;
   display: grid;
   gap: 1rem;
+}
+
+.login-brand {
+  justify-self: center;
+  margin-bottom: 0.5rem;
 }
 
 .auth-form {
@@ -27,6 +32,16 @@
 .support-copy,
 .helper-link {
   color: var(--mat-sys-on-surface-variant);
+}
+
+.helper-link {
+  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .auth-card {
+    padding: 1.5rem;
+  }
 }
 
 .feedback-box {

@@ -9,11 +9,16 @@
   </button>
 
   <mat-card class="auth-card surface-panel">
+    <app-brand-lockup
+      class="login-brand"
+      size="hero"
+      layout="stacked"
+      subtitle="Controlá animales, tareas y novedades del establecimiento desde un solo lugar."
+    />
+
     <p class="eyebrow">Acceso seguro</p>
     <h1>Iniciar sesión</h1>
-    <p class="support-copy">
-      Entrá con tu usuario o correo y una contraseña válida. {{ allowedRolesMessage }}
-    </p>
+    <p class="support-copy">Ingresá con tu correo o CI para continuar con la operación diaria.</p>
 
     @if (sessionMessage()) {
       <div class="feedback-box" role="status">
@@ -24,10 +29,10 @@
 
     <form [formGroup]="form" class="auth-form" (ngSubmit)="submit()">
       <mat-form-field appearance="outline">
-        <mat-label>Usuario o correo *</mat-label>
+        <mat-label>Correo o CI *</mat-label>
         <input matInput formControlName="username" autocomplete="username" required />
         <mat-icon matSuffix>person</mat-icon>
-        <mat-hint>Usá tu usuario registrado o tu correo.</mat-hint>
+        <mat-hint>Podés entrar con tu correo registrado o tu CI de ganadero.</mat-hint>
         <app-form-errors [control]="form.controls.username" [messages]="messages.username" />
       </mat-form-field>
 
@@ -57,8 +62,6 @@
       </button>
     </form>
 
-    <a class="helper-link" routerLink="/admin/bootstrap">
-      ¿Todavía no existe un administrador? Ejecutá el bootstrap inicial.
-    </a>
+    <a class="helper-link" routerLink="/registro">¿Todavía no tenés acceso? Registrate como ganadero.</a>
   </mat-card>
 </div>

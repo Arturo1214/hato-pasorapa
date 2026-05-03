@@ -1,14 +1,16 @@
 <div class="bootstrap-shell">
   <mat-card class="bootstrap-card surface-panel">
-    <p class="eyebrow">Bootstrap inicial</p>
-    <h1>Crear primer administrador</h1>
+    <app-brand-lockup class="bootstrap-brand" size="card" layout="stacked" />
+
+    <p class="eyebrow">Configuración inicial</p>
+    <h1>Habilitar acceso inicial</h1>
     <p class="support-copy">
-      Esta pantalla solo sirve para el alta inicial. {{ passwordPolicyMessage }}
+      Usá esta pantalla solo durante la configuración inicial del establecimiento. {{ passwordPolicyMessage }}
     </p>
 
     <form [formGroup]="form" class="bootstrap-form" (ngSubmit)="submit()">
       <mat-form-field appearance="outline">
-        <mat-label>Usuario administrador *</mat-label>
+        <mat-label>Usuario de acceso *</mat-label>
         <input matInput formControlName="username" autocomplete="username" required />
         <app-form-errors [control]="form.controls.username" [messages]="messages.username" />
       </mat-form-field>
@@ -23,7 +25,7 @@
       <mat-form-field appearance="outline">
         <mat-label>Nombre visible *</mat-label>
         <input matInput formControlName="displayName" required />
-        <mat-hint>Este nombre aparece en encabezados y trazabilidad administrativa.</mat-hint>
+        <mat-hint>Este nombre aparece en encabezados y paneles del sistema.</mat-hint>
         <app-form-errors [control]="form.controls.displayName" [messages]="messages.displayName" />
       </mat-form-field>
 
@@ -40,9 +42,9 @@
           <span>{{ feedbackMessage() }}</span>
         </div>
       }
-
+      
       <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || authService.loading()">
-        {{ authService.loading() ? 'Creando…' : 'Crear administrador' }}
+        {{ authService.loading() ? 'Configurando…' : 'Habilitar acceso' }}
       </button>
     </form>
 

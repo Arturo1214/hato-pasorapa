@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { PASSWORD_POLICY_MESSAGE, passwordPolicyValidators } from '../../../../shared/forms/password-policy';
+import { BrandLockupComponent } from '../../../../shared/ui/brand-lockup/brand-lockup.component';
 import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-errors.component';
 
 @Component({
@@ -23,6 +24,7 @@ import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-erro
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    BrandLockupComponent,
     FormErrorsComponent,
   ],
   templateUrl: './bootstrap-page.component.html',
@@ -43,12 +45,12 @@ export class BootstrapPageComponent {
   });
 
   readonly messages = {
-    username: { required: 'Ingresá un usuario administrador.' },
+    username: { required: 'Ingresá un usuario de acceso.' },
     email: {
       required: 'Ingresá un correo válido.',
       email: 'Ingresá un correo válido.',
     },
-    displayName: { required: 'Ingresá un nombre visible para el administrador.' },
+    displayName: { required: 'Ingresá un nombre visible para la cuenta.' },
     password: {
       required: 'Ingresá una contraseña segura.',
       minlength: PASSWORD_POLICY_MESSAGE,
@@ -66,7 +68,7 @@ export class BootstrapPageComponent {
 
     this.authService.bootstrap(this.form.getRawValue()).subscribe((result) => {
       if (!result.success) {
-        this.feedbackMessage.set(result.error?.message ?? 'No pudimos completar el bootstrap.');
+        this.feedbackMessage.set(result.error?.message ?? 'No pudimos completar la configuración inicial.');
         return;
       }
 

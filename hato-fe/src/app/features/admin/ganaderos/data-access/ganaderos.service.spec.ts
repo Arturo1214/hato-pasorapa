@@ -15,6 +15,8 @@ describe('GanaderosService', () => {
     id: 'ganadero-1',
     businessIdentifier: 'BO-100',
     name: 'Estancia Norte',
+    email: 'norte@hato.bo',
+    contactInfo: '',
     active: true,
     version: 1,
     createdAt: '2026-04-26T10:00:00.000Z',
@@ -99,6 +101,7 @@ describe('GanaderosService', () => {
     await expect(firstValueFrom(service.listGanaderos())).resolves.toEqual([
       createGanadero({
         id: 'pending:operation-ganadero-create-1',
+        email: '',
         version: 0,
         createdAt: '2026-04-26T10:06:00.000Z',
         updatedAt: '2026-04-26T10:06:00.000Z',

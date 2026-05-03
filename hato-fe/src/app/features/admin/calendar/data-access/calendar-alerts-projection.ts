@@ -208,6 +208,7 @@ function animalEventTitle(type: AnimalEventSnapshotPayload['type']) {
       DECEASED: 'Seguimiento operativo',
       LOST: 'Seguimiento por extravío',
       TRANSFERRED: 'Transferencia programada',
+      CASTRATION: 'Castración programada',
       OBSERVATION: 'Observación operativa',
     } as const
   )[type];

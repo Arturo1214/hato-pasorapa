@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatIconModule } from '@angular/material/icon';
@@ -11,6 +11,118 @@ import { ApplicationConfigService } from '../../../../core/config/application-co
 import { CalendarAlertsStore } from '../../../../features/admin/calendar/data-access/calendar-alerts.store';
 import { AdminConflictResolutionStore } from '../../../../features/admin/conflicts/data-access/admin-conflict-resolution.store';
 import { NotificationInboxStore } from '../../../../features/admin/notifications/data-access/notification-inbox.store';
+import { BrandLockupComponent } from '../../../../shared/ui/brand-lockup/brand-lockup.component';
+
+interface MenuItem {
+  label: string;
+  icon: string;
+  route: string;
+  description: string;
+  badge?: number;
+  severity?: string | null;
+}
+
+interface StaticMenuItem {
+  label: string;
+  icon: string;
+  route: string;
+  description: string;
+  badgeKey?: 'conflicts' | 'calendar' | 'notifications';
+}
+
+const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
+  {
+    label: 'Dashboard',
+    icon: 'space_dashboard',
+    route: '/admin/dashboard',
+    description: 'Resumen administrativo para seguir métricas y prioridades del establecimiento.',
+  },
+  {
+    label: 'Usuarios',
+    icon: 'manage_accounts',
+    route: '/admin/usuarios',
+    description: 'Alta, edición y control de acceso para el equipo del establecimiento.',
+  },
+  {
+    label: 'Ganaderos',
+    icon: 'groups',
+    route: '/admin/ganaderos',
+    description: 'Padrón ganadero con seguimiento administrativo y soporte operativo.',
+  },
+  {
+    label: 'Notificaciones',
+    icon: 'notifications',
+    route: '/admin/notificaciones',
+    description: 'Administrá envíos, creación e historial de notificaciones internas.',
+    badgeKey: 'notifications',
+  },
+  {
+    label: 'Reportes',
+    icon: 'analytics',
+    route: '/admin/reportes',
+    description: 'Indicadores agregados para productividad, costos y decisiones operativas.',
+  },
+];
+
+const GANADERO_MENU_ITEMS: StaticMenuItem[] = [
+  {
+    label: 'Dashboard',
+    icon: 'space_dashboard',
+    route: '/ganadero/dashboard',
+    description: 'Resumen diario del trabajo de campo con foco en tus animales y alertas.',
+  },
+  {
+    label: 'Animales',
+    icon: 'pets',
+    route: '/ganadero/animales',
+    description: 'Consultá y actualizá tu rodeo para sostener la operación diaria.',
+  },
+  {
+    label: 'Visitas veterinarias',
+    icon: 'vaccines',
+    route: '/ganadero/visitas',
+    description: 'Seguimiento de controles, visitas y observaciones clínicas del campo.',
+  },
+  {
+    label: 'Ganaderos',
+    icon: 'groups',
+    route: '/ganadero/ganaderos',
+    description: 'Referencia operativa del padrón ganadero asociado a tu trabajo diario.',
+  },
+  {
+    label: 'Calendario',
+    icon: 'calendar_month',
+    route: '/ganadero/calendario',
+    description: 'Agenda de tareas y recordatorios para no perder acciones clave del campo.',
+    badgeKey: 'calendar',
+  },
+  {
+    label: 'Notificaciones',
+    icon: 'notifications',
+    route: '/ganadero/notificaciones',
+    description: 'Bandeja de avisos recibidos con seguimiento de lectura y prioridades.',
+    badgeKey: 'notifications',
+  },
+  {
+    label: 'Sincronización',
+    icon: 'sync_alt',
+    route: '/ganadero/sincronizacion',
+    description: 'Estado actual de la sincronización y de las operaciones pendientes.',
+  },
+  {
+    label: 'Backups',
+    icon: 'save',
+    route: '/ganadero/backups',
+    description: 'Respaldo y restauración local para proteger la continuidad del trabajo.',
+  },
+  {
+    label: 'Conflictos',
+    icon: 'rule',
+    route: '/ganadero/conflictos',
+    description: 'Seguimiento y resolución de conflictos pendientes antes de cerrar la jornada.',
+    badgeKey: 'conflicts',
+  },
+];
 
 @Component({
   selector: 'app-sidebar',
@@ -23,9 +135,11 @@ import { NotificationInboxStore } from '../../../../features/admin/notifications
     MatIconModule,
     MatListModule,
     MatTooltipModule,
+    BrandLockupComponent,
   ],
   templateUrl: './sidebar.html',
   styleUrl: './sidebar.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SidebarComponent {
   readonly authService = inject(AuthService);
@@ -35,102 +149,32 @@ export class SidebarComponent {
   readonly notificationInboxStore = inject(NotificationInboxStore);
   readonly navigate = output<void>();
 
-  readonly menuItems = computed(() => {
-    const role = this.authService.currentUser()?.role;
+  readonly menuItems = computed(() =>
+    (this.authService.currentUser()?.role === 'ADMIN' ? ADMIN_MENU_ITEMS : GANADERO_MENU_ITEMS).map((item) =>
+      this.enrichMenuItem(item)
+    )
+  );
 
-    return [
-      {
-        label: 'Inicio',
-        icon: 'space_dashboard',
-        route: '/',
-        description:
-          role === 'ADMIN'
-            ? 'Resumen inicial para administración y operación.'
-            : 'Resumen inicial para trabajo de ganadería.',
-      },
-      ...(role === 'ADMIN'
-        ? [
-            {
-              label: 'Dashboard',
-              icon: 'insights',
-              route: '/admin/dashboard',
-              description: 'Métricas mínimas de usuarios y seguimiento administrativo.',
-            },
-            {
-              label: 'Reportes',
-              icon: 'analytics',
-              route: '/admin/reportes',
-              description: 'Métricas operativas offline-first con presets y frescura visible.',
-            },
-            ...(this.appConfig.config().offlineBackupV1Enabled
-              ? [
-                  {
-                    label: 'Backups',
-                    icon: 'save',
-                    route: '/admin/backups',
-                    description: 'Export/import local con restore transaccional y digest verificable.',
-                  },
-                ]
-              : []),
-            {
-              label: 'Usuarios',
-              icon: 'manage_accounts',
-              route: '/admin/usuarios',
-              description: 'Alta, baja y reseteo básico de usuarios del sistema.',
-            },
-            {
-              label: 'Ganaderos',
-              icon: 'groups',
-              route: '/admin/ganaderos',
-              description: 'Registro y gestión mínima de ganaderos.',
-            },
-          ]
-        : []),
-      {
-        label: 'Conflictos',
-        icon: 'rule',
-        route: '/admin/conflictos',
-        description: 'Resolución manual offline-first con diff visual y auditoría append-only.',
-        badge: this.conflictResolutionStore.unresolvedCount(),
-        severity: this.conflictResolutionStore.unresolvedCount() > 0 ? 'high' : null,
-      },
-      {
-        label: 'Calendario',
-        icon: 'calendar_month',
-        route: '/admin/calendario',
-        description: 'Agenda local con alertas offline y badge operativo.',
-        badge: this.calendarAlertsStore.totalPending(),
-        severity: this.calendarAlertsStore.badgeSeverity(),
-      },
-      {
-        label: 'Notificaciones',
-        icon: 'notifications',
-        route: '/admin/notificaciones',
-        description: 'Inbox local con leídas/no leídas por dispositivo.',
-        badge: this.notificationInboxStore.unreadCount(),
-        severity: this.notificationInboxStore.badgeSeverity(),
-      },
-      {
-        label: 'Sync observability',
-        icon: 'sync_alt',
-        route: '/admin/sync-observability',
-        description: 'Runtime local + histórico agregado con el mismo diccionario de métricas.',
-      },
-      {
-        label: 'Animales',
-        icon: 'pets',
-        route: '/admin/animales',
-        description:
-          role === 'ADMIN'
-            ? 'Ficha vigente, ownership actual y visibles operativos del rodeo.'
-            : 'Consulta y actualización operativa de la ficha vigente del rodeo.',
-      },
-      {
-        label: 'Visitas veterinarias',
-        icon: 'vaccines',
-        route: '/admin/visitas-veterinarias',
-        description: 'Checklist, nota clínica y protocolo de visitas de campo offline-first.',
-      },
-    ];
-  });
+  private enrichMenuItem(item: StaticMenuItem): MenuItem {
+    switch (item.badgeKey) {
+      case 'conflicts': {
+        const badge = this.conflictResolutionStore.unresolvedCount();
+        return { ...item, badge, severity: badge > 0 ? 'high' : null };
+      }
+      case 'calendar':
+        return {
+          ...item,
+          badge: this.calendarAlertsStore.totalPending(),
+          severity: this.calendarAlertsStore.badgeSeverity(),
+        };
+      case 'notifications':
+        return {
+          ...item,
+          badge: this.notificationInboxStore.unreadCount(),
+          severity: this.notificationInboxStore.badgeSeverity(),
+        };
+      default:
+        return item;
+    }
+  }
 }

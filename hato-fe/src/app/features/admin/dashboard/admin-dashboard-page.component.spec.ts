@@ -26,7 +26,7 @@ describe('AdminDashboardPageComponent', () => {
     return fixture;
   };
 
-  it('should render user metrics cards for administrators', async () => {
+  it('should fetch metrics and render the lazy charts shell for administrators', async () => {
     const fixture = await configure({
       loadMetrics: () =>
         of({
@@ -35,10 +35,12 @@ describe('AdminDashboardPageComponent', () => {
         }),
     });
 
-    expect(fixture.nativeElement.textContent).toContain('Administradores');
-    expect(fixture.nativeElement.textContent).toContain('Ganaderos usuario');
-    expect(fixture.nativeElement.textContent).toContain('2');
-    expect(fixture.nativeElement.textContent).toContain('3');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Seguimiento rápido de usuarios');
+    expect(fixture.nativeElement.textContent).toContain('Usuarios por rol');
+    expect(fixture.nativeElement.querySelectorAll('canvas')).toHaveLength(2);
   });
 
   it('should show a clear error state when dashboard metrics cannot be loaded', async () => {

@@ -45,15 +45,15 @@ export const appConfig: ApplicationConfig = {
       useFactory: () => new SyncOrchestratorService(),
     },
     provideAppInitializer(() => {
-        return initializeApplicationRuntime(
-          inject(ApplicationConfigService),
-          inject(AuthService),
-          inject(SyncOrchestratorService),
-          inject(CalendarAlertsStore),
-          inject(AdminConflictResolutionStore),
-          inject(NotificationInboxStore),
-          inject(AdminReportingStore)
-        )();
-      }),
-    ],
-  };
+      return initializeApplicationRuntime(
+        inject(ApplicationConfigService),
+        inject(AuthService),
+        inject(SyncOrchestratorService),
+        inject(CalendarAlertsStore),
+        inject(AdminConflictResolutionStore),
+        inject(NotificationInboxStore),
+        inject(AdminReportingStore)
+      )();
+    }),
+  ],
+};

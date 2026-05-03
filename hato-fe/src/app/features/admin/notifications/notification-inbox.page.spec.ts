@@ -30,7 +30,7 @@ describe('NotificationInboxPageComponent', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ role: 'ADMIN', displayName: 'Admin Root' }),
+            currentUser: () => ({ role: 'GANADERO', displayName: 'Ganadero Base' }),
           },
         },
         {
@@ -62,20 +62,17 @@ describe('NotificationInboxPageComponent', () => {
     expect(fakeStore.markAsRead).toHaveBeenCalledWith('notification-a');
   });
 
-  it('should allow ADMIN to publish a notification and show emitted history', () => {
-    fixture.componentInstance.createForm.setValue({
-      title: 'Aviso admin',
-      body: 'Mensaje operativo.',
-      targetingMode: 'EXPLICIT_LIST',
-      includeUserIds: ['ganadero-1'],
-      excludeUserIds: [],
-    });
+  it('should mark all notifications as read when the page is entered', () => {
+    expect(fakeService.markAllAsRead).toHaveBeenCalledTimes(1);
+    expect(fakeStore.rebuild).toHaveBeenCalledWith('mark-read');
+  });
 
-    fixture.componentInstance.submitCreate();
-    fixture.detectChanges();
+  it('should show only the received inbox for ganadero sessions', () => {
+    const text = fixture.nativeElement.textContent;
 
-    expect(fakeService.createNotification).toHaveBeenCalled();
-    expect(fixture.nativeElement.textContent).toContain('Historial emitido');
+    expect(text).toContain('Bandeja local');
+    expect(text).not.toContain('Nueva notificación');
+    expect(text).not.toContain('Historial emitido');
   });
 });
 
@@ -140,5 +137,7 @@ function createFakeService() {
         publishedAt: '2026-04-26T10:00:00.000Z',
       })
     ),
+    markRecipientAsRead: vi.fn(() => of(undefined)),
+    markAllAsRead: vi.fn(() => of(undefined)),
   };
 }

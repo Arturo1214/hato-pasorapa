@@ -1,18 +1,24 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { OverlayContainer } from '@angular/cdk/overlay';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { GanaderosPageComponent } from './ganaderos-page.component';
-import { GanaderosService, type GanaderosSyncState } from './data-access/ganaderos.service';
+import { GanaderosService, type GanaderoItem, type GanaderosSyncState } from './data-access/ganaderos.service';
 
 describe('GanaderosPageComponent', () => {
+  let overlayContainer: OverlayContainer;
+
   const createServiceMock = () => ({
-    listGanaderos: () => of([]),
-    createGanadero: () => of({ outcome: 'synced', message: 'Ganadero registrado correctamente.' }),
-    updateStatus: () => of({ outcome: 'synced', message: 'Ganadero dado de baja correctamente.' }),
+    listGanaderos: vi.fn(() => of([] as GanaderoItem[])),
+    createGanadero: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero registrado correctamente.' })),
+    updateGanadero: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero actualizado correctamente.' })),
+    resetPassword: vi.fn(() => of({ outcome: 'synced', message: 'Contraseña temporal reseteada correctamente.' })),
+    updateStatus: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero dado de baja correctamente.' })),
     syncState: signal<GanaderosSyncState>({
       pending: 0,
       syncing: false,
@@ -29,6 +35,7 @@ describe('GanaderosPageComponent', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
+        provideNoopAnimations(),
         {
           provide: GanaderosService,
           useValue: serviceMock,
@@ -42,28 +49,11 @@ describe('GanaderosPageComponent', () => {
       ],
     }).compileComponents();
 
+    overlayContainer = TestBed.inject(OverlayContainer);
     const fixture = TestBed.createComponent(GanaderosPageComponent);
     fixture.detectChanges();
     return { fixture, component: fixture.componentInstance };
   };
-
-  it('should show explicit required messages for the ganadero form', async () => {
-    const { fixture, component } = await configure(createServiceMock());
-
-    component.submitCreate();
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.textContent).toContain('Ingresá el identificador de negocio.');
-    expect(fixture.nativeElement.textContent).toContain('Ingresá el nombre del ganadero.');
-  });
-
-  it('should keep the register button disabled until the ganadero form is valid', async () => {
-    const { fixture } = await configure(createServiceMock());
-
-    const submitButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
-
-    expect(submitButton.disabled).toBe(true);
-  });
 
   it('should show an empty state when there are no ganaderos registered', async () => {
     const { fixture } = await configure(createServiceMock());
@@ -72,19 +62,11 @@ describe('GanaderosPageComponent', () => {
   });
 
   it('should show a clear error when the ganaderos list cannot be loaded', async () => {
-    const { fixture } = await configure({
-      ...createServiceMock(),
-      listGanaderos: () => throwError(() => new Error('boom')),
-    });
+    const serviceMock = createServiceMock();
+    serviceMock.listGanaderos.mockReturnValue(throwError(() => new Error('boom')));
+    const { fixture } = await configure(serviceMock);
 
     expect(fixture.nativeElement.textContent).toContain('No pudimos cargar los ganaderos.');
-  });
-
-  it('should show helper guidance for status filters and registration fields', async () => {
-    const { fixture } = await configure(createServiceMock());
-
-    expect(fixture.nativeElement.textContent).toContain('Elegí si querés ver activos, dados de baja o todos.');
-    expect(fixture.nativeElement.textContent).toContain('Usá el identificador único definido por negocio.');
   });
 
   it('should show sync visibility and manual refresh guidance for ganaderos', async () => {
@@ -102,33 +84,123 @@ describe('GanaderosPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Necesitás refrescar manualmente la lista para resolver el conflicto remoto.');
   });
 
-  it('should show queued feedback when a ganadero is created offline first', async () => {
+  it('should render the ganaderos table with the expected business columns', async () => {
     const serviceMock = createServiceMock();
-    serviceMock.listGanaderos = vi
-      .fn()
-      .mockReturnValueOnce(of([]))
-      .mockReturnValueOnce(
-        of([
-          {
-            id: 'pending:ganadero-1',
-            businessIdentifier: 'BO-100',
-            name: 'Estancia Norte',
-            active: true,
-            version: 0,
-            createdAt: '2026-04-26T10:06:00.000Z',
-            updatedAt: '2026-04-26T10:06:00.000Z',
-            lastSyncedAt: null,
-          },
-        ])
-      );
-    serviceMock.createGanadero = () => of({ outcome: 'queued', message: 'Alta de ganadero encolada. Se enviará al reconectar.' });
+    serviceMock.listGanaderos.mockReturnValue(
+      of([
+        {
+          id: 'ganadero-1',
+          businessIdentifier: 'BO-100',
+          name: 'Estancia Norte',
+          email: 'norte@hato.bo',
+          contactInfo: '',
+          active: true,
+          version: 1,
+          createdAt: '2026-04-26T10:06:00.000Z',
+          updatedAt: '2026-04-26T10:06:00.000Z',
+          lastSyncedAt: null,
+        },
+      ] as GanaderoItem[])
+    );
+    const { fixture } = await configure(serviceMock);
+
+    expect(fixture.nativeElement.textContent).toContain('Identificador');
+    expect(fixture.nativeElement.textContent).toContain('Correo');
+    expect(fixture.nativeElement.textContent).toContain('Estancia Norte');
+  });
+
+  it('should filter the table by business identifier when filters change', async () => {
+    const serviceMock = createServiceMock();
+    serviceMock.listGanaderos.mockReturnValue(
+      of([
+        {
+          id: 'ganadero-1',
+          businessIdentifier: 'BO-100',
+          name: 'Estancia Norte',
+          email: 'norte@hato.bo',
+          contactInfo: '',
+          active: true,
+          version: 1,
+          createdAt: '2026-04-26T10:00:00.000Z',
+          updatedAt: '2026-04-26T10:00:00.000Z',
+          lastSyncedAt: null,
+        },
+        {
+          id: 'ganadero-2',
+          businessIdentifier: 'BO-200',
+          name: 'Estancia Sur',
+          email: 'sur@hato.bo',
+          contactInfo: '',
+          active: true,
+          version: 1,
+          createdAt: '2026-04-26T10:00:00.000Z',
+          updatedAt: '2026-04-26T10:00:00.000Z',
+          lastSyncedAt: null,
+        },
+      ] as GanaderoItem[])
+    );
     const { fixture, component } = await configure(serviceMock);
 
-    component.createForm.setValue({ businessIdentifier: 'BO-100', name: 'Estancia Norte' });
-    component.submitCreate();
+    component.filters.set({ businessIdentifier: 'BO-200' });
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Alta de ganadero encolada. Se enviará al reconectar.');
+    expect(fixture.nativeElement.textContent).toContain('Estancia Sur');
+    expect(fixture.nativeElement.textContent).not.toContain('Estancia Norte');
+  });
+
+  it('should ask for confirmation before resetting a ganadero password', async () => {
+    const ganadero = {
+      id: 'ganadero-1',
+      businessIdentifier: 'BO-100',
+      name: 'Estancia Norte',
+      email: 'norte@hato.bo',
+      contactInfo: '',
+      active: true,
+      version: 1,
+      createdAt: '2026-04-26T10:00:00.000Z',
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      lastSyncedAt: null,
+    };
+    const serviceMock = createServiceMock();
+    serviceMock.listGanaderos.mockReturnValue(of([ganadero] as GanaderoItem[]));
+    const { component, fixture } = await configure(serviceMock);
+
+    component.handleRowAction({ actionId: 'reset-password', row: ganadero });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(overlayContainer.getContainerElement().textContent).toContain('112345AB');
+  });
+
+  it('should disable a ganadero after confirmation from the row action', async () => {
+    const ganadero = {
+      id: 'ganadero-1',
+      businessIdentifier: 'BO-100',
+      name: 'Estancia Norte',
+      email: 'norte@hato.bo',
+      contactInfo: '',
+      active: true,
+      version: 1,
+      createdAt: '2026-04-26T10:00:00.000Z',
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      lastSyncedAt: null,
+    };
+    const serviceMock = createServiceMock();
+    serviceMock.listGanaderos.mockReturnValue(of([ganadero] as GanaderoItem[]));
+    const { fixture, component } = await configure(serviceMock);
+
+    component.handleRowAction({ actionId: 'toggle-status', row: ganadero });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const confirmButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Confirmar baja')
+    ) as HTMLButtonElement;
+    confirmButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(serviceMock.updateStatus).toHaveBeenCalledWith('ganadero-1', false);
   });
 
   it('should show central sync progress and the latest post-sync message for ganaderos', async () => {

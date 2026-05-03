@@ -1,19 +1,74 @@
+import type { Route } from '@angular/router';
 import { routes } from './app.routes';
+import { MainLayout } from './ui/layout/main-layout/main-layout';
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const collectProtectedRenderableRoutes = (routes: readonly Route[]): Route[] =>
+  routes.flatMap((route) => {
+    if (route.path === '**' || route.redirectTo || route.path === '') {
+      return [];
+    }
+
+    if (route.children?.length) {
+      return collectProtectedRenderableRoutes(route.children);
+    }
+
+    if (route.component || route.loadComponent) {
+      return [route];
+    }
+
+    return [];
+  });
 
 describe('admin routes', () => {
-  it('should expose the admin dashboard, reportes, backups, users, ganaderos, conflictos, animales, visitas veterinarias, calendario and notificaciones routes', () => {
-    const protectedShell = routes.find((route) => route.path === '');
-    const children = protectedShell?.children ?? [];
+  it('should require non-empty header metadata for every authenticated route rendered inside MainLayout', async () => {
+    const protectedShell = routes.find((route) => route.path === '' && route.loadComponent);
 
-    expect(children.some((route) => route.path === 'admin/dashboard')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/reportes')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/backups')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/usuarios')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/ganaderos')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/conflictos')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/animales')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/visitas-veterinarias')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/calendario')).toBe(true);
-    expect(children.some((route) => route.path === 'admin/notificaciones')).toBe(true);
+    expect(protectedShell).toBeDefined();
+    expect(await protectedShell?.loadComponent?.()).toBe(MainLayout);
+
+    const protectedRoutes = collectProtectedRenderableRoutes(protectedShell?.children ?? []);
+
+    expect(protectedRoutes.map((route) => route.path)).toEqual([
+      'perfil',
+      'admin/dashboard',
+      'admin/reportes',
+      'admin/decision-support',
+      'admin/usuarios',
+      'admin/ganaderos',
+      'admin/conflictos',
+      'admin/notificaciones',
+      'ganadero/dashboard',
+      'ganadero/animales',
+      'ganadero/visitas',
+      'ganadero/ganaderos',
+      'ganadero/calendario',
+      'ganadero/notificaciones',
+      'ganadero/sincronizacion',
+      'ganadero/backups',
+      'ganadero/conflictos',
+    ]);
+
+    const routesMissingHeaderMeta = protectedRoutes
+      .map((route) => ({
+        path: route.path ?? '(empty)',
+        title: route.data?.['title'],
+        subtitle: route.data?.['subtitle'],
+      }))
+      .filter(
+        ({ title, subtitle }) => !isNonEmptyString(title) || !isNonEmptyString(subtitle)
+      );
+
+    expect(routesMissingHeaderMeta).toEqual([]);
+  });
+
+  it('should keep the authenticated shell root reserved for role-aware redirect', () => {
+    const protectedShell = routes.find((route) => route.path === '');
+    const rootRoute = protectedShell?.children?.find((route) => route.path === '');
+
+    expect(rootRoute?.loadComponent).toBeDefined();
+    expect(rootRoute?.canActivate?.length).toBe(1);
   });
 });

@@ -23,7 +23,7 @@ import {
 export interface AnimalEventItem {
   id: string;
   animalUuid: string;
-  type: 'SOLD' | 'DECEASED' | 'LOST' | 'TRANSFERRED' | 'OBSERVATION';
+  type: 'SOLD' | 'DECEASED' | 'LOST' | 'TRANSFERRED' | 'CASTRATION' | 'OBSERVATION';
   occurredAt: string;
   notes: string | null;
   performedByUserId: string;
@@ -99,6 +99,19 @@ export class AnimalsEventsService {
 
   createEvent(input: AnimalEventCreateInput): Observable<AnimalEventMutationFeedback> {
     return from(this.createEventInternal(input) as Promise<AnimalEventMutationFeedback>);
+  }
+
+  createCastrationEvent(
+    animalUuid: string,
+    payload: Pick<AnimalEventCreateInput, 'occurredAt' | 'notes' | 'metadata'>
+  ): Observable<AnimalEventMutationFeedback> {
+    return this.createEvent({
+      animalUuid,
+      type: 'CASTRATION',
+      occurredAt: payload.occurredAt,
+      notes: payload.notes,
+      metadata: payload.metadata,
+    });
   }
 
   private async listEventsInternal(animalUuid: string, filters: AnimalEventListFilters) {
@@ -223,6 +236,7 @@ export class AnimalsEventsService {
         payload.type === 'SOLD' || payload.type === 'DECEASED' || payload.type === 'LOST'
           ? false
           : currentSnapshot.active,
+      category: resolveProjectedCategory(currentSnapshot.category as string | null | undefined, payload.type),
       updatedAt: now,
     };
 
@@ -287,4 +301,21 @@ function normalizeOptionalText(value: string | null | undefined) {
 
 function normalizeOccurredAt(value: string) {
   return value.includes('T') && !value.endsWith('Z') ? `${value}:00.000Z`.replace('T', 'T') : value;
+}
+
+function resolveProjectedCategory(
+  currentCategory: string | null | undefined,
+  eventType: AnimalEventItem['type']
+): AnimalOfflineSnapshotPayload['category'] {
+  const safeCategory = currentCategory?.toUpperCase() ?? null;
+
+  if (eventType !== 'CASTRATION') {
+    return (safeCategory as AnimalOfflineSnapshotPayload['category'] | null) ?? 'VACA';
+  }
+
+  if (safeCategory === 'BULL' || safeCategory === 'CALF' || safeCategory === 'TORO' || safeCategory === 'TERNERO') {
+    return 'BUEY';
+  }
+
+  return (safeCategory as AnimalOfflineSnapshotPayload['category'] | null) ?? 'VACA';
 }

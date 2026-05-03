@@ -66,7 +66,7 @@ describe('LoginPageComponent', () => {
     component.submit();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Ingresá tu usuario o correo.');
+    expect(fixture.nativeElement.textContent).toContain('Ingresá tu correo o CI.');
     expect(fixture.nativeElement.textContent).toContain('Ingresá tu contraseña.');
   });
 
@@ -78,9 +78,16 @@ describe('LoginPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Usuario o contraseña inválidos.');
   });
 
-  it('should explain that the hardened login only works with ADMIN and GANADERO roles', () => {
-    expect(component.allowedRolesMessage).toBe('Solo existen roles ADMIN y GANADERO.');
-    expect(fixture.nativeElement.textContent).toContain(component.allowedRolesMessage);
+  it('should render user-facing branding copy without bootstrap or role instructions', () => {
+    const text = fixture.nativeElement.textContent;
+    const registerLink = fixture.nativeElement.querySelector('a[routerLink="/registro"]') as HTMLAnchorElement | null;
+
+    expect(text).toContain('Pasorapa Hato');
+    expect(text).toContain('Registrate como ganadero.');
+    expect(text).toContain('correo o CI');
+    expect(text).not.toContain('Solo existen roles ADMIN y GANADERO.');
+    expect(text).not.toContain('bootstrap inicial');
+    expect(registerLink).not.toBeNull();
   });
 
   it('should render differentiated copy for expired and reauth_required session states', async () => {

@@ -8,9 +8,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ALLOWED_ROLES_MESSAGE } from '../../../../core/auth/auth-rules';
 import { AuthService, type OfflineSessionStatus } from '../../../../core/auth/data-access/auth.service';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
+import { BrandLockupComponent } from '../../../../shared/ui/brand-lockup/brand-lockup.component';
 import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-errors.component';
 
 @Component({
@@ -25,6 +25,7 @@ import { FormErrorsComponent } from '../../../../shared/ui/form-errors/form-erro
     MatIconModule,
     MatInputModule,
     RouterLink,
+    BrandLockupComponent,
     FormErrorsComponent,
   ],
   templateUrl: './login-page.component.html',
@@ -40,11 +41,10 @@ export class LoginPageComponent {
   readonly authService = inject(AuthService);
   readonly themeService = inject(ThemeService);
   readonly feedbackMessage = signal<string | null>(null);
-  readonly allowedRolesMessage = ALLOWED_ROLES_MESSAGE;
   private readonly sessionContext = computed<OfflineSessionStatus | null>(() =>
     parseSessionContext(this.queryParamMap().get('session'))
   );
-  private readonly returnUrl = computed(() => this.queryParamMap().get('returnUrl') || '/');
+  private readonly returnUrl = computed(() => this.queryParamMap().get('returnUrl') || '/admin/dashboard');
   readonly sessionMessage = computed(() => {
     const sessionContext = this.sessionContext();
 
@@ -65,7 +65,7 @@ export class LoginPageComponent {
   });
 
   readonly messages = {
-    username: { required: 'Ingresá tu usuario o correo.' },
+    username: { required: 'Ingresá tu correo o CI.' },
     password: { required: 'Ingresá tu contraseña.' },
   };
 

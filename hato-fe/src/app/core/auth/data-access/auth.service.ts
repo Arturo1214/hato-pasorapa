@@ -20,6 +20,15 @@ export interface BootstrapPayload {
   password: string;
 }
 
+export interface GanaderoRegistrationPayload {
+  businessIdentifier: string;
+  name: string;
+  email: string;
+  password: string;
+  website: string;
+  formIssuedAt: string;
+}
+
 interface AuthApiUser {
   id: string;
   username: string;
@@ -111,8 +120,12 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   ACCOUNT_BLOCKED: 'Tu cuenta está bloqueada. Contactá a un administrador.',
   PASSWORD_POLICY_VIOLATION:
     'La contraseña debe tener al menos 8 caracteres, 1 mayúscula y 1 número.',
+  EMAIL_ALREADY_EXISTS: 'Ya existe una cuenta con ese correo.',
+  GANADERO_ALREADY_EXISTS: 'Ya existe un ganadero con ese identificador.',
+  ANTI_SPAM_REJECTED: 'Error en el registro, intenta más tarde.',
+  ANTI_SPAM_RATE_LIMITED: 'Error en el registro, intenta más tarde.',
   BOOTSTRAP_ALREADY_COMPLETED:
-    'El bootstrap inicial ya fue completado. Iniciá sesión con una cuenta activa.',
+    'La configuración inicial ya fue completada. Iniciá sesión con una cuenta activa.',
 };
 
 const DEFAULT_SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -206,6 +219,10 @@ export class AuthService {
 
   bootstrap(payload: BootstrapPayload) {
     return this.executeAuthRequest<AuthApiResponse>('/admin/bootstrap', payload);
+  }
+
+  registerGanadero(payload: GanaderoRegistrationPayload) {
+    return this.executeAuthRequest<AuthApiResponse>('/public/ganaderos', payload);
   }
 
   logout(reason: Extract<OfflineSessionBoundaryReason, 'logout' | 'manual_lock'> = 'logout') {

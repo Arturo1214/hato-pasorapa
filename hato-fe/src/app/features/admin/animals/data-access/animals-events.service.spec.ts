@@ -190,4 +190,53 @@ describe('AnimalsEventsService', () => {
     ]);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
   });
+
+  it('should queue castration events and project BUEY immediately in the local animal snapshot', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL:animal-uuid-1',
+      entityType: 'ANIMAL',
+      entityId: 'animal-uuid-1',
+      payload: {
+        uuid: 'animal-uuid-1',
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-100',
+        marca: null,
+        tatuaje: null,
+        category: 'BULL',
+        active: true,
+        admissionDate: '2026-04-26',
+        birthDate: '2024-04-26',
+        sex: 'MACHO',
+        weightKg: 410,
+        createdAt: '2026-04-26T10:00:00.000Z',
+        updatedAt: '2026-04-26T10:00:00.000Z',
+        version: 2,
+        lastSyncedAt: null,
+      } as Record<string, unknown>,
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 2,
+    });
+
+    await expect(
+      firstValueFrom(
+        service.createCastrationEvent('animal-uuid-1', {
+          occurredAt: '2026-04-26T10:15:00.000Z',
+          notes: 'Castración programada',
+          metadata: { reasonCode: 'SCHEDULED' },
+        })
+      )
+    ).resolves.toEqual({
+      outcome: 'queued',
+      message: 'Evento animal encolado. Se enviará al reconectar.',
+    });
+
+    const snapshot = await store.getSnapshot('ANIMAL', 'animal-uuid-1');
+    expect(snapshot?.payload).toEqual(
+      expect.objectContaining({
+        category: 'BUEY',
+        updatedAt: '2026-04-26T10:05:00.000Z',
+      })
+    );
+  });
 });

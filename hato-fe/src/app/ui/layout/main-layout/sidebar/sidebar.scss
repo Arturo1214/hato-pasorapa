@@ -13,29 +13,7 @@
 .logo-area {
   display: flex;
   align-items: center;
-  gap: 12px;
   padding: 8px 6px 2px;
-}
-
-.brand-mark {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #1961a1 0%, #3ca2bc 100%);
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
-.brand-copy {
-  display: grid;
-  gap: 2px;
-}
-
-.brand-copy span {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.8rem;
 }
 
 .domain-card {

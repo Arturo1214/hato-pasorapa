@@ -1,28 +1,27 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { finalize } from 'rxjs';
+import { MatDialog } from '@angular/material/dialog';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
+import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
+import {
+  DataTableComponent,
+  DATA_TABLE_FILTER_TYPE,
+  type DataTableAction,
+  type DataTableColumn,
+  type DataTableRowActionEvent,
+} from '../../../shared/ui/data-table/data-table.component';
+import { GANADERO_DIALOG_MODE, GanaderoFormDialogComponent, type GanaderoDialogResult } from './ganadero-form-dialog.component';
 import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.service';
 
 @Component({
   selector: 'app-ganaderos-page',
-  standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    FormErrorsComponent,
+    DataTableComponent,
   ],
   template: `
     <section class="admin-page">
@@ -42,53 +41,19 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
         @if (syncState().lastMessage) {
           <p>{{ syncState().lastMessage }}</p>
         }
+        @if (sensitiveActionsOnlineOnly()) {
+          <p>La edición y el reseteo de contraseñas de ganaderos requieren conexión.</p>
+        }
         @if (syncState().manualRefreshRequired) {
           <p>Necesitás refrescar manualmente la lista para resolver el conflicto remoto.</p>
         }
       </mat-card>
 
-      <mat-card appearance="outlined">
-        <mat-form-field appearance="outline">
-          <mat-label>Filtro de estado</mat-label>
-          <mat-select [value]="selectedFilter()" (valueChange)="changeFilter($event)">
-            <mat-option value="ALL">Todos</mat-option>
-            <mat-option value="ACTIVE">Activos</mat-option>
-            <mat-option value="INACTIVE">Baja</mat-option>
-          </mat-select>
-          <mat-hint>Elegí si querés ver activos, dados de baja o todos.</mat-hint>
-        </mat-form-field>
-      </mat-card>
-
-      <mat-card appearance="outlined">
-        <form [formGroup]="createForm" class="form-grid" (ngSubmit)="submitCreate()">
-          <mat-form-field appearance="outline">
-            <mat-label>Identificador de negocio *</mat-label>
-            <input matInput formControlName="businessIdentifier" required />
-            <mat-hint>Usá el identificador único definido por negocio.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Nombre del ganadero *</mat-label>
-            <input matInput formControlName="name" required />
-            <mat-hint>Este nombre se muestra en listados y confirmaciones administrativas.</mat-hint>
-          </mat-form-field>
-
-          <app-form-errors
-            [control]="createForm.controls.businessIdentifier"
-            [messages]="messages.businessIdentifier"
-          />
-          <app-form-errors [control]="createForm.controls.name" [messages]="messages.name" />
-
-          <button
-            mat-flat-button
-            color="primary"
-            type="submit"
-            [disabled]="createForm.invalid || createSubmitting()"
-          >
-            {{ createSubmitting() ? 'Guardando…' : 'Registrar ganadero' }}
-          </button>
-        </form>
-      </mat-card>
+      <div class="toolbar-actions">
+        <button mat-flat-button color="primary" type="button" (click)="openCreateDialog()">
+          Registrar ganadero
+        </button>
+      </div>
 
       @if (feedbackMessage()) {
         <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
@@ -99,23 +64,16 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
       } @else if (!ganaderos().length) {
         <mat-card appearance="outlined"><p>Todavía no hay ganaderos registrados.</p></mat-card>
       } @else {
-        <div class="cards-grid">
-          @for (ganadero of ganaderos(); track ganadero.id) {
-            <mat-card appearance="outlined">
-              <h2>{{ ganadero.name }}</h2>
-              <p>{{ ganadero.businessIdentifier }}</p>
-              <p>Estado: {{ ganadero.active ? 'ACTIVO' : 'BAJA' }}</p>
-              <button
-                mat-button
-                type="button"
-                [disabled]="updatingStatusIds().includes(ganadero.id)"
-                (click)="toggleStatus(ganadero)"
-              >
-                {{ ganadero.active ? 'Dar de baja' : 'Reactivar' }}
-              </button>
-            </mat-card>
-          }
-        </div>
+        <mat-card appearance="outlined">
+          <app-data-table
+            [columns]="columns"
+            [data]="ganaderos()"
+            [filters]="filters()"
+            [actions]="actions"
+            (filterChange)="filters.set($event)"
+            (rowAction)="handleRowAction($event)"
+          />
+        </mat-card>
       }
     </section>
   `,
@@ -127,96 +85,189 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
         padding: 1rem;
       }
 
-      .form-grid,
-      .cards-grid {
+      .toolbar-actions {
         display: grid;
         gap: 1rem;
-      }
-
-      .cards-grid {
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       }
     `,
   ],
 })
 export class GanaderosPageComponent {
-  private readonly formBuilder = inject(FormBuilder);
   private readonly ganaderosService = inject(GanaderosService);
   private readonly offlineStatus = inject(OfflineStatusService);
+  private readonly dialog = inject(MatDialog);
 
   readonly ganaderos = signal<GanaderoItem[]>([]);
   readonly errorMessage = signal<string | null>(null);
   readonly feedbackMessage = signal<string | null>(null);
-  readonly createSubmitting = signal(false);
-  readonly updatingStatusIds = signal<string[]>([]);
   readonly syncState = this.ganaderosService.syncState;
   readonly offlineMessage = this.offlineStatus.message;
+  readonly sensitiveActionsOnlineOnly = computed(() => this.offlineMessage() !== null);
+  readonly filters = signal<Record<string, string>>({});
   readonly syncSummary = computed(() => {
     const syncState = this.syncState();
     const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
     return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
   });
-  readonly selectedFilter = signal<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
-  readonly createForm = this.formBuilder.nonNullable.group({
-    businessIdentifier: ['', [Validators.required]],
-    name: ['', [Validators.required]],
-  });
-
-  readonly messages = {
-    businessIdentifier: { required: 'Ingresá el identificador de negocio.' },
-    name: { required: 'Ingresá el nombre del ganadero.' },
-  };
+  readonly columns: DataTableColumn[] = [
+    { key: 'businessIdentifier', label: 'Identificador', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    { key: 'name', label: 'Nombre', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    { key: 'email', label: 'Correo', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'active',
+      label: 'Estado',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [
+        { label: 'Activo', value: 'true' },
+        { label: 'Baja', value: 'false' },
+      ],
+      formatter: (value) => (value ? 'Activo' : 'Baja'),
+    },
+  ];
+  readonly actions: DataTableAction[] = [
+    { id: 'edit', label: 'Editar', icon: 'edit' },
+    { id: 'reset-password', label: 'Reset password', icon: 'lock_reset', color: 'warn' },
+    { id: 'toggle-status', label: 'Deshabilitar', icon: 'block', color: 'warn' },
+  ];
 
   constructor() {
     this.loadGanaderos();
   }
 
-  submitCreate() {
-    if (this.createForm.invalid) {
-      this.createForm.markAllAsTouched();
+  openCreateDialog() {
+    this.dialog
+      .open(GanaderoFormDialogComponent, {
+        data: { mode: GANADERO_DIALOG_MODE.CREATE },
+      })
+      .afterClosed()
+      .subscribe((result: GanaderoDialogResult | undefined) => {
+        if (!result) {
+          return;
+        }
+
+        this.feedbackMessage.set(null);
+        this.ganaderosService.createGanadero(result).subscribe({
+          next: (response) => {
+            this.feedbackMessage.set(response.message);
+            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+            if (response.outcome !== 'blocked') {
+              this.loadGanaderos();
+            }
+          },
+          error: () => this.errorMessage.set('No pudimos guardar el ganadero.'),
+        });
+      });
+  }
+
+  handleRowAction(event: DataTableRowActionEvent) {
+    const ganadero = event.row as unknown as GanaderoItem;
+
+    if (event.actionId === 'edit') {
+      this.openEditDialog(ganadero);
       return;
     }
 
-    this.feedbackMessage.set(null);
-    this.createSubmitting.set(true);
+    if (event.actionId === 'reset-password') {
+      this.confirmPasswordReset(ganadero);
+      return;
+    }
 
-    this.ganaderosService.createGanadero(this.createForm.getRawValue()).pipe(finalize(() => this.createSubmitting.set(false))).subscribe({
-      next: (result) => {
-        this.createForm.reset({ businessIdentifier: '', name: '' });
-        this.errorMessage.set(null);
-        this.feedbackMessage.set(result.message);
-        this.loadGanaderos();
-      },
-      error: () => this.errorMessage.set('No pudimos guardar el ganadero.'),
-    });
+    if (event.actionId === 'toggle-status') {
+      this.confirmStatusToggle(ganadero);
+    }
   }
 
-  toggleStatus(ganadero: GanaderoItem) {
-    this.feedbackMessage.set(null);
-    this.updatingStatusIds.update((ids) => [...ids, ganadero.id]);
+  private openEditDialog(ganadero: GanaderoItem) {
+    if (this.sensitiveActionsOnlineOnly()) {
+      return;
+    }
 
-    this.ganaderosService.updateStatus(ganadero.id, !ganadero.active).pipe(
-      finalize(() => this.updatingStatusIds.update((ids) => ids.filter((id) => id !== ganadero.id)))
-    ).subscribe({
-      next: (result) => {
-        this.feedbackMessage.set(result.message);
-        this.loadGanaderos();
-      },
-      error: () => this.errorMessage.set('No pudimos actualizar el estado del ganadero.'),
-    });
+    this.dialog
+      .open(GanaderoFormDialogComponent, {
+        data: { mode: GANADERO_DIALOG_MODE.EDIT, ganadero },
+      })
+      .afterClosed()
+      .subscribe((result: GanaderoDialogResult | undefined) => {
+        if (!result) {
+          return;
+        }
+
+        this.ganaderosService.updateGanadero(ganadero.id, result).subscribe({
+          next: (response) => {
+            this.feedbackMessage.set(response.message);
+            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+            if (response.outcome !== 'blocked') {
+              this.loadGanaderos();
+            }
+          },
+          error: () => this.errorMessage.set('No pudimos actualizar el ganadero.'),
+        });
+      });
   }
 
-  changeFilter(filter: 'ALL' | 'ACTIVE' | 'INACTIVE') {
-    this.selectedFilter.set(filter);
-    this.loadGanaderos();
+  private confirmPasswordReset(ganadero: GanaderoItem) {
+    if (this.sensitiveActionsOnlineOnly()) {
+      return;
+    }
+
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: 'Reset password temporal',
+          message: `Vas a resetear la contraseña de ${ganadero.name} (${ganadero.businessIdentifier}) a 112345AB.`,
+          confirmLabel: 'Confirmar reset',
+          tone: CONFIRMATION_DIALOG_TONE.WARN,
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed: boolean | undefined) => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.ganaderosService.resetPassword(ganadero.id).subscribe({
+          next: (response) => {
+            this.feedbackMessage.set(response.message);
+            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+          },
+          error: () => this.errorMessage.set('No pudimos resetear la contraseña temporal.'),
+        });
+      });
+  }
+
+  private confirmStatusToggle(ganadero: GanaderoItem) {
+    const nextActive = !ganadero.active;
+
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: nextActive ? 'Reactivar ganadero' : 'Dar de baja ganadero',
+          message: `Vas a ${nextActive ? 'reactivar' : 'dar de baja'} a ${ganadero.name}.`,
+          confirmLabel: nextActive ? 'Reactivar' : 'Confirmar baja',
+          tone: CONFIRMATION_DIALOG_TONE.WARN,
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed: boolean | undefined) => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.ganaderosService.updateStatus(ganadero.id, nextActive).subscribe({
+          next: (response) => {
+            this.feedbackMessage.set(response.message);
+            this.loadGanaderos();
+          },
+          error: () => this.errorMessage.set('No pudimos actualizar el estado del ganadero.'),
+        });
+      });
   }
 
   private loadGanaderos() {
     this.errorMessage.set(null);
-    const activeFilter =
-      this.selectedFilter() === 'ALL' ? undefined : this.selectedFilter() === 'ACTIVE';
 
-    this.ganaderosService.listGanaderos(activeFilter).subscribe({
+    this.ganaderosService.listGanaderos().subscribe({
       next: (ganaderos) => this.ganaderos.set(ganaderos),
       error: () => {
         this.ganaderos.set([]);

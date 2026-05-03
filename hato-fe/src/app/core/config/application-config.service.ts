@@ -13,7 +13,7 @@ export interface ApplicationRuntimeConfig {
 })
 export class ApplicationConfigService {
   private readonly runtimeConfig = signal<ApplicationRuntimeConfig>({
-      appName: 'Hato FE',
+      appName: 'Pasorapa Hato',
       domain: 'bo.pasorapa.hato',
       apiBaseUrl: '/api',
       offlineConflictResolutionV2: true,

@@ -123,6 +123,34 @@ describe('AuthService', () => {
     });
   });
 
+  it('should accept a ganadero login that uses CI in the same identifier field', async () => {
+    const credentials: LoginCredentials = { username: '12345678', password: 'Ganadera9' };
+
+    const resultPromise = firstValueFrom(service.login(credentials));
+    const request = httpController.expectOne('/api/auth/login');
+
+    expect(request.request.body).toEqual(credentials);
+    request.flush({
+      accessToken: 'jwt-token',
+      tokenType: 'Bearer',
+      expiresInSeconds: 28800,
+      user: {
+        id: 'user-2',
+        username: 'ganadera@hato.bo',
+        email: 'ganadera@hato.bo',
+        displayName: 'Ganadera Norte',
+        role: 'GANADERO',
+        status: 'ACTIVE',
+        version: 1,
+        updatedAt: '2026-04-25T12:10:00',
+        lastSyncedAt: null,
+      },
+    });
+
+    await expect(resultPromise).resolves.toEqual({ success: true, error: null });
+    expect(service.currentUser()?.username).toBe('ganadera@hato.bo');
+  });
+
   it('should classify the persisted envelope as expired once the 8h ttl elapses', () => {
     const envelope = buildOfflineSessionEnvelope({
       userId: 'user-1',

@@ -71,41 +71,33 @@ describe('SidebarComponent', () => {
   it('should show admin navigation entries for administrative management', async () => {
     await configure('ADMIN');
 
-    const text = fixture.nativeElement.textContent;
+    const labels = fixture.componentInstance.menuItems().map((item) => item.label);
 
-    expect(text).toContain('Dashboard');
-    expect(text).toContain('Reportes');
-    expect(text).toContain('Backups');
-    expect(text).toContain('Usuarios');
-    expect(text).toContain('Ganaderos');
-    expect(text).toContain('Conflictos');
-    expect(text).toContain('Calendario');
-    expect(text).toContain('Notificaciones');
-    expect(text).toContain('Sync observability');
-    expect(text).toContain('Animales');
-    expect(text).toContain('Visitas veterinarias');
+    expect(labels).toEqual(['Dashboard', 'Usuarios', 'Ganaderos', 'Notificaciones', 'Reportes']);
+    expect(labels).toHaveLength(5);
   });
 
-  it('should expose animales to ganadero sessions without admin-only menu entries', async () => {
+  it('should expose the role-ordered ganadero sidebar entries', async () => {
     await configure('GANADERO');
 
-    const text = fixture.nativeElement.textContent;
+    const labels = fixture.componentInstance.menuItems().map((item) => item.label);
 
-    expect(text).toContain('Animales');
-    expect(text).toContain('Calendario');
-    expect(text).toContain('Conflictos');
-    expect(text).toContain('Notificaciones');
-    expect(text).toContain('Sync observability');
-    expect(text).toContain('Visitas veterinarias');
-    expect(text).not.toContain('Reportes');
-    expect(text).not.toContain('Backups');
-    expect(text).not.toContain('Dashboard');
-    expect(text).not.toContain('Usuarios');
-    expect(text).not.toContain('Ganaderos');
+    expect(labels).toEqual([
+      'Dashboard',
+      'Animales',
+      'Visitas veterinarias',
+      'Ganaderos',
+      'Calendario',
+      'Notificaciones',
+      'Sincronización',
+      'Backups',
+      'Conflictos',
+    ]);
+    expect(labels).toHaveLength(9);
   });
 
   it('should render the operational badge for calendario entries', async () => {
-    await configure('ADMIN');
+    await configure('GANADERO');
 
     const badges = Array.from(fixture.nativeElement.querySelectorAll('.menu-badge')) as HTMLElement[];
     expect(badges.some((badge) => badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high')).toBe(true);

@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { ApplicationConfigService } from '../../core/config/application-config.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-home',
@@ -14,4 +15,9 @@ import { ApplicationConfigService } from '../../core/config/application-config.s
 })
 export class HomeComponent {
   readonly appConfig = inject(ApplicationConfigService);
+  private readonly router = inject(Router);
+
+  constructor() {
+    void this.router.navigateByUrl('/admin/dashboard');
+  }
 }

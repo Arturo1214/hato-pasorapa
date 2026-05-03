@@ -33,6 +33,13 @@ export interface CreateManagedUserPayload {
   password: string;
 }
 
+export interface UpdateManagedUserPayload {
+  username: string;
+  email: string;
+  displayName: string;
+  role: Role;
+}
+
 export interface AdminMutationFeedback {
   outcome: 'synced' | 'queued' | 'blocked';
   message: string;
@@ -114,6 +121,31 @@ export class AdminUsersService {
           return {
             outcome: 'synced',
             message: 'Usuario guardado correctamente.',
+          } satisfies AdminMutationFeedback;
+        })
+      );
+  }
+
+  updateUser(userId: string, payload: UpdateManagedUserPayload): Observable<AdminMutationFeedback> {
+    if (!this.offlineStatus.isOnline()) {
+      return from(
+        Promise.resolve({
+          outcome: 'blocked',
+          message: 'La edición de usuarios requiere conexión para mantener el padrón consistente.',
+        } satisfies AdminMutationFeedback)
+      );
+    }
+
+    return this.http
+      .put<ManagedUser>(`${this.appConfig.config().apiBaseUrl}/admin/users/${userId}`, payload, {
+        headers: this.buildMutationHeaders(),
+      })
+      .pipe(
+        map((user) => {
+          void this.saveUserSnapshot(user);
+          return {
+            outcome: 'synced',
+            message: 'Usuario actualizado correctamente.',
           } satisfies AdminMutationFeedback;
         })
       );

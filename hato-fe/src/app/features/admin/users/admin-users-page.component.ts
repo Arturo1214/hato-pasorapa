@@ -1,29 +1,27 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { finalize } from 'rxjs';
-import { PASSWORD_POLICY_MESSAGE, passwordPolicyValidators } from '../../../shared/forms/password-policy';
-import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
-import { AdminUsersService, type ManagedUser } from './data-access/admin-users.service';
+import { MatDialog } from '@angular/material/dialog';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
+import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
+import {
+  DataTableComponent,
+  DATA_TABLE_FILTER_TYPE,
+  type DataTableAction,
+  type DataTableColumn,
+  type DataTableRowActionEvent,
+} from '../../../shared/ui/data-table/data-table.component';
+import { AdminUsersService, type ManagedUser } from './data-access/admin-users.service';
+import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from './user-form-dialog.component';
 
 @Component({
   selector: 'app-admin-users-page',
-  standalone: true,
   imports: [
     CommonModule,
-    ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    FormErrorsComponent,
+    DataTableComponent,
   ],
   template: `
     <section class="admin-page">
@@ -44,98 +42,18 @@ import { OfflineStatusService } from '../../../core/offline/offline-status.servi
           <p>{{ syncState().lastMessage }}</p>
         }
         @if (sensitiveActionsOnlineOnly()) {
-          <p>Las altas de usuarios y resets de contraseña se resuelven solo online.</p>
+          <p>Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.</p>
         }
         @if (syncState().manualRefreshRequired) {
           <p>Necesitás refrescar manualmente la lista para resolver el conflicto remoto.</p>
         }
       </mat-card>
 
-      <mat-card appearance="outlined">
-        <form [formGroup]="createForm" class="form-grid" (ngSubmit)="submitCreate()">
-          <mat-form-field appearance="outline">
-            <mat-label>Usuario *</mat-label>
-            <input matInput formControlName="username" required />
-            <mat-hint>Definí un identificador único para ingreso y trazabilidad.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Correo *</mat-label>
-            <input matInput type="email" formControlName="email" required />
-            <mat-hint>Se usa para contacto, recuperación y auditoría.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Nombre visible *</mat-label>
-            <input matInput formControlName="displayName" required />
-            <mat-hint>Es el nombre que ve el equipo dentro del panel.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Rol *</mat-label>
-            <mat-select formControlName="role" required>
-              <mat-option value="ADMIN">ADMIN</mat-option>
-              <mat-option value="GANADERO">GANADERO</mat-option>
-            </mat-select>
-            <mat-hint>Solo existen roles ADMIN y GANADERO.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Contraseña *</mat-label>
-            <input matInput type="password" formControlName="password" autocomplete="new-password" required />
-            <mat-hint>Mínimo 8 caracteres, 1 mayúscula y 1 número.</mat-hint>
-          </mat-form-field>
-
-          <app-form-errors [control]="createForm.controls.username" [messages]="messages.username" />
-          <app-form-errors [control]="createForm.controls.email" [messages]="messages.email" />
-          <app-form-errors [control]="createForm.controls.displayName" [messages]="messages.displayName" />
-          <app-form-errors [control]="createForm.controls.password" [messages]="messages.password" />
-
-          <button
-            mat-flat-button
-            color="primary"
-            type="submit"
-            [disabled]="createForm.invalid || createSubmitting() || sensitiveActionsOnlineOnly()"
-          >
-            {{ createSubmitting() ? 'Guardando…' : 'Crear usuario' }}
-          </button>
-        </form>
-      </mat-card>
-
-      <mat-card appearance="outlined">
-        <form [formGroup]="passwordForm" class="form-grid" (ngSubmit)="submitPasswordReset()">
-          <mat-form-field appearance="outline">
-            <mat-label>Usuario a resetear *</mat-label>
-            <mat-select formControlName="userId" required>
-              @for (user of users(); track user.id) {
-                <mat-option [value]="user.id">{{ user.displayName }} ({{ user.role }})</mat-option>
-              }
-            </mat-select>
-            <mat-hint>Elegí la cuenta que necesita una nueva contraseña.</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Nueva contraseña *</mat-label>
-            <input matInput type="password" formControlName="password" autocomplete="new-password" required />
-            <mat-hint>Mantené la política: 8 caracteres, 1 mayúscula y 1 número.</mat-hint>
-          </mat-form-field>
-
-          <app-form-errors [control]="passwordForm.controls.userId" [messages]="passwordMessages.userId" />
-          <app-form-errors
-            [control]="passwordForm.controls.password"
-            [messages]="passwordMessages.password"
-          />
-
-          <button
-            mat-stroked-button
-            color="primary"
-            type="submit"
-            [disabled]="passwordForm.invalid || passwordSubmitting() || sensitiveActionsOnlineOnly()"
-          >
-            {{ passwordSubmitting() ? 'Actualizando…' : 'Resetear contraseña' }}
-          </button>
-        </form>
-      </mat-card>
+      <div class="toolbar-actions">
+        <button mat-flat-button color="primary" type="button" [disabled]="sensitiveActionsOnlineOnly()" (click)="openCreateDialog()">
+          Crear usuario
+        </button>
+      </div>
 
       @if (feedbackMessage()) {
         <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
@@ -146,25 +64,16 @@ import { OfflineStatusService } from '../../../core/offline/offline-status.servi
       } @else if (!users().length) {
         <mat-card appearance="outlined"><p>Todavía no hay usuarios administrados.</p></mat-card>
       } @else {
-        <div class="cards-grid">
-          @for (user of users(); track user.id) {
-            <mat-card appearance="outlined">
-              <h2>{{ user.displayName }}</h2>
-                <p>{{ user.username }} · {{ user.role }}</p>
-                <p>Estado: {{ user.status }}</p>
-                <div class="actions">
-                  <button
-                    mat-button
-                    type="button"
-                    [disabled]="updatingStatusIds().includes(user.id)"
-                    (click)="toggleStatus(user)"
-                  >
-                    {{ user.status === 'ACTIVE' ? 'Dar de baja' : 'Reactivar' }}
-                  </button>
-                </div>
-            </mat-card>
-          }
-        </div>
+        <mat-card appearance="outlined">
+          <app-data-table
+            [columns]="columns"
+            [data]="users()"
+            [filters]="filters()"
+            [actions]="actions"
+            (filterChange)="filters.set($event)"
+            (rowAction)="handleRowAction($event)"
+          />
+        </mat-card>
       }
     </section>
   `,
@@ -176,142 +85,170 @@ import { OfflineStatusService } from '../../../core/offline/offline-status.servi
         padding: 1rem;
       }
 
-      .form-grid,
-      .cards-grid {
+      .toolbar-actions {
         display: grid;
         gap: 1rem;
-      }
-
-      .cards-grid {
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      }
-
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
       }
     `,
   ],
 })
 export class AdminUsersPageComponent {
-  private readonly formBuilder = inject(FormBuilder);
   private readonly adminUsersService = inject(AdminUsersService);
   private readonly offlineStatus = inject(OfflineStatusService);
+  private readonly dialog = inject(MatDialog);
 
   readonly users = signal<ManagedUser[]>([]);
   readonly errorMessage = signal<string | null>(null);
   readonly feedbackMessage = signal<string | null>(null);
-  readonly createSubmitting = signal(false);
-  readonly passwordSubmitting = signal(false);
-  readonly updatingStatusIds = signal<string[]>([]);
   readonly syncState = this.adminUsersService.syncState;
   readonly offlineMessage = this.offlineStatus.message;
   readonly sensitiveActionsOnlineOnly = computed(() => this.offlineMessage() !== null);
+  readonly filters = signal<Record<string, string>>({});
   readonly syncSummary = computed(() => {
     const syncState = this.syncState();
     const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
     return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
   });
-  readonly createForm = this.formBuilder.nonNullable.group({
-    username: ['', [Validators.required]],
-    email: ['', [Validators.required, Validators.email]],
-    displayName: ['', [Validators.required]],
-    role: ['ADMIN' as const, [Validators.required]],
-    password: ['', passwordPolicyValidators],
-  });
-  readonly passwordForm = this.formBuilder.nonNullable.group({
-    userId: ['', [Validators.required]],
-    password: ['', passwordPolicyValidators],
-  });
-
-  readonly messages = {
-    username: { required: 'Ingresá un usuario.' },
-    email: { required: 'Ingresá un correo válido.', email: 'Ingresá un correo válido.' },
-    displayName: { required: 'Ingresá un nombre visible.' },
-    password: {
-      required: 'Ingresá una contraseña segura.',
-      minlength: PASSWORD_POLICY_MESSAGE,
-      pattern: PASSWORD_POLICY_MESSAGE,
+  readonly columns: DataTableColumn[] = [
+    { key: 'username', label: 'Usuario', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    { key: 'email', label: 'Correo', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'role',
+      label: 'Rol',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [
+        { label: 'ADMIN', value: 'ADMIN' },
+        { label: 'GANADERO', value: 'GANADERO' },
+      ],
     },
-  };
-  readonly passwordMessages = {
-    userId: { required: 'Seleccioná el usuario a resetear.' },
-    password: {
-      required: 'Ingresá una nueva contraseña segura.',
-      minlength: PASSWORD_POLICY_MESSAGE,
-      pattern: PASSWORD_POLICY_MESSAGE,
+    {
+      key: 'status',
+      label: 'Estado',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [
+        { label: 'Activo', value: 'ACTIVE' },
+        { label: 'Inactivo', value: 'INACTIVE' },
+        { label: 'Bloqueado', value: 'BLOCKED' },
+      ],
+      formatter: (value) => (value === 'ACTIVE' ? 'Activo' : value === 'INACTIVE' ? 'Inactivo' : 'Bloqueado'),
     },
-  };
+  ];
+  readonly actions: DataTableAction[] = [
+    { id: 'view', label: 'Ver', icon: 'visibility' },
+    { id: 'edit', label: 'Editar', icon: 'edit' },
+    { id: 'toggle-status', label: 'Deshabilitar', icon: 'block', color: 'warn' },
+  ];
 
   constructor() {
     this.loadUsers();
   }
 
-  submitCreate() {
-    if (this.createForm.invalid) {
-      this.createForm.markAllAsTouched();
+  openCreateDialog() {
+    if (this.sensitiveActionsOnlineOnly()) {
       return;
     }
 
-    this.feedbackMessage.set(null);
-    this.createSubmitting.set(true);
-
-    this.adminUsersService.createUser(this.createForm.getRawValue()).pipe(finalize(() => this.createSubmitting.set(false))).subscribe({
-      next: (result) => {
-        if (result.outcome === 'blocked') {
-          this.errorMessage.set(result.message);
+    this.dialog
+      .open(UserFormDialogComponent, {
+        data: { mode: USER_DIALOG_MODE.CREATE },
+      })
+      .afterClosed()
+      .subscribe((result: UserDialogResult | undefined) => {
+        if (!result) {
           return;
         }
 
-        this.createForm.reset({ role: 'ADMIN', username: '', email: '', displayName: '', password: '' });
-        this.errorMessage.set(null);
-        this.feedbackMessage.set(result.message);
-        this.loadUsers();
-      },
-      error: () => this.errorMessage.set('No pudimos guardar el usuario.'),
-    });
+        this.feedbackMessage.set(null);
+        this.adminUsersService.createUser({ ...result, password: result.password ?? '' }).subscribe({
+          next: (response) => {
+            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+            if (response.outcome !== 'blocked') {
+              this.feedbackMessage.set(response.message);
+              this.loadUsers();
+            }
+          },
+          error: () => this.errorMessage.set('No pudimos guardar el usuario.'),
+        });
+      });
   }
 
-  submitPasswordReset() {
-    if (this.passwordForm.invalid) {
-      this.passwordForm.markAllAsTouched();
+  handleRowAction(event: DataTableRowActionEvent) {
+    const user = event.row as unknown as ManagedUser;
+
+    if (event.actionId === 'view') {
+      this.dialog.open(UserFormDialogComponent, {
+        data: { mode: USER_DIALOG_MODE.VIEW, user },
+      });
       return;
     }
 
-    const { userId, password } = this.passwordForm.getRawValue();
-    this.feedbackMessage.set(null);
-    this.passwordSubmitting.set(true);
+    if (event.actionId === 'edit') {
+      this.openEditDialog(user);
+      return;
+    }
 
-    this.adminUsersService.resetPassword(userId, password).pipe(finalize(() => this.passwordSubmitting.set(false))).subscribe({
-      next: (result) => {
-        if (result.outcome === 'blocked') {
-          this.errorMessage.set(result.message);
+    if (event.actionId === 'toggle-status') {
+      this.confirmStatusToggle(user);
+    }
+  }
+
+  private openEditDialog(user: ManagedUser) {
+    if (this.sensitiveActionsOnlineOnly()) {
+      return;
+    }
+
+    this.dialog
+      .open(UserFormDialogComponent, {
+        data: { mode: USER_DIALOG_MODE.EDIT, user },
+      })
+      .afterClosed()
+      .subscribe((result: UserDialogResult | undefined) => {
+        if (!result) {
           return;
         }
 
-        this.passwordForm.reset({ userId: '', password: '' });
-        this.errorMessage.set(null);
-        this.feedbackMessage.set(result.message);
-      },
-      error: () => this.errorMessage.set('No pudimos resetear la contraseña.'),
-    });
+        this.adminUsersService.updateUser(user.id, result).subscribe({
+          next: (response) => {
+            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+            if (response.outcome !== 'blocked') {
+              this.feedbackMessage.set(response.message);
+              this.loadUsers();
+            }
+          },
+          error: () => this.errorMessage.set('No pudimos actualizar el usuario.'),
+        });
+      });
   }
 
-  toggleStatus(user: ManagedUser) {
+  private confirmStatusToggle(user: ManagedUser) {
     const nextStatus = user.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    this.feedbackMessage.set(null);
-    this.updatingStatusIds.update((ids) => [...ids, user.id]);
 
-    this.adminUsersService.updateStatus(user.id, nextStatus).pipe(
-      finalize(() => this.updatingStatusIds.update((ids) => ids.filter((id) => id !== user.id)))
-    ).subscribe({
-      next: (result) => {
-        this.feedbackMessage.set(result.message);
-        this.loadUsers();
-      },
-      error: () => this.errorMessage.set('No pudimos actualizar el estado del usuario.'),
-    });
+    this.dialog
+      .open(ConfirmationDialogComponent, {
+        data: {
+          title: nextStatus === 'INACTIVE' ? 'Deshabilitar usuario' : 'Reactivar usuario',
+          message: `Vas a ${nextStatus === 'INACTIVE' ? 'deshabilitar' : 'reactivar'} a ${user.displayName}.`,
+          confirmLabel: nextStatus === 'INACTIVE' ? 'Deshabilitar' : 'Reactivar',
+          tone: CONFIRMATION_DIALOG_TONE.WARN,
+        },
+      })
+      .afterClosed()
+      .subscribe((confirmed: boolean | undefined) => {
+        if (!confirmed) {
+          return;
+        }
+
+        this.feedbackMessage.set(null);
+        this.adminUsersService.updateStatus(user.id, nextStatus).subscribe({
+          next: (result) => {
+            this.feedbackMessage.set(result.message);
+            this.loadUsers();
+          },
+          error: () => this.errorMessage.set('No pudimos actualizar el estado del usuario.'),
+        });
+      });
   }
 
   private loadUsers() {

@@ -5,10 +5,20 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, PRIMARY_OUTLET, Router } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
+
+interface RouteViewMeta {
+  title: string;
+  subtitle: string;
+}
+
+const DEFAULT_ROUTE_VIEW_META: RouteViewMeta = {
+  title: 'Dashboard',
+  subtitle: 'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
+};
 
 @Component({
   selector: 'app-header',
@@ -27,27 +37,90 @@ export class HeaderComponent {
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
-      map(() => {
-        let currentRoute = this.activatedRoute;
-        while (currentRoute.firstChild) {
-          currentRoute = currentRoute.firstChild;
-        }
-
-        const routeData = currentRoute?.snapshot?.data ?? {};
-
-        return {
-          title: (routeData['title'] as string | undefined) ?? 'Inicio',
-          subtitle: (routeData['subtitle'] as string | undefined) ?? 'Base visual y técnica para el frontend de Hato.',
-        };
-      })
+      map(() => this.resolveRouteViewMeta())
     ),
     {
-      initialValue: {
-        title: 'Inicio',
-        subtitle: 'Base visual y técnica para el frontend de Hato.',
-      },
+      initialValue: DEFAULT_ROUTE_VIEW_META,
     }
   );
 
   readonly greeting = computed(() => this.authService.currentUser()?.displayName ?? 'Equipo Hato');
+
+  private resolveRouteViewMeta(): RouteViewMeta {
+    const rootSnapshot = this.router.routerState.snapshot?.root ?? this.activatedRoute.snapshot ?? null;
+    const routeChain = this.collectPrimaryRouteChain(rootSnapshot);
+
+    for (let index = routeChain.length - 1; index >= 0; index -= 1) {
+      const routeViewMeta = this.extractRouteViewMeta(routeChain[index]);
+
+      if (routeViewMeta) {
+        return routeViewMeta;
+      }
+    }
+
+    const fallbackTitle = this.resolveFallbackTitle(routeChain.at(-1) ?? null);
+
+    return {
+      title: fallbackTitle,
+      subtitle: DEFAULT_ROUTE_VIEW_META.subtitle,
+    };
+  }
+
+  private collectPrimaryRouteChain(snapshot: ActivatedRouteSnapshot | null): ActivatedRouteSnapshot[] {
+    const routeChain: ActivatedRouteSnapshot[] = [];
+    let currentSnapshot = snapshot;
+
+    while (currentSnapshot) {
+      routeChain.push(currentSnapshot);
+      currentSnapshot =
+        currentSnapshot.children.find((childSnapshot) => childSnapshot.outlet === PRIMARY_OUTLET) ??
+        currentSnapshot.firstChild ??
+        null;
+    }
+
+    return routeChain;
+  }
+
+  private extractRouteViewMeta(snapshot: ActivatedRouteSnapshot | null): RouteViewMeta | null {
+    const title = snapshot?.data?.['title'];
+    const subtitle = snapshot?.data?.['subtitle'];
+
+    if (typeof title !== 'string' || typeof subtitle !== 'string') {
+      return null;
+    }
+
+    return { title, subtitle };
+  }
+
+  private resolveFallbackTitle(snapshot: ActivatedRouteSnapshot | null): string {
+    const routeConfigPath = snapshot?.routeConfig?.path;
+
+    if (typeof routeConfigPath === 'string') {
+      const titleFromRoutePath = this.humanizeRoutePath(routeConfigPath);
+
+      if (titleFromRoutePath !== DEFAULT_ROUTE_VIEW_META.title) {
+        return titleFromRoutePath;
+      }
+    }
+
+    return this.humanizeRoutePath(this.router.url);
+  }
+
+  private humanizeRoutePath(path: string): string {
+    const normalizedPath = path
+      .split(/[?#]/, 1)[0]
+      .split('/')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment.length > 0 && segment !== 'admin')
+      .at(-1);
+
+    if (!normalizedPath) {
+      return DEFAULT_ROUTE_VIEW_META.title;
+    }
+
+    return normalizedPath
+      .split('-')
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(' ');
+  }
 }

@@ -1,17 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
+import { ChartsLazyComponent } from '../charts/charts-lazy.component';
 import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admin-dashboard.service';
 
 @Component({
   selector: 'app-admin-dashboard-page',
-  standalone: true,
-  imports: [CommonModule, MatCardModule],
+  imports: [CommonModule, MatCardModule, ChartsLazyComponent],
   template: `
     <section class="admin-page">
       <header class="page-header">
         <h1>Dashboard</h1>
-        <p>Resumen mínimo de usuarios del sistema para administración.</p>
+        <p>Seguimiento rápido de usuarios y estado operativo del padrón ganadero.</p>
       </header>
 
       @if (errorMessage()) {
@@ -19,23 +19,13 @@ import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admi
           <p>{{ errorMessage() }}</p>
         </mat-card>
       } @else if (metrics()) {
-        <div class="metrics-grid">
+        @defer (when metrics()) {
+          <app-charts-lazy [metrics]="metrics()!" />
+        } @placeholder {
           <mat-card appearance="outlined">
-            <h2>Administradores</h2>
-            <p>Total: {{ metrics()!.admins.total }}</p>
-            <p>Activos: {{ metrics()!.admins.active }}</p>
-            <p>De baja: {{ metrics()!.admins.inactive }}</p>
-            <p>Bloqueados: {{ metrics()!.admins.blocked }}</p>
+            <p>Preparando gráficos del dashboard…</p>
           </mat-card>
-
-          <mat-card appearance="outlined">
-            <h2>Ganaderos usuario</h2>
-            <p>Total: {{ metrics()!.ganaderos.total }}</p>
-            <p>Activos: {{ metrics()!.ganaderos.active }}</p>
-            <p>De baja: {{ metrics()!.ganaderos.inactive }}</p>
-            <p>Bloqueados: {{ metrics()!.ganaderos.blocked }}</p>
-          </mat-card>
-        </div>
+        }
       }
     </section>
   `,
@@ -50,12 +40,6 @@ import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admi
       .page-header h1,
       h2 {
         margin: 0 0 0.5rem;
-      }
-
-      .metrics-grid {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
     `,
   ],

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -29,11 +29,12 @@ import { NotificationInboxStore } from './data-access/notification-inbox.store';
     MatInputModule,
     MatSelectModule,
   ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="notifications-page">
       <header class="page-header">
         <h1>Notificaciones</h1>
-        <p>Inbox offline-first para GANADERO y alta operativa ADMIN→GANADERO.</p>
+        <p>Inbox offline-first para avisos recibidos por el ganadero en campo.</p>
       </header>
 
       <mat-card appearance="outlined">
@@ -42,7 +43,7 @@ import { NotificationInboxStore } from './data-access/notification-inbox.store';
         <button mat-stroked-button type="button" (click)="refresh()">Refrescar inbox</button>
       </mat-card>
 
-      @if (isAdmin()) {
+      @if (adminMode()) {
         <mat-card appearance="outlined">
           <h2>Nueva notificación</h2>
           @if (offlineMessage()) {
@@ -159,6 +160,8 @@ export class NotificationInboxPageComponent {
   private readonly adminNotificationsService = inject(AdminNotificationsService);
   private readonly offlineStatus = inject(OfflineStatusService);
 
+  readonly adminMode = input(false);
+
   readonly inboxStore = inject(NotificationInboxStore);
   readonly inboxItems = this.inboxStore.items;
   readonly offlineMessage = this.offlineStatus.message;
@@ -180,9 +183,14 @@ export class NotificationInboxPageComponent {
   });
 
   constructor() {
-    if (this.isAdmin()) {
+    if (this.adminMode() || this.isAdmin()) {
       this.loadAdminData();
     }
+
+    this.adminNotificationsService.markAllAsRead().subscribe({
+      next: () => void this.inboxStore.rebuild('mark-read'),
+      error: () => undefined,
+    });
   }
 
   refresh() {
@@ -227,6 +235,10 @@ export class NotificationInboxPageComponent {
   }
 
   markAsRead(notificationId: string) {
+    this.adminNotificationsService.markRecipientAsRead(notificationId).subscribe({
+      next: () => undefined,
+      error: () => undefined,
+    });
     void this.inboxStore.markAsRead(notificationId);
   }
 

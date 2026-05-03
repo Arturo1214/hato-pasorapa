@@ -11,7 +11,39 @@ import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 
-export type AnimalCategory = 'COW' | 'BULL' | 'CALF' | 'HEIFER';
+export const ANIMAL_CATEGORY = {
+  TERNERO: 'TERNERO',
+  TERNERA: 'TERNERA',
+  VAQUILLONA: 'VAQUILLONA',
+  VACA: 'VACA',
+  TORO: 'TORO',
+  BUEY: 'BUEY',
+} as const;
+
+export type AnimalCategory = (typeof ANIMAL_CATEGORY)[keyof typeof ANIMAL_CATEGORY];
+
+export const ANIMAL_SEX = {
+  MACHO: 'MACHO',
+  HEMBRA: 'HEMBRA',
+} as const;
+
+export type AnimalSex = (typeof ANIMAL_SEX)[keyof typeof ANIMAL_SEX];
+
+type LegacyAnimalCategory = 'COW' | 'BULL' | 'CALF' | 'HEIFER';
+
+export const ANIMAL_CATEGORY_OPTIONS = [
+  { value: ANIMAL_CATEGORY.TERNERO, label: 'Ternero' },
+  { value: ANIMAL_CATEGORY.TERNERA, label: 'Ternera' },
+  { value: ANIMAL_CATEGORY.VAQUILLONA, label: 'Vaquillona' },
+  { value: ANIMAL_CATEGORY.VACA, label: 'Vaca' },
+  { value: ANIMAL_CATEGORY.TORO, label: 'Toro' },
+  { value: ANIMAL_CATEGORY.BUEY, label: 'Buey' },
+] as const;
+
+export const ANIMAL_SEX_OPTIONS = [
+  { value: ANIMAL_SEX.HEMBRA, label: 'Hembra' },
+  { value: ANIMAL_SEX.MACHO, label: 'Macho' },
+] as const;
 
 export interface AnimalItem {
   uuid: string;
@@ -22,6 +54,7 @@ export interface AnimalItem {
   marca: string | null;
   tatuaje: string | null;
   category: AnimalCategory;
+  sex: AnimalSex | null;
   active: boolean;
   birthDate?: string | null;
   admissionDate: string;
@@ -47,13 +80,20 @@ export interface AnimalMutationPayload {
   marca?: string | null;
   tatuaje?: string | null;
   category: AnimalCategory;
+  sex?: AnimalSex | null;
   active: boolean;
   admissionDate: string;
+  birthDate?: string | null;
   weightKg?: number | null;
 }
 
 interface AnimalsPageResponse {
-  content: AnimalItem[];
+  content: RawAnimalItem[];
+}
+
+interface RawAnimalItem extends Omit<AnimalItem, 'category' | 'sex'> {
+  category: AnimalCategory | LegacyAnimalCategory;
+  sex?: AnimalSex | null;
 }
 
 export interface AnimalMutationFeedback {
@@ -136,7 +176,7 @@ export class AnimalsService {
       })
     );
 
-    const animals = response.content ?? [];
+    const animals = (response.content ?? []).map(normalizeAnimalItem);
     await Promise.all(animals.map((animal) => this.saveAnimalSnapshot(animal)));
     await this.refreshPendingState();
     return animals.map(
@@ -224,7 +264,8 @@ export class AnimalsService {
     const outbox = await this.store.listOutbox();
 
     return snapshots
-      .map((snapshot) => decorateAnimalSnapshot(snapshot.payload as unknown as AnimalItem, outbox))
+      .map((snapshot) => normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem))
+      .map((animal) => decorateAnimalSnapshot(animal, outbox))
       .filter((animal) => matchesAnimalFilters(animal, filters))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
@@ -277,8 +318,9 @@ function createOptimisticAnimalSnapshot(
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
     category: payload.category,
+    sex: payload.sex ?? inferAnimalSexFromCategory(payload.category),
     active: payload.active,
-    birthDate: null,
+    birthDate: payload.birthDate ?? null,
     admissionDate: payload.admissionDate,
     weightKg: payload.weightKg ?? null,
     createdAt: now,
@@ -305,8 +347,9 @@ function applyOptimisticAnimalUpdate(
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
     category: payload.category,
+    sex: payload.sex ?? currentSnapshot?.sex ?? inferAnimalSexFromCategory(payload.category),
     active: payload.active,
-    birthDate: currentSnapshot?.birthDate ?? null,
+    birthDate: payload.birthDate ?? currentSnapshot?.birthDate ?? null,
     admissionDate: payload.admissionDate,
     weightKg: payload.weightKg ?? null,
     createdAt: currentSnapshot?.createdAt ?? now,
@@ -316,6 +359,42 @@ function applyOptimisticAnimalUpdate(
     syncStatus: 'pending',
     syncMessage: 'Pendiente de sync.',
   };
+}
+
+function normalizeAnimalItem(animal: RawAnimalItem | AnimalItem): AnimalItem {
+  const category = normalizeAnimalCategory(animal.category, animal.sex ?? null);
+  return {
+    ...animal,
+    category,
+    sex: animal.sex ?? inferAnimalSexFromCategory(category),
+    birthDate: animal.birthDate ?? null,
+  } satisfies AnimalItem;
+}
+
+function normalizeAnimalCategory(category: RawAnimalItem['category'], sex: AnimalSex | null | undefined): AnimalCategory {
+  switch (category) {
+    case 'COW':
+      return ANIMAL_CATEGORY.VACA;
+    case 'BULL':
+      return ANIMAL_CATEGORY.TORO;
+    case 'HEIFER':
+      return ANIMAL_CATEGORY.VAQUILLONA;
+    case 'CALF':
+      return sex === ANIMAL_SEX.HEMBRA ? ANIMAL_CATEGORY.TERNERA : ANIMAL_CATEGORY.TERNERO;
+    default:
+      return category;
+  }
+}
+
+export function inferAnimalSexFromCategory(category: AnimalCategory): AnimalSex {
+  switch (category) {
+    case ANIMAL_CATEGORY.TERNERA:
+    case ANIMAL_CATEGORY.VAQUILLONA:
+    case ANIMAL_CATEGORY.VACA:
+      return ANIMAL_SEX.HEMBRA;
+    default:
+      return ANIMAL_SEX.MACHO;
+  }
 }
 
 function buildListQuery(filters: AnimalListFilters) {
@@ -401,8 +480,10 @@ function sanitizeMutationPayload(payload: AnimalMutationPayload): AnimalOfflineM
     marca: normalizeOptionalText(payload.marca),
     tatuaje: normalizeOptionalText(payload.tatuaje),
     category: payload.category,
+    sex: payload.sex ?? null,
     active: payload.active,
     admissionDate: payload.admissionDate,
+    birthDate: payload.birthDate ?? null,
     weightKg: payload.weightKg ?? null,
   };
 }

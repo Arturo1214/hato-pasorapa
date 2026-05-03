@@ -1,5 +1,5 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { inject } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, type OfflineSessionStatus } from '../auth/data-access/auth.service';
 import { ApplicationConfigService } from '../config/application-config.service';
@@ -513,6 +513,7 @@ interface SyncCycleRuntimeContext {
   hasMoreObserved: boolean;
 }
 
+@Injectable({ providedIn: 'root' })
 export class SyncApiService implements SyncApiClient {
   private readonly http = inject(HttpClient);
   private readonly appConfig = inject(ApplicationConfigService);

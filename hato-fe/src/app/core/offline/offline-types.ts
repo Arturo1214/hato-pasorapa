@@ -421,9 +421,11 @@ export interface AnimalOfflineMutationPayload extends Record<string, unknown> {
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
-  category: 'COW' | 'BULL' | 'CALF' | 'HEIFER';
+  category: 'TERNERO' | 'TERNERA' | 'VAQUILLONA' | 'VACA' | 'TORO' | 'BUEY';
+  sex?: 'MACHO' | 'HEMBRA' | null;
   active: boolean;
   admissionDate: string;
+  birthDate?: string | null;
   weightKg?: number | null;
 }
 
@@ -438,7 +440,7 @@ export interface AnimalOfflineSnapshotPayload extends AnimalOfflineMutationPaylo
   lastSyncedAt: string | null;
 }
 
-export const ANIMAL_EVENT_TYPES = ['SOLD', 'DECEASED', 'LOST', 'TRANSFERRED', 'OBSERVATION'] as const;
+export const ANIMAL_EVENT_TYPES = ['SOLD', 'DECEASED', 'LOST', 'TRANSFERRED', 'CASTRATION', 'OBSERVATION'] as const;
 export type AnimalEventType = (typeof ANIMAL_EVENT_TYPES)[number];
 export type AnimalEventSourceChannel = 'ONLINE' | 'OFFLINE';
 

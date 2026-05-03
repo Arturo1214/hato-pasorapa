@@ -66,9 +66,9 @@ describe('BootstrapPageComponent', () => {
     component.submit();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Ingresá un usuario administrador.');
+    expect(fixture.nativeElement.textContent).toContain('Ingresá un usuario de acceso.');
     expect(fixture.nativeElement.textContent).toContain('Ingresá un correo válido.');
-    expect(fixture.nativeElement.textContent).toContain('Ingresá un nombre visible para el administrador.');
+    expect(fixture.nativeElement.textContent).toContain('Ingresá un nombre visible para la cuenta.');
   });
 
   it('should validate the password policy before calling bootstrap', () => {
@@ -118,6 +118,14 @@ describe('BootstrapPageComponent', () => {
     const submitButton = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
 
     expect(submitButton.disabled).toBe(true);
-    expect(submitButton.textContent).toContain('Creando…');
+    expect(submitButton.textContent).toContain('Configurando…');
+  });
+
+  it('should keep the initial setup screen generic without public admin copy', () => {
+    const text = fixture.nativeElement.textContent;
+
+    expect(text).toContain('Habilitar acceso inicial');
+    expect(text).not.toContain('Crear primer administrador');
+    expect(text).not.toContain('Usuario administrador');
   });
 });

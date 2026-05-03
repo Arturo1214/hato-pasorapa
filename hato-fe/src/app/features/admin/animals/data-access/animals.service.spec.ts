@@ -8,7 +8,7 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
-import { AnimalsService, type AnimalItem } from './animals.service';
+import { ANIMAL_CATEGORY, ANIMAL_SEX, AnimalsService, type AnimalItem } from './animals.service';
 
 describe('AnimalsService', () => {
   const createAnimal = (overrides: Partial<AnimalItem> = {}): AnimalItem => ({
@@ -17,8 +17,10 @@ describe('AnimalsService', () => {
     arete: 'AR-100',
     marca: null,
     tatuaje: null,
-    category: 'COW',
+    category: ANIMAL_CATEGORY.VACA,
+    sex: ANIMAL_SEX.HEMBRA,
     active: true,
+    birthDate: null,
     admissionDate: '2026-04-26',
     weightKg: 420,
     createdAt: '2026-04-26T10:00:00.000Z',
@@ -68,7 +70,7 @@ describe('AnimalsService', () => {
     TestBed.resetTestingModule();
   });
 
-  it('should request operational filters online and cache the canonical uuid snapshot', async () => {
+  it('should request table filters online and cache canonical categories with sex data', async () => {
     const get = vi.fn(() => of({ content: [createAnimal()] }));
     const { service, store } = setup({ online: true, http: { get: get as never } });
 
@@ -78,15 +80,15 @@ describe('AnimalsService', () => {
           visible: 'AR-100',
           ownerGanaderoId: 'ganadero-uuid-1',
           active: true,
-          category: 'COW',
-        })
+            category: ANIMAL_CATEGORY.VACA,
+          })
       )
     ).resolves.toEqual([createAnimal({ syncStatus: 'synced', syncMessage: null })]);
 
     expect(get).toHaveBeenCalledTimes(1);
     const [requestedUrl, options] = get.mock.calls[0] as unknown as [string, { headers: HttpHeaders }];
     expect(requestedUrl).toBe(
-      '/api/animals?visible.contains=AR-100&ownerGanaderoId.equals=ganadero-uuid-1&active.equals=true&category.equals=COW&page=0&size=20&sort=updatedAt,desc'
+      '/api/animals?visible.contains=AR-100&ownerGanaderoId.equals=ganadero-uuid-1&active.equals=true&category.equals=VACA&page=0&size=20&sort=updatedAt,desc'
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
 
@@ -118,7 +120,8 @@ describe('AnimalsService', () => {
           ownerGanaderoId: 'ganadero-uuid-2',
           arete: null,
           marca: 'Marca Norte',
-          category: 'HEIFER',
+          category: 'VAQUILLONA',
+          sex: ANIMAL_SEX.HEMBRA,
           active: false,
           updatedAt: '2026-04-26T11:00:00.000Z',
           version: 3,
@@ -155,7 +158,7 @@ describe('AnimalsService', () => {
           visible: 'marca',
           ownerGanaderoId: 'ganadero-uuid-2',
           active: false,
-          category: 'HEIFER',
+          category: ANIMAL_CATEGORY.VAQUILLONA,
         })
       )
     ).resolves.toEqual([
@@ -164,7 +167,8 @@ describe('AnimalsService', () => {
         ownerGanaderoId: 'ganadero-uuid-2',
         arete: null,
         marca: 'Marca Norte',
-        category: 'HEIFER',
+        category: ANIMAL_CATEGORY.VAQUILLONA,
+        sex: ANIMAL_SEX.HEMBRA,
         active: false,
         updatedAt: '2026-04-26T11:00:00.000Z',
         version: 3,
@@ -184,7 +188,7 @@ describe('AnimalsService', () => {
         service.updateAnimal('animal-uuid-9', {
           ownerGanaderoId: 'ganadero-uuid-1',
           arete: ' AR-999 ',
-          category: 'COW',
+          category: ANIMAL_CATEGORY.VACA,
           active: true,
           admissionDate: '2026-04-26',
           weightKg: 420,
@@ -213,7 +217,8 @@ describe('AnimalsService', () => {
           ownerGanaderoId: 'ganadero-uuid-1',
           arete: ' AR-550 ',
           marca: 'Marca Centro',
-          category: 'HEIFER',
+          category: ANIMAL_CATEGORY.VAQUILLONA,
+          sex: ANIMAL_SEX.HEMBRA,
           active: true,
           admissionDate: '2026-04-26',
           weightKg: 410,
@@ -271,7 +276,7 @@ describe('AnimalsService', () => {
           ownerGanaderoId: 'ganadero-uuid-1',
           arete: 'AR-771',
           marca: 'Marca Norte',
-          category: 'COW',
+          category: ANIMAL_CATEGORY.VACA,
           active: false,
           admissionDate: '2026-04-26',
           weightKg: 415,
@@ -303,5 +308,33 @@ describe('AnimalsService', () => {
     ]);
     expect(dispatchEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
     expect(service.syncState().pending).toBe(1);
+  });
+
+  it('should preserve sex and birthDate in optimistic offline animal snapshots', async () => {
+    const { service, store } = setup({ online: false });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('22222222-3333-4444-8555-666666666666');
+
+    await firstValueFrom(
+      service.createAnimal({
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-880',
+        category: ANIMAL_CATEGORY.VACA,
+        active: true,
+        admissionDate: '2026-04-26',
+        weightKg: 410,
+        sex: ANIMAL_SEX.HEMBRA,
+        birthDate: '2025-10-26',
+      })
+    );
+
+    await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
+      expect.objectContaining({
+        key: 'ANIMAL:22222222-3333-4444-8555-666666666666',
+        payload: expect.objectContaining({
+          sex: 'HEMBRA',
+          birthDate: '2025-10-26',
+        }),
+      }),
+    ]);
   });
 });

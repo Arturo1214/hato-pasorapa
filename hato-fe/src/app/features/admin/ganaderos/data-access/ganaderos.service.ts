@@ -6,12 +6,14 @@ import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
-import { type Observable, firstValueFrom, from } from 'rxjs';
+import { type Observable, firstValueFrom, from, map } from 'rxjs';
 
 export interface GanaderoItem {
   id: string;
   businessIdentifier: string;
   name: string;
+  email: string;
+  contactInfo: string;
   active: boolean;
   version: number;
   createdAt: string;
@@ -24,8 +26,15 @@ interface GanaderosResponse {
 }
 
 export interface GanaderoMutationFeedback {
-  outcome: 'synced' | 'queued';
+  outcome: 'synced' | 'queued' | 'blocked';
   message: string;
+}
+
+export interface UpsertGanaderoPayload {
+  businessIdentifier: string;
+  name: string;
+  email?: string;
+  contactInfo?: string;
 }
 
 export interface GanaderosSyncState {
@@ -84,12 +93,59 @@ export class GanaderosService {
     return from(this.listGanaderosInternal(active));
   }
 
-  createGanadero(payload: { businessIdentifier: string; name: string }): Observable<GanaderoMutationFeedback> {
+  createGanadero(payload: UpsertGanaderoPayload): Observable<GanaderoMutationFeedback> {
     return from(this.enqueueCreate(payload));
   }
 
   updateStatus(id: string, active: boolean): Observable<GanaderoMutationFeedback> {
     return from(this.enqueueStatusUpdate(id, active));
+  }
+
+  updateGanadero(id: string, payload: UpsertGanaderoPayload): Observable<GanaderoMutationFeedback> {
+    if (!this.offlineStatus.isOnline()) {
+      return from(
+        Promise.resolve({
+          outcome: 'blocked',
+          message: 'La edición de ganaderos requiere conexión para mantener la información consistente.',
+        } satisfies GanaderoMutationFeedback)
+      );
+    }
+
+    return this.http
+      .put<GanaderoItem>(`${this.appConfig.config().apiBaseUrl}/admin/ganaderos/${id}`, payload, {
+        headers: this.buildMutationHeaders(),
+      })
+      .pipe(
+        map((ganadero) => {
+          void this.saveGanaderoSnapshot(ganadero);
+          return {
+            outcome: 'synced',
+            message: 'Ganadero actualizado correctamente.',
+          } satisfies GanaderoMutationFeedback;
+        })
+      );
+  }
+
+  resetPassword(id: string): Observable<GanaderoMutationFeedback> {
+    if (!this.offlineStatus.isOnline()) {
+      return from(
+        Promise.resolve({
+          outcome: 'blocked',
+          message: 'El reseteo de contraseña requiere conexión para aplicar el cambio inmediato.',
+        } satisfies GanaderoMutationFeedback)
+      );
+    }
+
+    return this.http
+      .put<{ message: string }>(`${this.appConfig.config().apiBaseUrl}/admin/ganaderos/${id}/reset-password`, {}, {
+        headers: this.buildMutationHeaders(),
+      })
+      .pipe(
+        map((response) => ({
+          outcome: 'synced',
+          message: response.message,
+        }) satisfies GanaderoMutationFeedback)
+      );
   }
 
   private async listGanaderosInternal(active?: boolean) {
@@ -112,13 +168,13 @@ export class GanaderosService {
     return response.ganaderos;
   }
 
-  private async enqueueCreate(payload: { businessIdentifier: string; name: string }) {
+  private async enqueueCreate(payload: UpsertGanaderoPayload) {
     const now = this.now();
     const operation = await this.store.enqueueOperation({
       entityType: 'GANADERO',
       entityId: `pending:${globalThis.crypto.randomUUID()}`,
       opType: 'CREATE',
-      payload,
+      payload: { ...payload } as Record<string, unknown>,
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
@@ -128,6 +184,8 @@ export class GanaderosService {
       id: pendingId,
       businessIdentifier: payload.businessIdentifier,
       name: payload.name,
+      email: payload.email ?? '',
+      contactInfo: payload.contactInfo ?? '',
       active: true,
       version: 0,
       createdAt: now,

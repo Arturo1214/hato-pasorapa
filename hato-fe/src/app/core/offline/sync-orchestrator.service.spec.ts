@@ -1,6 +1,10 @@
+import { provideHttpClient } from '@angular/common/http';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { InMemoryOfflinePersistenceAdapter } from './offline-store.migrations';
 import { OfflineStoreService } from './offline-store.service';
 import { SyncMetricsStore } from './sync-metrics.store';
+import { AuthService } from '../auth/data-access/auth.service';
 import { NotificationInboxStore } from '../../features/admin/notifications/data-access/notification-inbox.store';
 import {
   CALENDAR_ALERTS_REFRESH_EVENT,
@@ -84,6 +88,28 @@ describe('SyncOrchestratorService', () => {
 
     return { client: { push, pull }, push, pull, callSequence };
   };
+
+  it('should resolve from Angular DI during bootstrap-style initialization', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: SyncOrchestratorService,
+          useFactory: () => new SyncOrchestratorService(),
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: () => null,
+            getOfflineSessionStatus: () => 'active',
+          } satisfies Pick<AuthService, 'getAccessToken' | 'getOfflineSessionStatus'>,
+        },
+      ],
+    });
+
+    expect(TestBed.inject(SyncOrchestratorService)).toBeInstanceOf(SyncOrchestratorService);
+  });
 
   it('should push eligible operations before pulling and advance the checkpoint atomically on manual sync', async () => {
     const store = createStore();

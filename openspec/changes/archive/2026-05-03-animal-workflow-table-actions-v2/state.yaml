@@ -1,0 +1,18 @@
+change: animal-workflow-table-actions-v2
+phase: archived
+artifact_store: hybrid
+artifacts:
+  proposal: true
+  specs: true
+  design: true
+  tasks: true
+  apply: true
+  verify: false
+resolved_questions:
+  - question: "TERNERO→TORO a 24 meses entra en V2?"
+    answer: "Sí, auto-transición on-read a los 24 meses desde birthDate"
+  - question: "Agregar birthDate en AnimalRequest en V2?"
+    answer: "Sí, opcional para adultos, requerido para TERNERO/TERNERA"
+  - question: "Castración offline se encola igual que otros eventos offline?"
+    answer: "Sí, mismo queue y retry behavior que CRUD eventos operativos"
+last_updated: "2026-05-03"

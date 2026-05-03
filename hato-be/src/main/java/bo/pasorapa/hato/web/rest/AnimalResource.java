@@ -77,7 +77,7 @@ public class AnimalResource {
                     Ejemplos:
                     - ?id.greaterThan=10
                     - ?visible.contains=AR-100
-                    - ?category.equals=COW&active.equals=true
+                    - ?category.equals=VACA&active.equals=true
                     - ?admissionDate.greaterThanOrEqual=2024-01-01
                     Paginación:
                     - ?page=0&size=20&sort=updatedAt,desc
@@ -91,8 +91,9 @@ public class AnimalResource {
         AnimalCriteria criteria = bindCriteria(uriInfo);
         var pageable = PaginationBinder.bind(uriInfo);
 
-        var page = animalQueryService.findByCriteriaPaged(criteria, pageable).map(animalMapper::toResponse);
-        return Response.ok(page).build();
+        var page = animalQueryService.findByCriteriaPaged(criteria, pageable);
+        animalService.applyAutoTransitionsOnRead(page.getContent());
+        return Response.ok(page.map(animalMapper::toResponse)).build();
     }
 
     @GET
@@ -105,7 +106,7 @@ public class AnimalResource {
     @GET
     @Path("/{uuid}")
     public Response getOne(@PathParam("uuid") UUID uuid) {
-        return ResponseUtil.wrapOrNotFound(animalQueryService.findOne(uuid).map(animalMapper::toResponse));
+        return Response.ok(animalMapper.toResponse(animalService.findByUuid(uuid))).build();
     }
 
     private AnimalCriteria bindCriteria(UriInfo uriInfo) {

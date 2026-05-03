@@ -6,6 +6,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -79,7 +80,8 @@ public final class SyncHarnessFixtures {
             animal.setMarcaNormalized(("CODE-" + tag).toLowerCase());
             animal.setUuid(uuid);
             animal.setVersion(version);
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 10));
             animal.setWeightKg(new BigDecimal("420.50"));

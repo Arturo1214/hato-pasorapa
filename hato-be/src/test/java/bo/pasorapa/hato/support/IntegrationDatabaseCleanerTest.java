@@ -13,6 +13,7 @@ import bo.pasorapa.hato.domain.SyncOperationReceipt;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
@@ -108,7 +109,8 @@ class IntegrationDatabaseCleanerTest {
         animal.setMarca("Cleanup Marca");
         animal.setMarcaNormalized("cleanup marca");
         animal.setOwnerGanadero(ganadero);
-        animal.setCategory(AnimalCategory.COW);
+        animal.setCategory(AnimalCategory.VACA);
+        animal.setSex(AnimalSex.HEMBRA);
         animal.setActive(true);
         animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
         animal.setWeightKg(new BigDecimal("400.00"));

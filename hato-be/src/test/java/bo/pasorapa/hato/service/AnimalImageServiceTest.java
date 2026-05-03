@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -102,7 +103,8 @@ class AnimalImageServiceTest {
             animal.setMarca("Marca " + tag);
             animal.setMarcaNormalized(("Marca " + tag).toLowerCase());
             animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("400.00"));

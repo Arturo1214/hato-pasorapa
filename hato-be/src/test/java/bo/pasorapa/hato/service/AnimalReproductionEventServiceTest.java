@@ -7,6 +7,7 @@ import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -160,6 +161,45 @@ class AnimalReproductionEventServiceTest {
         assertEquals("ANIMAL_REPRODUCTION_EVENT_FATHER_NOT_FOUND", exception.code());
     }
 
+    @Test
+    void shouldDerivePerformedByUserIdFromAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
+        UUID authenticatedUserId = UUID.fromString("99999999-aaaa-4bbb-8ccc-dddddddddddd");
+        seedAnimal(animalUuid, "AR-derived");
+
+        var created = animalReproductionEventService.create(new AnimalReproductionEventRequest(
+                animalUuid,
+                AnimalReproductionEventType.SERVICE,
+                OffsetDateTime.parse("2026-04-27T20:00:00Z"),
+                "Servicio derivado",
+                null,
+                "OFFLINE",
+                UUID.fromString("12121212-3434-4567-8901-121212121212"),
+                Map.of("serviceMethod", "NATURAL"),
+                OffsetDateTime.parse("2026-04-27T20:01:00Z")), authenticatedUserId);
+
+        assertEquals(authenticatedUserId, created.getPerformedByUserId());
+    }
+
+    @Test
+    void shouldRejectPerformedByUserMismatchAgainstAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("ffffffff-eeee-4ddd-8ccc-bbbbbbbbbbbb");
+        seedAnimal(animalUuid, "AR-mismatch");
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(new AnimalReproductionEventRequest(
+                animalUuid,
+                AnimalReproductionEventType.SERVICE,
+                OffsetDateTime.parse("2026-04-27T21:00:00Z"),
+                "Servicio inválido",
+                UUID.fromString("abababab-abab-4bab-8bab-abababababab"),
+                "OFFLINE",
+                UUID.fromString("cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd"),
+                Map.of("serviceMethod", "NATURAL"),
+                OffsetDateTime.parse("2026-04-27T21:01:00Z")), UUID.fromString("efefefef-efef-4fef-8fef-efefefefefef")));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_PERFORMED_BY_MISMATCH", exception.code());
+    }
+
     private AnimalReproductionEventRequest request(
             UUID animalUuid,
             AnimalReproductionEventType type,
@@ -189,7 +229,8 @@ class AnimalReproductionEventServiceTest {
             animal.setMarca("Marca " + tag);
             animal.setMarcaNormalized(("Marca " + tag).toLowerCase());
             animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("400.00"));

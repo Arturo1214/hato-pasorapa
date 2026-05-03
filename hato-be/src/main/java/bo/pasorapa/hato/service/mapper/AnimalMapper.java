@@ -23,9 +23,11 @@ public class AnimalMapper {
         animal.setMarca(request.marca());
         animal.setTatuaje(request.tatuaje());
         animal.setCategory(request.category());
+        animal.setSex(request.sex());
         animal.setActive(request.active());
         animal.setAdmissionDate(request.admissionDate());
         animal.setWeightKg(request.weightKg());
+        animal.setBirthDate(request.birthDate());
     }
 
     public AnimalResponse toResponse(Animal animal) {
@@ -38,6 +40,7 @@ public class AnimalMapper {
                 animal.getMarca(),
                 animal.getTatuaje(),
                 animal.getCategory(),
+                animal.getSex(),
                 animal.getActive(),
                 animal.getBirthDate(),
                 animal.getAdmissionDate(),

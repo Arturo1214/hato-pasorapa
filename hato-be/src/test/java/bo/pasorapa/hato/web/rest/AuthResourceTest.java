@@ -4,8 +4,10 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
 import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.security.PasswordHasher;
@@ -23,6 +25,9 @@ class AuthResourceTest {
     UserRepository userRepository;
 
     @Inject
+    GanaderoRepository ganaderoRepository;
+
+    @Inject
     PasswordHasher passwordHasher;
 
     @Inject
@@ -33,8 +38,14 @@ class AuthResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("admin", "admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "Admin123"));
-            userRepository.persist(buildUser("ganadero", "ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
+            userRepository.persist(buildUser("ganadero@hato.bo", "ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
             userRepository.persist(buildUser("bloqueado", "blocked@hato.bo", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));
+
+            Ganadero ganadero = new Ganadero();
+            ganadero.setBusinessIdentifier("12345678");
+            ganadero.setName("Ganadero Norte");
+            ganadero.setEmail("ganadero@hato.bo");
+            ganaderoRepository.persist(ganadero);
         });
     }
 
@@ -73,7 +84,25 @@ class AuthResourceTest {
                 .post("/api/auth/login")
                 .then()
                 .statusCode(200)
-                .body("user.username", equalTo("ganadero"))
+                .body("user.username", equalTo("ganadero@hato.bo"))
+                .body("user.role", equalTo("GANADERO"));
+    }
+
+    @Test
+    void shouldLoginGanaderoWithBusinessIdentifier() {
+        given()
+                .contentType("application/json")
+                .body("""
+                        {
+                          "username": "12345678",
+                          "password": "Ganadero9"
+                        }
+                        """)
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(200)
+                .body("user.username", equalTo("ganadero@hato.bo"))
                 .body("user.role", equalTo("GANADERO"));
     }
 
@@ -85,6 +114,23 @@ class AuthResourceTest {
                         {
                           "username": "admin",
                           "password": "bad-password"
+                        }
+                        """)
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(401)
+                .body("code", equalTo("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void shouldRejectUnknownIdentifierWithGenericError() {
+        given()
+                .contentType("application/json")
+                .body("""
+                        {
+                          "username": "99999999",
+                          "password": "Ganadero9"
                         }
                         """)
                 .when()

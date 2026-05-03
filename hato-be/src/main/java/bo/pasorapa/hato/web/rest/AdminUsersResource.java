@@ -8,6 +8,7 @@ import bo.pasorapa.hato.service.dto.admin.users.AdminUserCreateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserPasswordUpdateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserResponse;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserStatusUpdateRequest;
+import bo.pasorapa.hato.service.dto.admin.users.AdminUserUpdateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUsersListResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import jakarta.annotation.security.RolesAllowed;
@@ -49,6 +50,15 @@ public class AdminUsersResource {
     public Response create(@Valid AdminUserCreateRequest request, @HeaderParam("X-Operation-Id") String operationIdHeader) {
         MutationResult<AdminUserResponse> result = adminUserService.create(request, requireOperationId(operationIdHeader), currentUserId());
         return Response.status(result.replayed() ? Response.Status.OK : Response.Status.CREATED).entity(result.data()).build();
+    }
+
+    @PUT
+    @Path("/{id}")
+    public AdminUserResponse update(
+            @PathParam("id") UUID id,
+            @Valid AdminUserUpdateRequest request,
+            @HeaderParam("X-Operation-Id") String operationIdHeader) {
+        return adminUserService.update(id, request, requireOperationId(operationIdHeader), currentUserId()).data();
     }
 
     @PUT

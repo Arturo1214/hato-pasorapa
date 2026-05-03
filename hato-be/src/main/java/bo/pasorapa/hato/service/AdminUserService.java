@@ -12,6 +12,7 @@ import bo.pasorapa.hato.service.dto.admin.users.AdminUserCreateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserPasswordUpdateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserResponse;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUserStatusUpdateRequest;
+import bo.pasorapa.hato.service.dto.admin.users.AdminUserUpdateRequest;
 import bo.pasorapa.hato.service.dto.admin.users.AdminUsersListResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -73,6 +74,42 @@ public class AdminUserService {
     public MutationResult<AdminUserResponse> updateStatus(UUID userId, AdminUserStatusUpdateRequest request, UUID operationId, UUID performedByUserId) {
         MutationResult<User> mutation = updateUserStatus(userId, request.status(), operationId, performedByUserId, "ADMIN_USER_STATUS_UPDATED", false);
         return new MutationResult<>(toResponse(mutation.data()), mutation.replayed());
+    }
+
+    @Transactional
+    public MutationResult<AdminUserResponse> update(UUID userId, AdminUserUpdateRequest request, UUID operationId, UUID performedByUserId) {
+        OperationLog existingOperation = operationLogRepository.findByOperationId(operationId).orElse(null);
+        if (existingOperation != null && existingOperation.getResourceId() != null) {
+            return new MutationResult<>(toResponse(findUser(existingOperation.getResourceId())), true);
+        }
+
+        validateRole(request.role());
+
+        User user = findUser(userId);
+        String nextUsername = request.username().trim();
+        String nextEmail = request.email().trim().toLowerCase();
+
+        userRepository.findByUsernameOrEmail(nextUsername).ifPresent(existing -> {
+            if (!existing.getId().equals(userId) && existing.getUsername().equalsIgnoreCase(nextUsername)) {
+                throw new BusinessException("USERNAME_ALREADY_EXISTS", "El usuario ya existe.", Response.Status.CONFLICT);
+            }
+        });
+
+        userRepository.findByUsernameOrEmail(nextEmail).ifPresent(existing -> {
+            if (!existing.getId().equals(userId) && existing.getEmail().equalsIgnoreCase(nextEmail)) {
+                throw new BusinessException("EMAIL_ALREADY_EXISTS", "El correo ya existe.", Response.Status.CONFLICT);
+            }
+        });
+
+        user.setUsername(nextUsername);
+        user.setEmail(nextEmail);
+        user.setDisplayName(request.displayName().trim());
+        user.setRole(request.role());
+        userRepository.persist(user);
+        userRepository.flush();
+
+        persistOperation(operationId, "ADMIN_USER_UPDATED", user.getId(), performedByUserId);
+        return new MutationResult<>(toResponse(user), false);
     }
 
     @Transactional

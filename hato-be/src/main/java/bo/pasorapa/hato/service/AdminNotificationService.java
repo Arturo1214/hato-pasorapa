@@ -3,6 +3,7 @@ package bo.pasorapa.hato.service;
 import bo.pasorapa.hato.domain.AdminNotification;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
 import bo.pasorapa.hato.domain.OperationLog;
+import bo.pasorapa.hato.repository.AdminNotificationRecipientRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.service.dto.admin.common.MutationResult;
@@ -20,16 +21,19 @@ import java.util.UUID;
 public class AdminNotificationService {
 
     private final AdminNotificationRepository adminNotificationRepository;
+    private final AdminNotificationRecipientRepository adminNotificationRecipientRepository;
     private final OperationLogRepository operationLogRepository;
     private final AdminNotificationTargetingResolver targetingResolver;
     private final AdminNotificationMapper adminNotificationMapper;
 
     public AdminNotificationService(
             AdminNotificationRepository adminNotificationRepository,
+            AdminNotificationRecipientRepository adminNotificationRecipientRepository,
             OperationLogRepository operationLogRepository,
             AdminNotificationTargetingResolver targetingResolver,
             AdminNotificationMapper adminNotificationMapper) {
         this.adminNotificationRepository = adminNotificationRepository;
+        this.adminNotificationRecipientRepository = adminNotificationRecipientRepository;
         this.operationLogRepository = operationLogRepository;
         this.targetingResolver = targetingResolver;
         this.adminNotificationMapper = adminNotificationMapper;
@@ -73,6 +77,7 @@ public class AdminNotificationService {
             AdminNotificationRecipient recipient = new AdminNotificationRecipient();
             recipient.setNotification(notification);
             recipient.setRecipientUserId(recipientUserId);
+            recipient.setRead(false);
             recipient.setCreatedAt(notification.getPublishedAt());
             recipient.setUpdatedAt(notification.getPublishedAt());
             adminNotificationRepository.getEntityManager().persist(recipient);
@@ -82,6 +87,25 @@ public class AdminNotificationService {
         persistOperation(operationId, notification.getId(), performedByUserId);
 
         return new MutationResult<>(adminNotificationMapper.toResponse(notification), false);
+    }
+
+    public long countUnread(UUID userId) {
+        return adminNotificationRecipientRepository.countByRecipientUserIdAndReadFalse(userId);
+    }
+
+    @Transactional
+    public void markRecipientAsRead(UUID recipientId, UUID userId) {
+        AdminNotificationRecipient recipient = adminNotificationRecipientRepository.findOwnedByUser(recipientId, userId)
+                .orElseThrow(() -> new bo.pasorapa.hato.service.error.BusinessException(
+                        "ADMIN_NOTIFICATION_RECIPIENT_NOT_FOUND",
+                        "No encontramos la notificación solicitada para este usuario.",
+                        jakarta.ws.rs.core.Response.Status.NOT_FOUND));
+        recipient.setRead(true);
+    }
+
+    @Transactional
+    public void markAllAsReadForUser(UUID userId) {
+        adminNotificationRecipientRepository.markAllAsReadForUser(userId);
     }
 
     private void persistOperation(UUID operationId, UUID resourceId, UUID performedByUserId) {

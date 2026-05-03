@@ -17,6 +17,7 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AdminNotificationTargetingMode;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
@@ -41,6 +42,7 @@ import bo.pasorapa.hato.service.dto.sync.ResolveConflictRequest;
 import bo.pasorapa.hato.service.dto.sync.SyncEntityType;
 import bo.pasorapa.hato.service.dto.sync.SyncOperationRequest;
 import bo.pasorapa.hato.service.dto.sync.SyncOperationType;
+import bo.pasorapa.hato.service.error.BusinessException;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -449,6 +451,35 @@ class SyncServiceTest {
         assertEquals("pending", response.nextLocalStatus());
         assertEquals(2, syncConflictAuditLedgerRepository.listByOperationId(operationId).size());
         assertEquals("RESOLVED", syncConflictAuditLedgerRepository.listByOperationId(operationId).getLast().getEventType());
+    }
+
+    @Test
+    void shouldRejectConflictResolutionFromDifferentAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("44444444-5555-4666-8777-888888888888");
+        UUID operationId = UUID.fromString("99999999-0000-4111-8222-333333333333");
+        UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
+        UUID anotherUserId = UUID.fromString("ca25845f-69d4-4af0-9078-93040319401a");
+        seedAnimal(animalUuid, "BO-OWN-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0));
+
+        syncService.push(
+                new PushSyncRequest(List.of(new SyncOperationRequest(
+                        operationId,
+                        SyncEntityType.ANIMAL,
+                        animalUuid.toString(),
+                        SyncOperationType.UPDATE,
+                        Map.of("tag", "BO-OWN-2"),
+                        2,
+                        OffsetDateTime.parse("2026-04-28T10:05:00Z"),
+                        OffsetDateTime.parse("2026-04-28T10:05:00Z")))),
+                actorId,
+                true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> syncService.resolveConflict(
+                operationId,
+                new ResolveConflictRequest("retry_local", "Otro usuario intenta resolver un conflicto ajeno."),
+                anotherUserId));
+
+        assertEquals("SYNC_CONFLICT_FORBIDDEN", exception.code());
     }
 
     @Test
@@ -1009,7 +1040,8 @@ class SyncServiceTest {
             animal.setMarcaNormalized(("CODE-" + tag).toLowerCase());
             animal.setUuid(uuid);
             animal.setVersion(version);
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 10));
             animal.setWeightKg(new BigDecimal("420.50"));

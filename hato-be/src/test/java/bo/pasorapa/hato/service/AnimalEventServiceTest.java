@@ -2,17 +2,20 @@ package bo.pasorapa.hato.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
+import bo.pasorapa.hato.service.error.BusinessException;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -141,6 +144,82 @@ class AnimalEventServiceTest {
         assertEquals(OWNER_B, projected.getOwnerGanadero().getId());
     }
 
+    @Test
+    void shouldDerivePerformedByUserIdFromAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("9f544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        UUID authenticatedUserId = UUID.fromString("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+        seedAnimal(animalUuid, OWNER_A, true);
+
+        AnimalEvent created = animalEventService.create(new AnimalEventRequest(
+                animalUuid,
+                AnimalEventType.OBSERVATION,
+                OffsetDateTime.parse("2026-04-27T18:00:00Z"),
+                "Observación derivada",
+                null,
+                "OFFLINE",
+                UUID.fromString("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+                Map.of("reasonCode", "GENERAL_NOTE"),
+                OffsetDateTime.parse("2026-04-27T18:01:00Z")), authenticatedUserId);
+
+        assertEquals(authenticatedUserId, created.getPerformedByUserId());
+    }
+
+    @Test
+    void shouldRejectPerformedByUserMismatchAgainstAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("af544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        seedAnimal(animalUuid, OWNER_A, true);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalEventService.create(new AnimalEventRequest(
+                animalUuid,
+                AnimalEventType.OBSERVATION,
+                OffsetDateTime.parse("2026-04-27T19:00:00Z"),
+                "Observación inválida",
+                UUID.fromString("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+                "OFFLINE",
+                UUID.fromString("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+                Map.of("reasonCode", "GENERAL_NOTE"),
+                OffsetDateTime.parse("2026-04-27T19:01:00Z")), UUID.fromString("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")));
+
+        assertEquals("ANIMAL_EVENT_PERFORMED_BY_MISMATCH", exception.code());
+    }
+
+    @Test
+    void shouldApplyCastrationTransitionOnlyForEligibleMaleCategories() {
+        UUID youngMaleUuid = UUID.fromString("9e6158e6-b245-4db8-9307-cb85f77458dd");
+        UUID femaleUuid = UUID.fromString("f08f9cb2-32d0-4ff8-8c38-ea6563574d1a");
+        seedAnimal(youngMaleUuid, OWNER_A, true);
+        seedAnimal(femaleUuid, OWNER_A, true);
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            animalRepository.findByUuid(youngMaleUuid).orElseThrow().setCategory(AnimalCategory.TERNERO);
+            Animal female = animalRepository.findByUuid(femaleUuid).orElseThrow();
+            female.setCategory(AnimalCategory.VACA);
+            female.setSex(AnimalSex.HEMBRA);
+        });
+
+        animalEventService.create(fromRequest(
+                youngMaleUuid,
+                AnimalEventType.CASTRATION,
+                "2026-04-27T20:00:00Z",
+                Map.of("reasonCode", "SCHEDULED"),
+                UUID.fromString("0f31bd62-0ba1-4418-93f1-d00e0fd4d4c4"),
+                USER_ID));
+
+        animalEventService.create(fromRequest(
+                femaleUuid,
+                AnimalEventType.CASTRATION,
+                "2026-04-27T20:05:00Z",
+                Map.of("reasonCode", "SCHEDULED"),
+                UUID.fromString("8a5c25e2-0610-4af4-86e9-a9fdc9d2141c"),
+                USER_ID));
+
+        Animal castrated = QuarkusTransaction.requiringNew().call(() -> animalRepository.findByUuid(youngMaleUuid).orElseThrow());
+        Animal unchanged = QuarkusTransaction.requiringNew().call(() -> animalRepository.findByUuid(femaleUuid).orElseThrow());
+
+        assertEquals(AnimalCategory.BUEY, castrated.getCategory());
+        assertEquals(AnimalCategory.VACA, unchanged.getCategory());
+    }
+
     private AnimalEventRequest fromRequest(
             UUID animalUuid,
             AnimalEventType eventType,
@@ -171,7 +250,8 @@ class AnimalEventServiceTest {
             animal.setMarca("Marca " + uuid.toString().substring(0, 4));
             animal.setMarcaNormalized(animal.getMarca().toLowerCase());
             animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(active);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("400.00"));

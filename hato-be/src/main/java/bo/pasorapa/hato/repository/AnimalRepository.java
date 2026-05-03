@@ -1,6 +1,8 @@
 package bo.pasorapa.hato.repository;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDateTime;
@@ -39,5 +41,9 @@ public class AnimalRepository implements PanacheRepositoryBase<Animal, Long> {
                         effectiveCursorUuid)
                 .page(0, limitPlusOne)
                 .list();
+    }
+
+    public long countByOwnerAndSexAndCategory(UUID ganaderoId, AnimalSex sex, AnimalCategory category) {
+        return count("ownerGanadero.id = ?1 and sex = ?2 and category = ?3", ganaderoId, sex, category);
     }
 }

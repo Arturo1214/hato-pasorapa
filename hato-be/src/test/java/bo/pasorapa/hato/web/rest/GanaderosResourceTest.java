@@ -191,6 +191,100 @@ class GanaderosResourceTest {
                 .body("ganaderos[0].businessIdentifier", equalTo("NIT-200"));
     }
 
+    @Test
+    void shouldUpdateGanaderoAdministrativeData() {
+        Ganadero ganadero = QuarkusTransaction.requiringNew().call(() -> {
+            Ganadero entity = new Ganadero();
+            entity.setBusinessIdentifier("NIT-300");
+            entity.setName("Ganadera Central");
+            entity.setEmail("central@hato.bo");
+            ganaderoRepository.persist(entity);
+            ganaderoRepository.flush();
+            return entity;
+        });
+
+        String token = loginAs("root-admin", "RootAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .header("X-Operation-Id", UUID.randomUUID().toString())
+                .body("""
+                        {
+                          "businessIdentifier": "NIT-301",
+                          "name": "Ganadera Central Actualizada",
+                          "email": "actualizada@hato.bo",
+                          "contactInfo": "{\\\"telefono\\\":\\\"70000001\\\",\\\"direccion\\\":\\\"Zona Sur\\\"}"
+                        }
+                        """)
+                .when()
+                .put("/api/admin/ganaderos/{id}", ganadero.getId())
+                .then()
+                .statusCode(200)
+                .body("businessIdentifier", equalTo("NIT-301"))
+                .body("name", equalTo("Ganadera Central Actualizada"))
+                .body("email", equalTo("actualizada@hato.bo"))
+                .body("contactInfo", equalTo("{\"telefono\":\"70000001\",\"direccion\":\"Zona Sur\"}"));
+    }
+
+    @Test
+    void shouldResetGanaderoPasswordToTheTemporaryValue() {
+        Ganadero ganadero = QuarkusTransaction.requiringNew().call(() -> {
+            Ganadero entity = new Ganadero();
+            entity.setBusinessIdentifier("NIT-400");
+            entity.setName("Ganadera Temporal");
+            entity.setEmail("ganadera-temporal@hato.bo");
+            ganaderoRepository.persist(entity);
+
+            User user = buildUser("ganadera-temporal@hato.bo", Role.GANADERO, "Original99");
+            user.setEmail("ganadera-temporal@hato.bo");
+            userRepository.persist(user);
+
+            ganaderoRepository.flush();
+            userRepository.flush();
+            return entity;
+        });
+
+        String token = loginAs("root-admin", "RootAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .header("X-Operation-Id", UUID.randomUUID().toString())
+                .when()
+                .put("/api/admin/ganaderos/{id}/reset-password", ganadero.getId())
+                .then()
+                .statusCode(200)
+                .body("message", equalTo("Contraseña temporal restablecida correctamente."));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "username": "ganadera-temporal@hato.bo",
+                          "password": "Original99"
+                        }
+                        """)
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(401)
+                .body("code", equalTo("INVALID_CREDENTIALS"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "username": "ganadera-temporal@hato.bo",
+                          "password": "112345AB"
+                        }
+                        """)
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(200);
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)

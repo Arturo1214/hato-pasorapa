@@ -4,11 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginRequest;
+import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -28,6 +31,9 @@ class AuthServiceTest {
     UserRepository userRepository;
 
     @Inject
+    GanaderoRepository ganaderoRepository;
+
+    @Inject
     PasswordHasher passwordHasher;
 
     @Inject
@@ -40,6 +46,13 @@ class AuthServiceTest {
             userRepository.persist(buildUser("admin", Role.ADMIN, UserStatus.ACTIVE, "Admin123"));
             userRepository.persist(buildUser("inactive", Role.GANADERO, UserStatus.INACTIVE, "Ganadero9"));
             userRepository.persist(buildUser("blocked", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));
+            userRepository.persist(buildUser("ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
+
+            Ganadero ganadero = new Ganadero();
+            ganadero.setBusinessIdentifier("12345678");
+            ganadero.setName("Ganadero CI");
+            ganadero.setEmail("ganadero@hato.bo");
+            ganaderoRepository.persist(ganadero);
         });
     }
 
@@ -71,6 +84,28 @@ class AuthServiceTest {
     void shouldRejectInvalidCredentials() {
         BusinessException exception = assertThrows(BusinessException.class,
                 () -> authService.login(new AuthLoginRequest("admin", "wrong")));
+
+        assertEquals("INVALID_CREDENTIALS", exception.code());
+    }
+
+    @Test
+    void shouldAuthenticateGanaderoWithEmail() {
+        AuthLoginResponse response = authService.login(new AuthLoginRequest("ganadero@hato.bo", "Ganadero9"));
+
+        assertEquals("ganadero@hato.bo", response.user().username());
+    }
+
+    @Test
+    void shouldAuthenticateGanaderoWithBusinessIdentifier() {
+        AuthLoginResponse response = authService.login(new AuthLoginRequest("12345678", "Ganadero9"));
+
+        assertEquals("ganadero@hato.bo", response.user().username());
+    }
+
+    @Test
+    void shouldReturnGenericErrorForUnknownIdentifier() {
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> authService.login(new AuthLoginRequest("99999999", "Ganadero9")));
 
         assertEquals("INVALID_CREDENTIALS", exception.code());
     }

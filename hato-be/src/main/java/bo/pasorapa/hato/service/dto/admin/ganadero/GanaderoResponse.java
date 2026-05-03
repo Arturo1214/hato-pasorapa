@@ -4,6 +4,8 @@ public record GanaderoResponse(
         String id,
         String businessIdentifier,
         String name,
+        String email,
+        String contactInfo,
         boolean active,
         long version,
         String createdAt,

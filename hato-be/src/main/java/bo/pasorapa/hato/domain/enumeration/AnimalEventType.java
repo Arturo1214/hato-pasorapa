@@ -5,5 +5,6 @@ public enum AnimalEventType {
     DECEASED,
     LOST,
     TRANSFERRED,
+    CASTRATION,
     OBSERVATION
 }

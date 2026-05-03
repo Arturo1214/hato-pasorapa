@@ -12,6 +12,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.HerdCostLedgerRepository;
@@ -241,7 +242,8 @@ class SyncResourceV2IntegrationTest {
         animal.setAreteNormalized("bo-lot-1");
         animal.setMarca("BO-LOT-1");
         animal.setMarcaNormalized("bo-lot-1");
-        animal.setCategory(AnimalCategory.COW);
+        animal.setCategory(AnimalCategory.VACA);
+        animal.setSex(AnimalSex.HEMBRA);
         animal.setActive(true);
         animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
         animal.setWeightKg(new BigDecimal("410.00"));

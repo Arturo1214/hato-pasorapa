@@ -22,7 +22,7 @@ public class AnimalCriteriaDoc {
     String ownerGanaderoIdEquals;
 
     @QueryParam("category.equals")
-    @Parameter(description = "Filtra por categoría: COW, BULL, CALF, HEIFER")
+    @Parameter(description = "Filtra por categoría: TERNERO, TERNERA, VAQUILLONA, VACA, TORO, BUEY")
     String categoryEquals;
 
     @QueryParam("active.equals")

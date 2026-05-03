@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 013-public-ganadero-registration
+      author: opencode
+      changes:
+        - addColumn:
+            tableName: ganaderos
+            columns:
+              - column:
+                  name: email
+                  type: varchar(120)
+              - column:
+                  name: contact_info
+                  type: clob
+        - createIndex:
+            tableName: ganaderos
+            indexName: idx_ganaderos_email
+            unique: true
+            columns:
+              - column:
+                  name: email

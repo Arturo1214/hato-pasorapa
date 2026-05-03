@@ -24,6 +24,12 @@ public class Ganadero {
     @Column(nullable = false, length = 160)
     private String name;
 
+    @Column(length = 120, unique = true)
+    private String email;
+
+    @Column(name = "contact_info", columnDefinition = "CLOB")
+    private String contactInfo;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -64,6 +70,10 @@ public class Ganadero {
     public void setBusinessIdentifier(String businessIdentifier) { this.businessIdentifier = businessIdentifier; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getContactInfo() { return contactInfo; }
+    public void setContactInfo(String contactInfo) { this.contactInfo = contactInfo; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
     public Long getVersion() { return version; }

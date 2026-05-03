@@ -15,6 +15,10 @@ public class GanaderoRepository implements PanacheRepositoryBase<Ganadero, UUID>
         return find("lower(businessIdentifier) = ?1", businessIdentifier.toLowerCase()).firstResultOptional();
     }
 
+    public Optional<Ganadero> findByEmail(String email) {
+        return find("lower(email) = ?1", email.toLowerCase()).firstResultOptional();
+    }
+
     public List<Ganadero> listByActive(Boolean active) {
         if (active == null) {
             return listAll(io.quarkus.panache.common.Sort.by("createdAt").ascending());

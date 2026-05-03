@@ -13,6 +13,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -73,10 +74,12 @@ class AnimalResourceTest {
                           "ownerGanaderoId": "e469411a-c4cb-4718-b60b-b5c157af5292",
                           "arete": "BO-9100",
                           "marca": "HAT-100",
-                          "category": "COW",
+                          "category": "VACA",
+                          "sex": "HEMBRA",
                           "active": true,
                           "admissionDate": "2024-02-01",
-                          "weightKg": 410.50
+                          "weightKg": 410.50,
+                          "birthDate": "2023-02-01"
                         }
                         """)
                 .when()
@@ -114,10 +117,12 @@ class AnimalResourceTest {
                           "ownerGanaderoId": "e469411a-c4cb-4718-b60b-b5c157af5292",
                           "arete": "BO-9101",
                           "marca": "HAT-101",
-                          "category": "COW",
+                          "category": "VACA",
+                          "sex": "HEMBRA",
                           "active": true,
                           "admissionDate": "2024-02-01",
-                          "weightKg": 420.25
+                          "weightKg": 420.25,
+                          "birthDate": "2023-02-01"
                         }
                         """)
                 .when()
@@ -141,7 +146,31 @@ class AnimalResourceTest {
                 .body("""
                         {
                           "arete": "BO-9100",
-                          "category": "COW",
+                          "category": "VACA",
+                          "sex": "HEMBRA",
+                          "active": true,
+                          "admissionDate": "2024-02-01",
+                          "weightKg": 410.50
+                        }
+                        """)
+                .when()
+                .post("/api/animals")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void shouldRejectCreateAnimalWithoutSex() {
+        String token = loginAs("animal-admin", "AdminAnimal9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "ownerGanaderoId": "e469411a-c4cb-4718-b60b-b5c157af5292",
+                          "arete": "BO-9100",
+                          "category": "VACA",
                           "active": true,
                           "admissionDate": "2024-02-01",
                           "weightKg": 410.50
@@ -169,7 +198,7 @@ class AnimalResourceTest {
                     "ARETE-OPERATIVO-01",
                     null,
                     null,
-                    AnimalCategory.COW,
+                    AnimalCategory.VACA,
                     true,
                     LocalDate.of(2024, 2, 1),
                     new BigDecimal("410.50"),
@@ -183,7 +212,7 @@ class AnimalResourceTest {
                     null,
                     "Marca Secundaria",
                     null,
-                    AnimalCategory.HEIFER,
+                    AnimalCategory.VAQUILLONA,
                     true,
                     LocalDate.of(2024, 3, 1),
                     new BigDecimal("350.00"),
@@ -197,7 +226,7 @@ class AnimalResourceTest {
                     "ARETE-OPERATIVO-99",
                     null,
                     null,
-                    AnimalCategory.COW,
+                    AnimalCategory.VACA,
                     false,
                     LocalDate.of(2024, 4, 1),
                     new BigDecimal("500.00"),
@@ -208,15 +237,66 @@ class AnimalResourceTest {
         given()
                 .auth().oauth2(token)
                 .when()
-                .get("/api/animals?visible.contains=operativo&ownerGanaderoId.equals={owner}&active.equals=true&category.equals=COW&page=0&size=20&sort=updatedAt,desc", ownerA)
+                .get("/api/animals?visible.contains=operativo&ownerGanaderoId.equals={owner}&active.equals=true&category.equals=VACA&page=0&size=20&sort=updatedAt,desc", ownerA)
                 .then()
                 .statusCode(200)
                 .body("content", hasSize(1))
                 .body("content[0].uuid", equalTo("d9a81b4e-faed-4a59-a55d-5fd65f6a3c11"))
                 .body("content[0].ownerGanaderoId", equalTo(ownerA.toString()))
                 .body("content[0].arete", equalTo("ARETE-OPERATIVO-01"))
-                .body("content[0].category", equalTo("COW"))
+                .body("content[0].category", equalTo("VACA"))
                 .body("content[0].active", equalTo(true));
+    }
+
+    @Test
+    void shouldRejectInvalidSexCategoryCombination() {
+        String token = loginAs("animal-admin", "AdminAnimal9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "ownerGanaderoId": "e469411a-c4cb-4718-b60b-b5c157af5292",
+                          "arete": "BO-9199",
+                          "category": "VACA",
+                          "sex": "MACHO",
+                          "active": true,
+                          "admissionDate": "2024-02-01",
+                          "weightKg": 410.50,
+                          "birthDate": "2023-02-01"
+                        }
+                        """)
+                .when()
+                .post("/api/animals")
+                .then()
+                .statusCode(400)
+                .body("code", equalTo("INVALID_SEX_CATEGORY_COMBINATION"));
+    }
+
+    @Test
+    void shouldRequireBirthDateForYoungAnimalCategories() {
+        String token = loginAs("animal-admin", "AdminAnimal9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "ownerGanaderoId": "e469411a-c4cb-4718-b60b-b5c157af5292",
+                          "arete": "BO-9200",
+                          "category": "TERNERO",
+                          "sex": "MACHO",
+                          "active": true,
+                          "admissionDate": "2024-02-01",
+                          "weightKg": 410.50
+                        }
+                        """)
+                .when()
+                .post("/api/animals")
+                .then()
+                .statusCode(400)
+                .body("code", equalTo("BIRTH_DATE_REQUIRED_FOR_YOUNG_ANIMAL"));
     }
 
     @Test
@@ -297,6 +377,7 @@ class AnimalResourceTest {
         animal.setMarcaNormalized(normalizeVisible(marca));
         animal.setTatuajeNormalized(normalizeVisible(tatuaje));
         animal.setCategory(category);
+        animal.setSex(AnimalSex.HEMBRA);
         animal.setActive(active);
         animal.setAdmissionDate(admissionDate);
         animal.setWeightKg(weightKg);

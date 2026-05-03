@@ -1,6 +1,7 @@
 package bo.pasorapa.hato.service.dto;
 
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public record AnimalResponse(
         String marca,
         String tatuaje,
         AnimalCategory category,
+        AnimalSex sex,
         Boolean active,
         LocalDate birthDate,
         LocalDate admissionDate,

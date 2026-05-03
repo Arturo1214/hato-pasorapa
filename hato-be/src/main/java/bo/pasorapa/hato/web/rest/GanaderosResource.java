@@ -1,11 +1,13 @@
 package bo.pasorapa.hato.web.rest;
 
 import bo.pasorapa.hato.service.GanaderoService;
+import bo.pasorapa.hato.service.dto.admin.common.ActionMessageResponse;
 import bo.pasorapa.hato.service.dto.admin.common.MutationResult;
 import bo.pasorapa.hato.service.dto.admin.ganadero.GanaderoCreateRequest;
 import bo.pasorapa.hato.service.dto.admin.ganadero.GanaderoResponse;
 import bo.pasorapa.hato.service.dto.admin.ganadero.GanaderoStatusUpdateRequest;
 import bo.pasorapa.hato.service.dto.admin.ganadero.GanaderosListResponse;
+import bo.pasorapa.hato.service.dto.admin.ganadero.GanaderoUpdateRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
@@ -55,6 +57,23 @@ public class GanaderosResource {
             @Valid GanaderoStatusUpdateRequest request,
             @HeaderParam("X-Operation-Id") String operationIdHeader) {
         return ganaderoService.updateStatus(id, request, requireOperationId(operationIdHeader), currentUserId()).data();
+    }
+
+    @PUT
+    @Path("/{id}")
+    public GanaderoResponse update(
+            @PathParam("id") UUID id,
+            @Valid GanaderoUpdateRequest request,
+            @HeaderParam("X-Operation-Id") String operationIdHeader) {
+        return ganaderoService.update(id, request, requireOperationId(operationIdHeader), currentUserId()).data();
+    }
+
+    @PUT
+    @Path("/{id}/reset-password")
+    public ActionMessageResponse resetPassword(
+            @PathParam("id") UUID id,
+            @HeaderParam("X-Operation-Id") String operationIdHeader) {
+        return ganaderoService.resetPassword(id, requireOperationId(operationIdHeader), currentUserId()).data();
     }
 
     private UUID currentUserId() {

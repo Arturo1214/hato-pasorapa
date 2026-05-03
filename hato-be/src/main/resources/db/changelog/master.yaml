@@ -23,3 +23,9 @@ databaseChangeLog:
       file: db/changelog/011-integral-herd-management-v2.yaml
   - include:
       file: db/changelog/012-default-admin-seed.yaml
+  - include:
+      file: db/changelog/013-public-ganadero-registration.yaml
+  - include:
+      file: db/changelog/014-role-based-navigation-and-ownership-v1.yaml
+  - include:
+      file: db/changelog/015-animal-category-workflow-v2.yaml

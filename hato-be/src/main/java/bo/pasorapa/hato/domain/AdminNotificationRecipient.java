@@ -26,6 +26,9 @@ public class AdminNotificationRecipient {
     @Column(name = "recipient_user_id", nullable = false)
     private UUID recipientUserId;
 
+    @Column(name = "read", nullable = false)
+    private boolean read;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -52,6 +55,9 @@ public class AdminNotificationRecipient {
     public void setNotification(AdminNotification notification) { this.notification = notification; }
     public UUID getRecipientUserId() { return recipientUserId; }
     public void setRecipientUserId(UUID recipientUserId) { this.recipientUserId = recipientUserId; }
+    public boolean isRead() { return read; }
+    public boolean getRead() { return read; }
+    public void setRead(boolean read) { this.read = read; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

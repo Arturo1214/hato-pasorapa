@@ -25,16 +25,19 @@ public class AnimalEventService {
     private final AnimalRepository animalRepository;
     private final GanaderoRepository ganaderoRepository;
     private final AnimalEventMapper animalEventMapper;
+    private final AnimalService animalService;
 
     public AnimalEventService(
             AnimalEventRepository animalEventRepository,
             AnimalRepository animalRepository,
             GanaderoRepository ganaderoRepository,
-            AnimalEventMapper animalEventMapper) {
+            AnimalEventMapper animalEventMapper,
+            AnimalService animalService) {
         this.animalEventRepository = animalEventRepository;
         this.animalRepository = animalRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.animalEventMapper = animalEventMapper;
+        this.animalService = animalService;
     }
 
     @Transactional
@@ -44,6 +47,10 @@ public class AnimalEventService {
 
     @Transactional
     public AnimalEvent create(AnimalEventRequest request, UUID authenticatedUserId) {
+        if (request.type() == AnimalEventType.CASTRATION) {
+            return animalService.applyCastration(request, authenticatedUserId);
+        }
+
         AnimalEvent existing = animalEventRepository.findByOperationId(request.operationId()).orElse(null);
         if (existing != null) {
             return existing;
@@ -114,6 +121,12 @@ public class AnimalEventService {
                                 "ANIMAL_EVENT_TRANSFER_OWNER_NOT_FOUND",
                                 "No encontramos el ganadero destino para la transferencia.",
                                 Response.Status.BAD_REQUEST)));
+            }
+            case CASTRATION -> {
+                if (animal.getCategory() == bo.pasorapa.hato.domain.enumeration.AnimalCategory.TERNERO
+                        || animal.getCategory() == bo.pasorapa.hato.domain.enumeration.AnimalCategory.TORO) {
+                    animal.setCategory(bo.pasorapa.hato.domain.enumeration.AnimalCategory.BUEY);
+                }
             }
             case OBSERVATION -> {
                 // No core mutation in V1.

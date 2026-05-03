@@ -155,6 +155,57 @@ class AdminUsersResourceTest {
     }
 
     @Test
+    void shouldUpdateManagedUserProfileAndRejectInvalidPayload() {
+        User managedUser = QuarkusTransaction.requiringNew().call(() -> {
+            User user = buildUser("managed-admin", "managed-admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "Managed99");
+            user.setDisplayName("Managed Admin");
+            userRepository.persist(user);
+            userRepository.flush();
+            return user;
+        });
+
+        String token = loginAs("root-admin", "RootAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .header("X-Operation-Id", UUID.randomUUID().toString())
+                .body("""
+                        {
+                          "username": "managed-admin-updated",
+                          "email": "managed-admin-updated@hato.bo",
+                          "displayName": "Managed Admin Updated",
+                          "role": "GANADERO"
+                        }
+                        """)
+                .when()
+                .put("/api/admin/users/{id}", managedUser.getId())
+                .then()
+                .statusCode(200)
+                .body("username", equalTo("managed-admin-updated"))
+                .body("email", equalTo("managed-admin-updated@hato.bo"))
+                .body("displayName", equalTo("Managed Admin Updated"))
+                .body("role", equalTo("GANADERO"));
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .header("X-Operation-Id", UUID.randomUUID().toString())
+                .body("""
+                        {
+                          "username": "",
+                          "email": "correo-invalido",
+                          "displayName": "",
+                          "role": null
+                        }
+                        """)
+                .when()
+                .put("/api/admin/users/{id}", managedUser.getId())
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
     void shouldResetPasswordAndRejectOldCredentials() {
         User managedUser = QuarkusTransaction.requiringNew().call(() -> {
             User user = buildUser("reset-admin", "reset-admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "Original99");

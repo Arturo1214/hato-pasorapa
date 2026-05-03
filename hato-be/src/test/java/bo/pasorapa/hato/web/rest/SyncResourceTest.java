@@ -16,6 +16,7 @@ import bo.pasorapa.hato.domain.AnimalImage;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
@@ -579,6 +580,63 @@ class SyncResourceTest {
     }
 
     @Test
+    void shouldAllowOnlyTheConflictOwnerToResolveThroughRest() {
+        UUID animalUuid = UUID.fromString("98989898-9898-4989-8989-989898989898");
+        String operationId = "97979797-9797-4979-8979-979797979797";
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            animalRepository.persist(buildAnimal(animalUuid, "BO-GAN-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0)));
+            userRepository.persist(buildUser("ganadero-conflict", "ganadero-conflict@hato.bo", Role.GANADERO, "Ganadero9"));
+        });
+
+        String ganaderoToken = loginAs("ganadero-conflict", "Ganadero9");
+        String adminToken = loginAs("root-admin", "RootAdmin9");
+
+        given()
+                .auth().oauth2(ganaderoToken)
+                .header("X-Sync-Conflict-Version", "2")
+                .contentType(ContentType.JSON)
+                .body(syncUpdateBody(operationId, animalUuid.toString(), "BO-GAN-2", 2))
+                .when()
+                .post("/api/sync/push")
+                .then()
+                .statusCode(409);
+
+        given()
+                .auth().oauth2(adminToken)
+                .header("X-Sync-Conflict-Version", "2")
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "action": "retry_local",
+                          "reason": "Intento indebido del admin."
+                        }
+                        """)
+                .when()
+                .post("/api/sync/conflicts/%s/resolve".formatted(operationId))
+                .then()
+                .statusCode(403)
+                .body("code", equalTo("SYNC_CONFLICT_FORBIDDEN"));
+
+        given()
+                .auth().oauth2(ganaderoToken)
+                .header("X-Sync-Conflict-Version", "2")
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "action": "retry_local",
+                          "reason": "Resuelve el mismo ganadero dueño del conflicto."
+                        }
+                        """)
+                .when()
+                .post("/api/sync/conflicts/%s/resolve".formatted(operationId))
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("resolved"))
+                .body("nextLocalStatus", equalTo("pending"));
+    }
+
+    @Test
     void shouldExposeObservabilityUsingDefault24hWindow() {
         String token = loginAs("root-admin", "RootAdmin9");
 
@@ -721,6 +779,7 @@ class SyncResourceTest {
                                 "arete": " AR-8800 ",
                                 "marca": "Marca Centro",
                                 "category": "HEIFER",
+                                "sex": "HEMBRA",
                                 "active": true,
                                 "admissionDate": "2026-04-24",
                                 "weightKg": 395.5
@@ -1283,8 +1342,9 @@ class SyncResourceTest {
         animal.setAreteNormalized(tag.trim().toLowerCase());
         animal.setMarca("CODE-" + tag);
         animal.setMarcaNormalized(("CODE-" + tag).toLowerCase());
-        animal.setCategory(AnimalCategory.COW);
-        animal.setActive(true);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
+            animal.setActive(true);
         animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
         animal.setWeightKg(new BigDecimal("410.00"));
         animal.setVersion(version);

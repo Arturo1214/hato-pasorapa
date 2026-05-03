@@ -57,4 +57,13 @@ public class AnimalEventRepository implements PanacheRepositoryBase<AnimalEvent,
                 .page(0, limitPlusOne)
                 .list();
     }
+
+    public List<AnimalEvent> findUpcomingForGanadero(UUID ganaderoId, LocalDateTime since, int limit) {
+        return find(
+                        "from AnimalEvent where animal.ownerGanadero.id = ?1 and occurredAt >= ?2 order by occurredAt asc, eventId asc",
+                        ganaderoId,
+                        since)
+                .page(0, limit)
+                .list();
+    }
 }

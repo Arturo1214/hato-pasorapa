@@ -2,6 +2,8 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginRequest;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginResponse;
@@ -24,15 +26,17 @@ public class AuthService {
     private static final Pattern PASSWORD_POLICY_PATTERN = Pattern.compile(PASSWORD_POLICY_REGEX);
 
     private final UserRepository userRepository;
+    private final GanaderoRepository ganaderoRepository;
     private final PasswordHasher passwordHasher;
 
-    public AuthService(UserRepository userRepository, PasswordHasher passwordHasher) {
+    public AuthService(UserRepository userRepository, GanaderoRepository ganaderoRepository, PasswordHasher passwordHasher) {
         this.userRepository = userRepository;
+        this.ganaderoRepository = ganaderoRepository;
         this.passwordHasher = passwordHasher;
     }
 
     public AuthLoginResponse login(AuthLoginRequest request) {
-        User user = userRepository.findByUsernameOrEmail(request.username())
+        User user = resolveUser(request.username())
                 .orElseThrow(() -> new BusinessException(
                         "INVALID_CREDENTIALS",
                         "Las credenciales son inválidas.",
@@ -60,6 +64,18 @@ public class AuthService {
         }
 
         return issueToken(user);
+    }
+
+    private java.util.Optional<User> resolveUser(String identifier) {
+        java.util.Optional<User> directMatch = userRepository.findByUsernameOrEmail(identifier);
+        if (directMatch.isPresent()) {
+            return directMatch;
+        }
+
+        return ganaderoRepository.findByBusinessIdentifier(identifier)
+                .map(Ganadero::getEmail)
+                .filter(email -> email != null && !email.isBlank())
+                .flatMap(userRepository::findByUsernameOrEmail);
     }
 
     public void ensurePasswordPolicy(String password) {

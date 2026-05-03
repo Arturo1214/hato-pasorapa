@@ -1,5 +1,8 @@
 package bo.pasorapa.hato.service.dto.admin.auth;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
+@RegisterForReflection
 public record AuthUserResponse(
         String id,
         String username,

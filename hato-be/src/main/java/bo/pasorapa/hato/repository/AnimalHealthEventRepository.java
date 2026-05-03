@@ -82,6 +82,15 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
                 .list();
     }
 
+    public List<AnimalHealthEvent> findUpcomingVisits(UUID ganaderoId, int limit) {
+        return find(
+                        "from AnimalHealthEvent where animal.ownerGanadero.id = ?1 and healthEventType = ?2 order by occurredAt asc, eventId asc",
+                        ganaderoId,
+                        AnimalHealthEventType.FIELD_VET_VISIT)
+                .page(0, limit)
+                .list();
+    }
+
     private String readVisitId(String metadataJson) {
         Object visit = readMetadata(metadataJson).get("visit");
         if (!(visit instanceof Map<?, ?> visitMap)) {

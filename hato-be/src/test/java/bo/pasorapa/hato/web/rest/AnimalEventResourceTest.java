@@ -11,6 +11,7 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
@@ -88,6 +89,42 @@ class AnimalEventResourceTest {
                 .body("items[0].type", equalTo("OBSERVATION"));
     }
 
+    @Test
+    void shouldCreateCastrationEventAndProjectBueyCategory() {
+        UUID animalUuid = UUID.fromString("d5c7e7ef-57ee-41c1-bfdf-2d6f1c8b77f4");
+        seedAnimal(animalUuid);
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal animal = animalRepository.findByUuid(animalUuid).orElseThrow();
+            animal.setCategory(AnimalCategory.TERNERO);
+            animal.setSex(AnimalSex.MACHO);
+        });
+
+        String token = loginAs("animal-event-admin", "AnimalEvent9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .header("X-Operation-Id", "a0f115cc-8470-4bd6-abde-b31fd92a7b3a")
+                .body("""
+                        {
+                          "animalUuid": "%s",
+                          "type": "CASTRATION",
+                          "occurredAt": "2026-04-27T10:00:00Z",
+                          "notes": "Castración programada",
+                          "sourceChannel": "ONLINE",
+                          "operationId": "a0f115cc-8470-4bd6-abde-b31fd92a7b3a",
+                          "metadata": {"reasonCode": "SCHEDULED"},
+                          "clientCreatedAt": "2026-04-27T10:00:10Z"
+                        }
+                        """.formatted(animalUuid))
+                .when()
+                .post("/api/animals/{uuid}/events", animalUuid)
+                .then()
+                .statusCode(201)
+                .body("type", equalTo("CASTRATION"))
+                .body("category", equalTo("BUEY"));
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)
@@ -137,7 +174,8 @@ class AnimalEventResourceTest {
             animal.setMarca("Marca Norte");
             animal.setMarcaNormalized("marca norte");
             animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("410.00"));

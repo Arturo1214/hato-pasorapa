@@ -208,7 +208,7 @@ public class SyncService {
                     int nextCount = animalImageCounts.getOrDefault(animalUuid, 0) + 1;
                     animalImageCounts.put(animalUuid, nextCount);
                     if (nextCount > AnimalImageSecuritySupport.V1_MAX_IMAGES_PER_ANIMAL_PER_SYNC) {
-                        results.add(persistReceipt(operation, validationError(operation, "ANIMAL_IMAGE_SYNC_BATCH_LIMIT_EXCEEDED", conflictResolutionV2Enabled)));
+                        results.add(persistReceipt(operation, validationError(operation, "ANIMAL_IMAGE_SYNC_BATCH_LIMIT_EXCEEDED", conflictResolutionV2Enabled), currentUserId));
                         continue;
                     }
                 }
@@ -450,6 +450,8 @@ public class SyncService {
     public ResolveConflictResponse resolveConflict(UUID operationId, ResolveConflictRequest request, UUID currentUserId) {
         SyncOperationReceipt receipt = syncOperationReceiptRepository.findByIdOptional(operationId)
                 .orElseThrow(() -> new BusinessException("SYNC_CONFLICT_NOT_FOUND", "No encontramos el conflicto solicitado.", jakarta.ws.rs.core.Response.Status.NOT_FOUND));
+        List<SyncConflictAuditLedger> auditTrail = syncConflictAuditLedgerRepository.listByOperationId(operationId);
+        requireConflictOwnership(auditTrail, currentUserId);
         SyncOperationResult result = toResult(receipt, true);
         if (result.conflict() == null || result.conflict().policy() == null) {
             throw new BusinessException("SYNC_CONFLICT_NOT_RESOLVABLE", "El conflicto no tiene policy de resolución manual V2.", jakarta.ws.rs.core.Response.Status.CONFLICT);
@@ -466,7 +468,6 @@ public class SyncService {
             throw new BusinessException("SYNC_CONFLICT_ACTION_NOT_ALLOWED", "La acción solicitada no está permitida por policy para esta operación.", jakarta.ws.rs.core.Response.Status.CONFLICT);
         }
 
-        List<SyncConflictAuditLedger> auditTrail = syncConflictAuditLedgerRepository.listByOperationId(operationId);
         SyncConflictAuditLedger latest = auditTrail.isEmpty() ? null : auditTrail.getLast();
         String nextLocalStatus = action == ManualResolutionAction.RETRY_LOCAL ? "pending" : "acked";
         if (latest != null && "RESOLVED".equals(latest.getEventType())) {
@@ -511,63 +512,78 @@ public class SyncService {
         }
 
         if (!syncPayloadMapper.isOfflineOperationAllowed(operation.entityType(), operation.opType())) {
-            return persistReceipt(operation, validationError(operation, OPERATION_NOT_ALLOWED_OFFLINE, conflictResolutionV2Enabled));
+            return persistReceipt(operation, validationError(operation, OPERATION_NOT_ALLOWED_OFFLINE, conflictResolutionV2Enabled), currentUserId);
         }
 
         try {
             return switch (operation.entityType()) {
                 case ANIMAL -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalCreate(operation));
-                    case UPDATE -> persistReceipt(operation, handleAnimalUpdate(operation, conflictResolutionV2Enabled));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleAnimalCreate(operation), currentUserId);
+                    case UPDATE -> persistReceipt(operation, handleAnimalUpdate(operation, conflictResolutionV2Enabled), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case USER -> switch (operation.opType()) {
-                    case STATUS_UPDATE -> persistReceipt(operation, handleUserStatusUpdate(operation, currentUserId, conflictResolutionV2Enabled));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case STATUS_UPDATE -> persistReceipt(operation, handleUserStatusUpdate(operation, currentUserId, conflictResolutionV2Enabled), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case GANADERO -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleGanaderoCreate(operation, currentUserId));
-                    case STATUS_UPDATE -> persistReceipt(operation, handleGanaderoStatusUpdate(operation, currentUserId, conflictResolutionV2Enabled));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleGanaderoCreate(operation, currentUserId), currentUserId);
+                    case STATUS_UPDATE -> persistReceipt(operation, handleGanaderoStatusUpdate(operation, currentUserId, conflictResolutionV2Enabled), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case LOT -> switch (operation.opType()) {
-                    case CREATE, UPDATE -> persistReceipt(operation, handleLotUpsert(operation));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE, UPDATE -> persistReceipt(operation, handleLotUpsert(operation), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case LOT_ASSIGNMENT -> switch (operation.opType()) {
-                    case CREATE, UPDATE -> persistReceipt(operation, handleLotAssignmentUpsert(operation));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE, UPDATE -> persistReceipt(operation, handleLotAssignmentUpsert(operation), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case PRODUCTIVITY_LEDGER -> switch (operation.opType()) {
-                    case CREATE, UPDATE -> persistReceipt(operation, handleProductivityLedgerUpsert(operation));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE, UPDATE -> persistReceipt(operation, handleProductivityLedgerUpsert(operation), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case COST_LEDGER -> switch (operation.opType()) {
-                    case CREATE, UPDATE -> persistReceipt(operation, handleCostLedgerUpsert(operation));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE, UPDATE -> persistReceipt(operation, handleCostLedgerUpsert(operation), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalEventCreate(operation, currentUserId));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleAnimalEventCreate(operation, currentUserId), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_HEALTH_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalHealthEventCreate(operation, currentUserId));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleAnimalHealthEventCreate(operation, currentUserId), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_REPRODUCTION_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalReproductionEventCreate(operation, currentUserId));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleAnimalReproductionEventCreate(operation, currentUserId), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_IMAGE -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalImageCreate(operation));
-                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled));
+                    case CREATE -> persistReceipt(operation, handleAnimalImageCreate(operation), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
-                case NOTIFICATION -> persistReceipt(operation, validationError(operation, OPERATION_NOT_ALLOWED_OFFLINE, conflictResolutionV2Enabled));
+                case NOTIFICATION -> persistReceipt(operation, validationError(operation, OPERATION_NOT_ALLOWED_OFFLINE, conflictResolutionV2Enabled), currentUserId);
             };
         } catch (BusinessException exception) {
-            return persistReceipt(operation, validationError(operation, exception.code(), conflictResolutionV2Enabled));
+            return persistReceipt(operation, validationError(operation, exception.code(), conflictResolutionV2Enabled), currentUserId);
         } catch (IllegalArgumentException exception) {
-            return persistReceipt(operation, validationError(operation, exception.getMessage(), conflictResolutionV2Enabled));
+            return persistReceipt(operation, validationError(operation, exception.getMessage(), conflictResolutionV2Enabled), currentUserId);
+        }
+    }
+
+    private void requireConflictOwnership(List<SyncConflictAuditLedger> auditTrail, UUID currentUserId) {
+        UUID conflictOwnerId = auditTrail.stream()
+                .filter(entry -> "DETECTED".equals(entry.getEventType()))
+                .map(SyncConflictAuditLedger::getActorUserId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (conflictOwnerId != null && !conflictOwnerId.equals(currentUserId)) {
+            throw new BusinessException(
+                    "SYNC_CONFLICT_FORBIDDEN",
+                    "Solo el usuario que originó el conflicto puede resolverlo.",
+                    jakarta.ws.rs.core.Response.Status.FORBIDDEN);
         }
     }
 
@@ -834,10 +850,18 @@ public class SyncService {
     }
 
     private SyncOperationResult persistReceipt(SyncOperationRequest operation, SyncOperationResult result) {
-        return persistReceipt(syncOperationReceiptRepository.findById(operation.operationId()), operation, result);
+        return persistReceipt(operation, result, null);
+    }
+
+    private SyncOperationResult persistReceipt(SyncOperationRequest operation, SyncOperationResult result, UUID actorUserId) {
+        return persistReceipt(syncOperationReceiptRepository.findById(operation.operationId()), operation, result, actorUserId);
     }
 
     private SyncOperationResult persistReceipt(SyncOperationReceipt receipt, SyncOperationRequest operation, SyncOperationResult result) {
+        return persistReceipt(receipt, operation, result, null);
+    }
+
+    private SyncOperationResult persistReceipt(SyncOperationReceipt receipt, SyncOperationRequest operation, SyncOperationResult result, UUID actorUserId) {
         boolean isNewReceipt = receipt == null;
         if (receipt == null) {
             receipt = new SyncOperationReceipt();
@@ -876,7 +900,7 @@ public class SyncService {
         if (isNewReceipt) {
             syncOperationReceiptRepository.persist(receipt);
         }
-        recordDetectedConflict(operation, result);
+        recordDetectedConflict(operation, result, actorUserId);
         return result;
     }
 
@@ -922,7 +946,7 @@ public class SyncService {
                 conflict);
     }
 
-    private void recordDetectedConflict(SyncOperationRequest operation, SyncOperationResult result) {
+    private void recordDetectedConflict(SyncOperationRequest operation, SyncOperationResult result, UUID actorUserId) {
         if (result.conflict() == null || !List.of("version_conflict", "validation_error").contains(result.classification())) {
             return;
         }
@@ -934,6 +958,7 @@ public class SyncService {
         detected.setOperationType(operation.opType().name());
         detected.setEventType("DETECTED");
         detected.setReason(result.conflict().reason());
+        detected.setActorUserId(actorUserId);
         detected.setPolicyKey(result.conflict().policyKey() == null
                 ? syncPayloadMapper.buildPolicyKey(operation.entityType(), operation.opType())
                 : result.conflict().policyKey());

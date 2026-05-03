@@ -28,6 +28,7 @@ class AdminNotificationLiquibaseMigrationTest {
 
             assertTrue(tableExists(connection, "admin_notifications"));
             assertTrue(tableExists(connection, "admin_notification_recipients"));
+            assertTrue(columnExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "READ"));
             assertTrue(indexExists(connection, "ADMIN_NOTIFICATIONS", "IDX_ADMIN_NOTIFICATIONS_UPDATED_ID"));
             assertTrue(indexExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "IDX_ADMIN_NOTIFICATION_RECIPIENT_PULL"));
             assertTrue(uniqueConstraintExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "UK_ADMIN_NOTIFICATION_RECIPIENT_ONCE"));
@@ -48,6 +49,12 @@ class AdminNotificationLiquibaseMigrationTest {
                 }
             }
             return false;
+        }
+    }
+
+    private boolean columnExists(Connection connection, String tableName, String columnName) throws Exception {
+        try (ResultSet resultSet = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
+            return resultSet.next();
         }
     }
 

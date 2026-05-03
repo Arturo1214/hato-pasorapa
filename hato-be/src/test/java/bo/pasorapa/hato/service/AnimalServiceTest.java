@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -21,6 +22,8 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 @QuarkusTest
 class AnimalServiceTest {
@@ -63,10 +66,12 @@ class AnimalServiceTest {
                         "BO-2000",
                         null,
                         null,
-                        AnimalCategory.COW,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
                         true,
                         LocalDate.of(2024, 2, 1),
-                        new BigDecimal("410.50")))));
+                        new BigDecimal("410.50"),
+                        null))));
 
         assertEquals("ANIMAL_OWNER_NOT_FOUND", exception.code());
     }
@@ -79,10 +84,12 @@ class AnimalServiceTest {
                         " ",
                         null,
                         null,
-                        AnimalCategory.COW,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
                         true,
                         LocalDate.of(2024, 2, 1),
-                        new BigDecimal("410.50")))));
+                        new BigDecimal("410.50"),
+                        null))));
 
         assertEquals("ANIMAL_VISIBLE_IDENTIFIER_REQUIRED", exception.code());
     }
@@ -95,10 +102,12 @@ class AnimalServiceTest {
                         "bo-1000",
                         "Otra Marca",
                         null,
-                        AnimalCategory.COW,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
                         true,
                         LocalDate.of(2024, 3, 1),
-                        new BigDecimal("390.00")))));
+                        new BigDecimal("390.00"),
+                        null))));
 
         assertEquals("ANIMAL_ARETE_ALREADY_EXISTS", exception.code());
     }
@@ -111,10 +120,85 @@ class AnimalServiceTest {
                         "BO-3000",
                         "Marca Base",
                         "Tatuaje Base",
-                        AnimalCategory.COW,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
                         true,
                         LocalDate.of(2024, 3, 1),
-                        new BigDecimal("390.00")))));
+                        new BigDecimal("390.00"),
+                        null))));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "VACA,MACHO",
+            "TERNERO,HEMBRA",
+            "TERNERA,MACHO",
+            "BUEY,HEMBRA",
+            "VAQUILLONA,MACHO"
+    })
+    void shouldRejectInvalidSexCategoryCombination(AnimalCategory category, AnimalSex sex) {
+        BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
+                animalService.create(new AnimalRequest(
+                        UUID.fromString("95315ab0-0f7c-4b94-a55e-912d179a702c"),
+                        "BO-6000",
+                        null,
+                        null,
+                        category,
+                        sex,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        LocalDate.of(2023, 2, 1)))));
+
+        assertEquals("INVALID_SEX_CATEGORY_COMBINATION", exception.code());
+    }
+
+    @Test
+    void shouldRequireBirthDateForYoungAnimals() {
+        BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
+                animalService.create(new AnimalRequest(
+                        UUID.fromString("95315ab0-0f7c-4b94-a55e-912d179a702c"),
+                        "BO-7000",
+                        null,
+                        null,
+                        AnimalCategory.TERNERO,
+                        AnimalSex.MACHO,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        null))));
+
+        assertEquals("BIRTH_DATE_REQUIRED_FOR_YOUNG_ANIMAL", exception.code());
+    }
+
+    @Test
+    void shouldAutoTransitionYoungMaleAnimalsOnRead() {
+        UUID uuid = UUID.fromString("7d8c18f3-ea47-4f20-b1b8-b5f15f803f55");
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal animal = buildAnimal(uuid, UUID.fromString("95315ab0-0f7c-4b94-a55e-912d179a702c"), "BO-8000", "Marca Joven", null);
+            animal.setCategory(AnimalCategory.TERNERO);
+            animal.setSex(AnimalSex.MACHO);
+            animal.setBirthDate(LocalDate.now().minusMonths(25));
+            animalRepository.persist(animal);
+        });
+
+        Animal transitioned = QuarkusTransaction.requiringNew().call(() -> animalService.findByUuid(uuid));
+        assertEquals(AnimalCategory.TORO, transitioned.getCategory());
+    }
+
+    @Test
+    void shouldKeepYoungAnimalCategoryWhenTransitionDoesNotApply() {
+        UUID uuid = UUID.fromString("d6ea4011-5300-4ebf-8a96-14e88c1291d2");
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal animal = buildAnimal(uuid, UUID.fromString("95315ab0-0f7c-4b94-a55e-912d179a702c"), "BO-8100", "Marca Joven", null);
+            animal.setCategory(AnimalCategory.TERNERO);
+            animal.setSex(AnimalSex.MACHO);
+            animal.setBirthDate(LocalDate.now().minusMonths(23));
+            animalRepository.persist(animal);
+        });
+
+        Animal pendingTransition = QuarkusTransaction.requiringNew().call(() -> animalService.findByUuid(uuid));
+        assertEquals(AnimalCategory.TERNERO, pendingTransition.getCategory());
     }
 
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name) {
@@ -138,7 +222,8 @@ class AnimalServiceTest {
         animal.setTatuajeNormalized(tatuaje == null ? null : tatuaje.trim().toLowerCase());
         animal.setTag(arete);
         animal.setCode(marca);
-        animal.setCategory(AnimalCategory.COW);
+        animal.setCategory(AnimalCategory.VACA);
+        animal.setSex(AnimalSex.HEMBRA);
         animal.setActive(true);
         animal.setAdmissionDate(LocalDate.of(2024, 1, 10));
         animal.setWeightKg(new BigDecimal("420.50"));

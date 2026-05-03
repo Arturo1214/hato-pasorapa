@@ -7,6 +7,7 @@ import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -238,6 +239,47 @@ class AnimalHealthEventServiceTest {
         assertEquals(3, animalHealthEventRepository.listByTreatmentCase(animalUuid, "CASE-001").size());
     }
 
+    @Test
+    void shouldDerivePerformedByUserIdFromAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("5ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        UUID authenticatedUserId = UUID.fromString("99999999-9999-4999-8999-999999999999");
+        seedAnimal(animalUuid);
+
+        AnimalHealthEventRequest request = new AnimalHealthEventRequest(
+                animalUuid,
+                AnimalHealthEventType.VACCINATION,
+                OffsetDateTime.parse("2026-04-27T20:00:00Z"),
+                "Vacuna anual",
+                null,
+                "OFFLINE",
+                UUID.fromString("aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"),
+                Map.of("productName", "Brucelosis"),
+                OffsetDateTime.parse("2026-04-27T20:01:00Z"));
+
+        var created = animalHealthEventService.create(request, authenticatedUserId);
+
+        assertEquals(authenticatedUserId, created.getPerformedByUserId());
+    }
+
+    @Test
+    void shouldRejectPerformedByUserMismatchAgainstAuthenticatedUser() {
+        UUID animalUuid = UUID.fromString("6ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalHealthEventService.create(new AnimalHealthEventRequest(
+                animalUuid,
+                AnimalHealthEventType.VACCINATION,
+                OffsetDateTime.parse("2026-04-27T21:00:00Z"),
+                "Vacuna inválida",
+                UUID.fromString("bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb"),
+                "OFFLINE",
+                UUID.fromString("cccccccc-1111-4111-8111-cccccccccccc"),
+                Map.of("productName", "Brucelosis"),
+                OffsetDateTime.parse("2026-04-27T21:01:00Z")), UUID.fromString("dddddddd-1111-4111-8111-dddddddddddd")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_PERFORMED_BY_MISMATCH", exception.code());
+    }
+
     private AnimalHealthEventRequest request(
             UUID animalUuid,
             AnimalHealthEventType type,
@@ -286,7 +328,8 @@ class AnimalHealthEventServiceTest {
             animal.setMarca("Marca " + animalUuid.toString().substring(0, 4));
             animal.setMarcaNormalized(animal.getMarca().toLowerCase());
             animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.COW);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("400.00"));

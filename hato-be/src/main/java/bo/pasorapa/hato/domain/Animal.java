@@ -1,6 +1,7 @@
 package bo.pasorapa.hato.domain;
 
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -61,6 +62,10 @@ public class Animal {
     @Enumerated(EnumType.STRING)
     @Column(name = "category", nullable = false, length = 30)
     private AnimalCategory category;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sex", length = 10)
+    private AnimalSex sex;
 
     @Column(name = "active", nullable = false)
     private Boolean active = Boolean.TRUE;
@@ -209,6 +214,14 @@ public class Animal {
 
     public void setCategory(AnimalCategory category) {
         this.category = category;
+    }
+
+    public AnimalSex getSex() {
+        return sex;
+    }
+
+    public void setSex(AnimalSex sex) {
+        this.sex = sex;
     }
 
     public Boolean getActive() {

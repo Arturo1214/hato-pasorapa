@@ -3,6 +3,7 @@ package bo.pasorapa.hato.service.mapper;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
 import bo.pasorapa.hato.service.dto.animalimage.AnimalImageRequest;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
@@ -146,6 +147,9 @@ public class SyncPayloadMapper {
         if (payload.containsKey("category") && payload.get("category") instanceof String category) {
             animal.setCategory(AnimalCategory.valueOf(category));
         }
+        if (payload.containsKey("sex") && payload.get("sex") instanceof String sex) {
+            animal.setSex(AnimalSex.valueOf(sex));
+        }
         if (payload.containsKey("active") && payload.get("active") instanceof Boolean active) {
             animal.setActive(active);
         }
@@ -167,6 +171,7 @@ public class SyncPayloadMapper {
     public AnimalRequest toAnimalRequest(Map<String, Object> payload) {
         UUID ownerGanaderoId = requireUuid(payload.get("ownerGanaderoId"), "ANIMAL_OWNER_GANADERO_ID_REQUIRED");
         AnimalCategory category = readAnimalCategory(payload);
+        AnimalSex sex = readAnimalSex(payload);
         Boolean active = readAnimalActive(payload);
         LocalDate admissionDate = readAnimalAdmissionDate(payload);
 
@@ -176,9 +181,11 @@ public class SyncPayloadMapper {
                 readOptionalText(payload.get("marca")),
                 readOptionalText(payload.get("tatuaje")),
                 category,
+                sex,
                 active,
                 admissionDate,
-                readOptionalDecimal(payload.get("weightKg")));
+                readOptionalDecimal(payload.get("weightKg")),
+                readOptionalDate(payload.get("birthDate"), "ANIMAL_BIRTH_DATE_INVALID"));
     }
 
     public UserStatus readUserStatus(Map<String, Object> payload) {
@@ -205,7 +212,7 @@ public class SyncPayloadMapper {
             throw new IllegalArgumentException("GANADERO_NAME_REQUIRED");
         }
 
-        return new GanaderoCreateRequest(businessIdentifier, name);
+        return new GanaderoCreateRequest(businessIdentifier, name, null);
     }
 
     public Boolean readGanaderoActive(Map<String, Object> payload) {
@@ -368,10 +375,42 @@ public class SyncPayloadMapper {
         }
 
         try {
-            return AnimalCategory.valueOf(category);
+            return switch (category.trim().toUpperCase()) {
+                case "COW" -> AnimalCategory.VACA;
+                case "BULL" -> AnimalCategory.TORO;
+                case "HEIFER" -> AnimalCategory.VAQUILLONA;
+                case "CALF" -> readAnimalSex(payload) == AnimalSex.HEMBRA ? AnimalCategory.TERNERA : AnimalCategory.TERNERO;
+                default -> AnimalCategory.valueOf(category.trim().toUpperCase());
+            };
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("ANIMAL_CATEGORY_INVALID");
         }
+    }
+
+    private AnimalSex readAnimalSex(Map<String, Object> payload) {
+        Object rawSex = payload.get("sex");
+        if (!(rawSex instanceof String sex) || sex.isBlank()) {
+            return inferLegacyAnimalSex(payload);
+        }
+
+        try {
+            return AnimalSex.valueOf(sex);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("ANIMAL_SEX_INVALID");
+        }
+    }
+
+    private AnimalSex inferLegacyAnimalSex(Map<String, Object> payload) {
+        Object rawCategory = payload.get("category");
+        if (!(rawCategory instanceof String category) || category.isBlank()) {
+            throw new IllegalArgumentException("ANIMAL_SEX_REQUIRED");
+        }
+
+        return switch (category.trim().toUpperCase()) {
+            case "COW", "HEIFER", "VACA", "VAQUILLONA", "TERNERA" -> AnimalSex.HEMBRA;
+            case "BULL", "TORO", "BUEY", "TERNERO", "CALF" -> AnimalSex.MACHO;
+            default -> throw new IllegalArgumentException("ANIMAL_SEX_REQUIRED");
+        };
     }
 
     private Boolean readAnimalActive(Map<String, Object> payload) {

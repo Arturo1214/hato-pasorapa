@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-animal-sex-and-notification-read
+      author: opencode
+      changes:
+        - addColumn:
+            tableName: animals
+            columns:
+              - column:
+                  name: sex
+                  type: VARCHAR(10)
+        - sql:
+            sql: |
+              UPDATE animals
+              SET sex = 'HEMBRA'
+              WHERE sex IS NULL AND category IN ('COW', 'HEIFER', 'CALF');
+        - sql:
+            sql: |
+              UPDATE animals
+              SET sex = 'MACHO'
+              WHERE sex IS NULL AND category = 'BULL';
+        - addColumn:
+            tableName: admin_notification_recipients
+            columns:
+              - column:
+                  name: read
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

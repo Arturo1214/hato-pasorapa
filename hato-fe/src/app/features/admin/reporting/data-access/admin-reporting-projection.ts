@@ -62,6 +62,10 @@ export interface AdminReportingProjectionBase {
   activeAssignments: Array<OfflineSnapshotRecord & { payload: HerdLotAssignmentSnapshotPayload }>;
 }
 
+/**
+ * @deprecated Kept only for the legacy reporting page until Slice 4 rewires the UI to
+ * server-backed AdminReportsStore data. New reporting data MUST come from `/api/admin/reports/*`.
+ */
 export function projectAdminReportingV2(input: AdminReportingProjectionInput): AdminReportingProjectionResult {
   const base = buildAdminReportingProjectionBase(input);
   const { selectedWindow, selectedPreset, visibleProductivityLedger, visibleCostLedger, activities, lots, activeAssignments } = base;

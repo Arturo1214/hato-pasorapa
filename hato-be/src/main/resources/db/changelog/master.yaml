@@ -31,3 +31,5 @@ databaseChangeLog:
       file: db/changelog/015-animal-category-workflow-v2.yaml
   - include:
       file: db/changelog/016-notification-recipient-workflow-v1.yaml
+  - include:
+      file: db/changelog/017-admin-reporting-indexes-v1.yaml

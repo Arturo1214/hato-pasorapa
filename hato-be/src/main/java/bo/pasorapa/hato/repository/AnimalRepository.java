@@ -6,6 +6,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,4 +47,53 @@ public class AnimalRepository implements PanacheRepositoryBase<Animal, Long> {
     public long countByOwnerAndSexAndCategory(UUID ganaderoId, AnimalSex sex, AnimalCategory category) {
         return count("ownerGanadero.id = ?1 and sex = ?2 and category = ?3", ganaderoId, sex, category);
     }
+
+    public List<InventoryCountRow> listInventoryByGanadero(UUID ganaderoId, Boolean active) {
+        StringBuilder query = new StringBuilder(
+                """
+                select new bo.pasorapa.hato.repository.AnimalRepository$InventoryCountRow(
+                    ganadero.id,
+                    ganadero.name,
+                    animal.category,
+                    animal.sex,
+                    animal.active,
+                    count(animal)
+                )
+                from Animal animal
+                join animal.ownerGanadero ganadero
+                """);
+        List<Object> params = new ArrayList<>();
+        if (ganaderoId != null || active != null) {
+            query.append(" where ");
+        }
+        if (ganaderoId != null) {
+            query.append("ganadero.id = ?").append(params.size() + 1);
+            params.add(ganaderoId);
+        }
+        if (active != null) {
+            if (!params.isEmpty()) {
+                query.append(" and ");
+            }
+            query.append("animal.active = ?").append(params.size() + 1);
+            params.add(active);
+        }
+        query.append(
+                """
+                 group by ganadero.id, ganadero.name, animal.category, animal.sex, animal.active
+                 order by ganadero.name asc, ganadero.id asc, animal.category asc, animal.sex asc, animal.active desc
+                """);
+        var typedQuery = getEntityManager().createQuery(query.toString(), InventoryCountRow.class);
+        for (int index = 0; index < params.size(); index++) {
+            typedQuery.setParameter(index + 1, params.get(index));
+        }
+        return typedQuery.getResultList();
+    }
+
+    public record InventoryCountRow(
+            UUID ganaderoId,
+            String ganaderoName,
+            AnimalCategory category,
+            AnimalSex sex,
+            Boolean active,
+            long count) {}
 }

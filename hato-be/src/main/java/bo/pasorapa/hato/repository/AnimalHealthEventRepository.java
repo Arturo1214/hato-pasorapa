@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -90,6 +91,66 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
                 .page(0, limit)
                 .list();
     }
+
+    public List<HealthActivityRow> listHealthActivity(
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo,
+            AnimalHealthEventType type,
+            UUID ganaderoId,
+            UUID animalUuid,
+            int limit) {
+        StringBuilder query = new StringBuilder(
+                """
+                select new bo.pasorapa.hato.repository.AnimalHealthEventRepository$HealthActivityRow(
+                    event.eventId,
+                    event.occurredAt,
+                    event.healthEventType,
+                    ganadero.id,
+                    ganadero.name,
+                    animal.uuid,
+                    animal.code,
+                    animal.tag,
+                    event.notes
+                )
+                from AnimalHealthEvent event
+                join event.animal animal
+                join animal.ownerGanadero ganadero
+                where event.occurredAt >= ?1 and event.occurredAt <= ?2
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(occurredFrom);
+        params.add(occurredTo);
+        if (type != null) {
+            query.append(" and event.healthEventType = ?").append(params.size() + 1);
+            params.add(type);
+        }
+        if (ganaderoId != null) {
+            query.append(" and ganadero.id = ?").append(params.size() + 1);
+            params.add(ganaderoId);
+        }
+        if (animalUuid != null) {
+            query.append(" and animal.uuid = ?").append(params.size() + 1);
+            params.add(animalUuid);
+        }
+        query.append(" order by event.occurredAt desc, event.eventId desc");
+
+        var typedQuery = getEntityManager().createQuery(query.toString(), HealthActivityRow.class);
+        for (int index = 0; index < params.size(); index++) {
+            typedQuery.setParameter(index + 1, params.get(index));
+        }
+        return typedQuery.setMaxResults(limit).getResultList();
+    }
+
+    public record HealthActivityRow(
+            UUID eventId,
+            LocalDateTime occurredAt,
+            AnimalHealthEventType type,
+            UUID ganaderoId,
+            String ganaderoName,
+            UUID animalUuid,
+            String animalCode,
+            String animalTag,
+            String notes) {}
 
     private String readVisitId(String metadataJson) {
         Object visit = readMetadata(metadataJson).get("visit");

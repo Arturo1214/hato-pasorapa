@@ -1,7 +1,11 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { AdminReportingStore } from './data-access/admin-reporting.store';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminReportingPageComponent } from './admin-reporting-page.component';
+import { AdminReportsExportService } from './data-access/admin-reports-export';
+import { AdminReportsStore } from './data-access/admin-reports.store';
+import type { AdminReportId } from './data-access/admin-reports.service';
+
+const exportService = { exportToExcel: vi.fn() };
 
 describe('AdminReportingPageComponent', () => {
   let fixture: ComponentFixture<AdminReportingPageComponent>;
@@ -12,90 +16,132 @@ describe('AdminReportingPageComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [AdminReportingPageComponent],
-      providers: [{ provide: AdminReportingStore, useValue: fakeStore }],
+      providers: [
+        { provide: AdminReportsStore, useValue: fakeStore },
+        { provide: AdminReportsExportService, useValue: exportService },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AdminReportingPageComponent);
     fixture.detectChanges();
   });
 
-  it('should render freshness, bounded controls and operational recent activity', () => {
+  it('should render the three report options without sync or debug controls', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Última sync: 2026-04-27T09:59:00.000Z');
-    expect(text).toContain('Último cálculo: 2026-04-27T10:00:00.000Z');
-    expect(text).toContain('Ventana activa: 7d');
-    expect(text).toContain('Preset activo: all');
-    expect(text).toContain('Evento sanitario · Vaccination');
-    expect(text).toContain('Lotes');
-    expect(text).toContain('Costo acumulado');
-    expect(text).toContain('80');
-    expect(text).toContain('V2 descriptivo: sin filtros libres');
+    expect(text).toContain('Inventario por Ganadero');
+    expect(text).toContain('Actividad Sanitaria');
+    expect(text).toContain('Alcance de Notificaciones');
+    expect(text).toContain('Ganadero A');
+    expect(text).not.toContain('Última sync');
+    expect(text).not.toContain('Refrescar ahora');
+    expect(text).not.toContain('Ventana activa');
+    expect(text).not.toContain('Preset activo');
   });
 
-  it('should trigger bounded window preset changes and manual refresh from UI actions', async () => {
-    await fixture.componentInstance.useWindow('90d');
-    await fixture.componentInstance.usePreset('active_only');
-    await fixture.componentInstance.refresh();
+  it('should switch reports and render filters appropriate to the selected report', async () => {
+    await fixture.componentInstance.selectReport('health-activity');
+    fixture.detectChanges();
 
-    expect(fakeStore.setWindow).toHaveBeenCalledWith('90d');
-    expect(fakeStore.setPreset).toHaveBeenCalledWith('active_only');
-    expect(fakeStore.refreshNow).toHaveBeenCalledTimes(1);
+    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('health-activity', expect.objectContaining({ from: '2026-05-01', to: '2026-05-10', limit: 200 }));
+    expect(fixture.nativeElement.textContent).toContain('Tipo de evento');
+    expect(fixture.componentInstance.healthEventTypeOptions.map((option) => option.label)).toEqual(
+      expect.arrayContaining(['Vacunación', 'Visita veterinaria de campo'])
+    );
+    expect(fixture.nativeElement.textContent).toContain('Animal');
+
+    await fixture.componentInstance.selectReport('notification-reach');
+    fixture.detectChanges();
+
+    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('notification-reach', expect.objectContaining({ from: '2026-05-01', to: '2026-05-10', limit: 200 }));
+    expect(fixture.nativeElement.textContent).toContain('Desde');
+    expect(fixture.nativeElement.textContent).toContain('Hasta');
+    expect(fixture.nativeElement.textContent).toContain('Segmentación');
   });
 
-  it('should keep excluded V1 capabilities unavailable in the rendered page', () => {
+  it('should keep report filters compact and readable', () => {
+    expect(fixture.nativeElement.querySelector('.filters-row')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.filter-control--sm')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Filtros');
+  });
+
+  it('should format inventory breakdown values with Spanish labels', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).not.toContain('Exportar');
-    expect(text).not.toContain('Programar reporte');
-    expect(text).not.toContain('Predicción');
-    expect(text).not.toContain('Filtro libre');
+    expect(text).toContain('Vacas (6)');
+    expect(text).not.toContain('VACA: 6');
+  });
+
+  it('should validate that Hasta is greater than or equal to Desde before applying filters', async () => {
+    await fixture.componentInstance.selectReport('health-activity');
+    fakeStore.setFilter({ from: '2026-05-10', to: '2026-05-01' });
+    fixture.detectChanges();
+
+    await fixture.componentInstance.applyFilters();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('La fecha "Hasta" debe ser mayor o igual a "Desde".');
+    expect(fakeStore.loadReport).toHaveBeenCalledTimes(2);
+  });
+
+  it('should update date filters from datepicker values', () => {
+    fixture.componentInstance.updateDateFilter('from', new Date('2026-05-03T00:00:00'));
+
+    expect(fakeStore.setFilter).toHaveBeenCalledWith({ from: '2026-05-03' });
+  });
+
+  it('should export the current report rows with Spanish DataTable columns when enabled', async () => {
+    await fixture.componentInstance.exportCurrentReport();
+
+    expect(exportService.exportToExcel).toHaveBeenCalledWith(
+      fakeStore.reportData(),
+      expect.arrayContaining([expect.objectContaining({ key: 'ganaderoName', label: 'Ganadero' })]),
+      'InventarioPorGanadero'
+    );
+  });
+
+  it('should show loading, error, and empty states while disabling Excel export when unavailable', () => {
+    fakeStore.loadingState.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cargando reporte administrativo…');
+
+    fakeStore.loadingState.set(false);
+    fakeStore.errorState.set('No pudimos cargar el reporte administrativo.');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No pudimos cargar el reporte administrativo.');
+    expect(fixture.nativeElement.querySelector('[data-testid="export-report"]').disabled).toBe(true);
+
+    fakeStore.errorState.set(null);
+    fakeStore.reportDataState.set([]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No hay datos para los filtros seleccionados');
   });
 });
 
 function createFakeStore() {
-  const freshnessState = signal({
-    lastSyncAt: '2026-04-27T09:59:00.000Z',
-    lastComputedAt: '2026-04-27T10:00:00.000Z',
-    stale: false,
-  });
-  const summaryState = signal({ usersTotal: 1, ganaderosTotal: 1, animalesTotal: 1, animalesActivos: 1, lotesTotal: 1, lotesActivos: 1, asignacionesActivas: 1, productividadTotal: 1, costosTotal: 1, costoAcumulado: 80 });
-  const eventCountsState = signal({ 'ANIMAL_HEALTH_EVENT:VACCINATION': 1 });
-  const descriptiveKpisState = signal({ animalesActivos: 1, lotesActivos: 1, productividadTotal: 1, costosTotal: 1, costoAcumulado: 80 });
-  const lotBreakdownState = signal([{ lotId: 'lot-a', lotName: 'Lote A', animalesActivos: 1, productividadTotal: 1, costosTotal: 1, costoAcumulado: 80 }]);
-  const recentActivityState = signal([
-    {
-      id: 'health-a',
-      sourceType: 'ANIMAL_HEALTH_EVENT',
-      eventType: 'VACCINATION',
-      occurredAt: '2026-04-27T09:00:00.000Z',
-      animalUuid: 'animal-a',
-      animalLabel: 'BO-001',
-      title: 'Evento sanitario · Vaccination',
-    },
+  const selectedReportState = signal<AdminReportId>('inventory-by-ganadero');
+  const filtersState = signal({});
+  const reportDataState = signal([
+    { ganaderoId: 7, ganaderoName: 'Ganadero A', total: 10, active: 8, inactive: 2, byCategory: { VACA: 6 }, bySex: { HEMBRA: 8 } },
   ]);
-  const selectedWindowState = signal<'7d' | '30d' | '90d'>('7d');
-  const selectedPresetState = signal<'all' | 'active_only' | 'inactive_only'>('all');
+  const loadingState = signal(false);
+  const errorState = signal<string | null>(null);
+  const canExportState = signal(true);
 
   return {
-    summary: summaryState.asReadonly(),
-    freshness: freshnessState.asReadonly(),
-    stale: signal(false).asReadonly(),
-    error: signal<string | null>(null).asReadonly(),
-    loading: signal(false).asReadonly(),
-    statusMessage: signal<string | null>(null).asReadonly(),
-    selectedWindow: selectedWindowState.asReadonly(),
-    selectedPreset: selectedPresetState.asReadonly(),
-    recentActivity: recentActivityState.asReadonly(),
-    descriptiveKpis: descriptiveKpisState.asReadonly(),
-    lotBreakdown: lotBreakdownState.asReadonly(),
-    allowedWindows: signal(['7d', '30d', '90d'] as const).asReadonly(),
-    allowedPresets: signal(['all', 'active_only', 'inactive_only'] as const).asReadonly(),
-    scopeGuardMessage: signal('V2 descriptivo: sin filtros libres, exportaciones complejas, reportes programados ni analítica predictiva.').asReadonly(),
-    eventCounts: () => eventCountsState(),
-    ensureFresh: vi.fn(async () => undefined),
-    setWindow: vi.fn(async (window: '7d' | '30d' | '90d') => selectedWindowState.set(window)),
-    setPreset: vi.fn(async (preset: 'all' | 'active_only' | 'inactive_only') => selectedPresetState.set(preset)),
-    refreshNow: vi.fn(async () => undefined),
+    selectedReport: selectedReportState.asReadonly(),
+    filters: filtersState.asReadonly(),
+    reportData: reportDataState.asReadonly(),
+    loading: loadingState.asReadonly(),
+    error: errorState.asReadonly(),
+    canExport: canExportState.asReadonly(),
+    loadingState,
+    errorState,
+    reportDataState,
+    loadReport: vi.fn(async (report: 'inventory-by-ganadero' | 'health-activity' | 'notification-reach', filters = {}) => {
+      selectedReportState.set(report);
+      filtersState.set(filters);
+    }),
+    setFilter: vi.fn((filter) => filtersState.update((current) => ({ ...current, ...filter }))),
   };
 }

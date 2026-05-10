@@ -1,12 +1,10 @@
-# admin-reporting-aggregates-v1 Specification
+# Delta for admin-reporting-aggregates-v1
 
-## Purpose
-
-Definir métricas administrativas agregadas V1 derivadas desde endpoints BE bajo `/api/admin/reports/*`. Reemplaza el enfoque de cómputo local desde snapshots offline por reportes administrativos server-backed con filtros por rango de fechas.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Local aggregated metrics contract
+
+(Previously: compute admin aggregates from local snapshots only)
 
 The system MUST fetch admin aggregates from BE endpoints under `/api/admin/reports/*` and SHALL expose at least total users, totalники, total animals, and animales activos. Aggregates are derived server-side from `GANADERO`, `ANIMAL`, and related domain entities via Panache repositories.
 
@@ -28,6 +26,8 @@ The system MUST fetch admin aggregates from BE endpoints under `/api/admin/repor
 
 ### Requirement: Bounded windows and predefined V1 filters
 
+(Previously: predefined `7d`, `30d`, `90d` windows with ad-hoc filter rejection)
+
 The system MUST support server-side bounded windows (`7d`, `30d`, `90d`) passed as query parameters to report endpoints. The BE validates window parameters and returns data only for the requested window. The FE MUST NOT compute aggregations client-side.
 
 #### Scenario: Report uses 7d bounded window
@@ -45,32 +45,6 @@ The system MUST support server-side bounded windows (`7d`, `30d`, `90d`) passed 
 - AND no report data is returned
 
 (Previously: ad-hoc filters rejected client-side)
-
-#### Scenario: Predefined filter preset is accepted
-
-- GIVEN an admin selects a declared V1 preset
-- WHEN reporting recomputes aggregates
-- THEN the result reflects that preset and selected bounded window
-
-#### Scenario: Ad-hoc filter is rejected
-
-- GIVEN an admin attempts a filter not present in V1 presets
-- WHEN the request is evaluated by reporting state
-- THEN the ad-hoc filter is not applied
-- AND the UI keeps using a valid predefined preset
-
-#### Scenario: Explicit exclusions are applied
-
-- GIVEN a preset with excluded productivity/cost categories
-- WHEN aggregates are computed
-- THEN excluded records are omitted from totals
-
-#### Scenario: Period comparison uses bounded and aligned windows
-
-- GIVEN two comparison periods are requested for decision support
-- WHEN aggregates are generated
-- THEN both periods are computed using declared bounded windows only
-- AND the comparison output is deterministic across repeated runs
 
 ### Requirement: Remove local-only aggregate computation
 

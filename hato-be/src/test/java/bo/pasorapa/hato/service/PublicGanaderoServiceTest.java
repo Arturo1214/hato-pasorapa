@@ -2,6 +2,7 @@ package bo.pasorapa.hato.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
@@ -104,6 +105,39 @@ class PublicGanaderoServiceTest {
 
         assertEquals("GANADERO_ALREADY_EXISTS", exception.code());
         QuarkusTransaction.requiringNew().run(() -> assertEquals(0, userRepository.count()));
+    }
+
+    @Test
+    void shouldRejectValuesThatOverflowUserConstraintsBeforePersisting() {
+        String emailTooLongForUsername = "campo-muy-largo-para-usuario-publico-001@registro-ganadero-pasorapa.bo";
+        String nameTooLongForDisplayName = "Ganadera ".repeat(14);
+
+        BusinessException emailException = assertThrows(BusinessException.class,
+                () -> publicGanaderoService.register(new GanaderoPublicCreateRequest(
+                        "12345678",
+                        "Ganadera Norte",
+                        emailTooLongForUsername,
+                        "Ganadera9",
+                        "",
+                        Instant.now().minusSeconds(5)), "127.0.0.1"));
+
+        assertEquals("REGISTRATION_EMAIL_TOO_LONG", emailException.code());
+
+        BusinessException nameException = assertThrows(BusinessException.class,
+                () -> publicGanaderoService.register(new GanaderoPublicCreateRequest(
+                        "12345678",
+                        nameTooLongForDisplayName,
+                        "ganadera@hato.bo",
+                        "Ganadera9",
+                        "",
+                        Instant.now().minusSeconds(5)), "127.0.0.1"));
+
+        assertEquals("REGISTRATION_NAME_TOO_LONG", nameException.code());
+        assertTrue(nameTooLongForDisplayName.length() > 120);
+        QuarkusTransaction.requiringNew().run(() -> {
+            assertEquals(0, ganaderoRepository.count());
+            assertEquals(0, userRepository.count());
+        });
     }
 
     private User buildUser(String username, String email) {

@@ -7,7 +7,6 @@ import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { CalendarAlertsStore } from '../../../../features/admin/calendar/data-access/calendar-alerts.store';
 import { AdminConflictResolutionStore } from '../../../../features/admin/conflicts/data-access/admin-conflict-resolution.store';
-import { NotificationInboxStore } from '../../../../features/admin/notifications/data-access/notification-inbox.store';
 import { SidebarComponent } from './sidebar';
 
 describe('SidebarComponent integration', () => {
@@ -26,7 +25,6 @@ describe('SidebarComponent integration', () => {
         provideRouter([]),
         { provide: CalendarAlertsStore, useValue: { totalPending: () => 2, badgeSeverity: () => 'overdue' } },
         { provide: AdminConflictResolutionStore, useValue: { unresolvedCount: () => 3 } },
-        { provide: NotificationInboxStore, useValue: { unreadCount: () => 1, badgeSeverity: () => 'info' } },
         { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api', offlineBackupV1Enabled: true }) } },
         { provide: AuthService, useValue: { currentUser: currentUserState, logout: vi.fn() } },
       ],
@@ -52,7 +50,6 @@ describe('SidebarComponent integration', () => {
       'Dashboard',
       'Animales',
       'Visitas veterinarias',
-      'Ganaderos',
       'Calendario',
       'Notificaciones',
       'Sincronización',

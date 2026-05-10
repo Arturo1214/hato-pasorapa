@@ -9,4 +9,5 @@ apps/api/target/
 infra/compose/.env
 .atl/
 /images/
+/logs/
 hato-be/databasechangelog.csv

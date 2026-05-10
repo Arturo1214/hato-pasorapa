@@ -48,11 +48,6 @@ function resolveErrorMessage(error: unknown, fallback: string): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="profile-page">
-      <header class="page-header">
-        <h1>Perfil</h1>
-        <p>Completá tus datos de contacto y actualizá tu contraseña cuando lo necesités.</p>
-      </header>
-
       <mat-card appearance="outlined">
         <p><strong>Usuario:</strong> {{ authService.currentUser()?.displayName ?? 'Sin sesión' }}</p>
         <p><strong>Correo:</strong> {{ authService.currentUser()?.email ?? 'Sin correo' }}</p>

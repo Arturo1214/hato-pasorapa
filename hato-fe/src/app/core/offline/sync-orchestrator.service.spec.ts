@@ -5,7 +5,6 @@ import { InMemoryOfflinePersistenceAdapter } from './offline-store.migrations';
 import { OfflineStoreService } from './offline-store.service';
 import { SyncMetricsStore } from './sync-metrics.store';
 import { AuthService } from '../auth/data-access/auth.service';
-import { NotificationInboxStore } from '../../features/admin/notifications/data-access/notification-inbox.store';
 import {
   CALENDAR_ALERTS_REFRESH_EVENT,
   MANUAL_SYNC_EVENT,
@@ -330,7 +329,7 @@ describe('SyncOrchestratorService', () => {
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: REPORTING_REFRESH_EVENT }));
   });
 
-  it('should preserve the cached notification inbox when a manual refresh is requested offline', async () => {
+  it('should preserve cached notification snapshots when a manual refresh is requested offline', async () => {
     const store = createStore();
     const metrics = new SyncMetricsStore();
     await store.saveSnapshot({
@@ -347,10 +346,6 @@ describe('SyncOrchestratorService', () => {
         updatedAt: '2026-04-26T10:00:00.000Z',
       },
     });
-
-    const inbox = new NotificationInboxStore();
-    inbox.configureForTesting({ offlineStore: store, windowRef: window });
-    await inbox.initialize();
 
     const apiClient = {
       push: vi.fn<SyncApiClient['push']>(),
@@ -374,14 +369,6 @@ describe('SyncOrchestratorService', () => {
     expect(apiClient.push).not.toHaveBeenCalled();
     expect(apiClient.pull).not.toHaveBeenCalled();
     expect((await store.listSnapshots('NOTIFICATION')).map((snapshot) => snapshot.entityId)).toEqual(['notification-a']);
-    expect(inbox.unreadCount()).toBe(1);
-    expect(inbox.items()[0]).toEqual(
-      expect.objectContaining({
-        id: 'notification-a',
-        title: 'Aviso offline',
-        read: false,
-      })
-    );
   });
 
   it('should push and pull ANIMAL_REPRODUCTION_EVENT operations without duplicating replayed snapshots', async () => {

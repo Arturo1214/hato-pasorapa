@@ -30,7 +30,11 @@ describe('AnimalFormDialogComponent', () => {
   });
 
   it('should render the birthDate field and submit a valid create payload', async () => {
-    await configure({ mode: ANIMAL_DIALOG_MODE.CREATE });
+    await configure({
+      mode: ANIMAL_DIALOG_MODE.CREATE,
+      currentUserRole: 'ADMIN',
+      ownerOptions: [{ id: 'ganadero-uuid-1', label: 'Ganadero Uno · NIT-1' }],
+    });
 
     component.form.patchValue({
       ownerGanaderoId: 'ganadero-uuid-1',
@@ -55,7 +59,11 @@ describe('AnimalFormDialogComponent', () => {
   });
 
   it('should show validation errors when category and sex are incompatible', async () => {
-    await configure({ mode: ANIMAL_DIALOG_MODE.CREATE });
+    await configure({
+      mode: ANIMAL_DIALOG_MODE.CREATE,
+      currentUserRole: 'ADMIN',
+      ownerOptions: [{ id: 'ganadero-uuid-1', label: 'Ganadero Uno · NIT-1' }],
+    });
 
     component.form.patchValue({
       ownerGanaderoId: 'ganadero-uuid-1',
@@ -75,6 +83,8 @@ describe('AnimalFormDialogComponent', () => {
   it('should require birthDate for young animals in edit mode', async () => {
     await configure({
       mode: ANIMAL_DIALOG_MODE.EDIT,
+      currentUserRole: 'ADMIN',
+      ownerOptions: [{ id: 'ganadero-uuid-1', label: 'Ganadero Uno · NIT-1' }],
       animal: {
         uuid: 'animal-uuid-1',
         ownerGanaderoId: 'ganadero-uuid-1',
@@ -101,5 +111,30 @@ describe('AnimalFormDialogComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Ingresá la fecha de nacimiento para terneros/as.');
     expect(dialogRef.close).not.toHaveBeenCalled();
+  });
+
+  it('should hide the owner selector for ganadero and omit raw UUID typing', async () => {
+    await configure({
+      mode: ANIMAL_DIALOG_MODE.CREATE,
+      currentUserRole: 'GANADERO',
+      ownerOptions: [],
+    });
+
+    component.form.patchValue({
+      arete: 'AR-200',
+      category: ANIMAL_CATEGORY.VACA,
+      sex: ANIMAL_SEX.HEMBRA,
+      active: true,
+      admissionDate: '2026-04-26',
+    });
+    component.submit();
+
+    expect(fixture.nativeElement.textContent).toContain('El propietario se asignará automáticamente con tu sesión de ganadero.');
+    expect(fixture.nativeElement.textContent).not.toContain('UUID del ganadero dueño');
+    expect(dialogRef.close).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerGanaderoId: null,
+      }),
+    );
   });
 });

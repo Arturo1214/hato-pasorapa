@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
+import { MatIconModule } from '@angular/material/icon';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
 import {
@@ -21,36 +22,23 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
     CommonModule,
     MatButtonModule,
     MatCardModule,
+    MatIconModule,
     DataTableComponent,
   ],
   template: `
     <section class="admin-page">
-      <header class="page-header">
-        <h1>Ganaderos</h1>
-        <p>Registro básico, filtros de estado y baja administrativa.</p>
-      </header>
-
-      <mat-card appearance="outlined">
-        <p>Estado de sync: {{ syncSummary() }}</p>
-        @if (syncState().syncing) {
-          <p>Sincronizando cambios offline…</p>
-        }
+      <mat-card appearance="outlined" class="status-card">
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
         }
-        @if (syncState().lastMessage) {
-          <p>{{ syncState().lastMessage }}</p>
-        }
         @if (sensitiveActionsOnlineOnly()) {
           <p>La edición y el reseteo de contraseñas de ganaderos requieren conexión.</p>
-        }
-        @if (syncState().manualRefreshRequired) {
-          <p>Necesitás refrescar manualmente la lista para resolver el conflicto remoto.</p>
         }
       </mat-card>
 
       <div class="toolbar-actions">
         <button mat-flat-button color="primary" type="button" (click)="openCreateDialog()">
+          <mat-icon>group_add</mat-icon>
           Registrar ganadero
         </button>
       </div>
@@ -61,20 +49,20 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
 
       @if (errorMessage()) {
         <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
-      } @else if (!ganaderos().length) {
-        <mat-card appearance="outlined"><p>Todavía no hay ganaderos registrados.</p></mat-card>
-      } @else {
-        <mat-card appearance="outlined">
-          <app-data-table
-            [columns]="columns"
-            [data]="ganaderos()"
-            [filters]="filters()"
-            [actions]="actions"
-            (filterChange)="filters.set($event)"
-            (rowAction)="handleRowAction($event)"
-          />
-        </mat-card>
       }
+
+      <mat-card appearance="outlined" class="table-card">
+        <app-data-table
+          [columns]="columns"
+          [data]="ganaderos()"
+          [filters]="filters()"
+          [actions]="actions"
+          [loading]="loading()"
+          emptyMessage="Todavía no hay ganaderos registrados."
+          (filterChange)="filters.set($event)"
+          (rowAction)="handleRowAction($event)"
+        />
+      </mat-card>
     </section>
   `,
   styles: [
@@ -86,8 +74,24 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
       }
 
       .toolbar-actions {
-        display: grid;
-        gap: 1rem;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .toolbar-actions button {
+        border-radius: 999px;
+      }
+
+      .toolbar-actions mat-icon {
+        margin-inline-end: 0.35rem;
+      }
+
+      .status-card p {
+        margin: 0.25rem 0;
+      }
+
+      .table-card {
+        padding: 0.75rem;
       }
     `,
   ],
@@ -100,15 +104,10 @@ export class GanaderosPageComponent {
   readonly ganaderos = signal<GanaderoItem[]>([]);
   readonly errorMessage = signal<string | null>(null);
   readonly feedbackMessage = signal<string | null>(null);
-  readonly syncState = this.ganaderosService.syncState;
+  readonly loading = signal(false);
   readonly offlineMessage = this.offlineStatus.message;
   readonly sensitiveActionsOnlineOnly = computed(() => this.offlineMessage() !== null);
   readonly filters = signal<Record<string, string>>({});
-  readonly syncSummary = computed(() => {
-    const syncState = this.syncState();
-    const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
-    return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
-  });
   readonly columns: DataTableColumn[] = [
     { key: 'businessIdentifier', label: 'Identificador', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
     { key: 'name', label: 'Nombre', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
@@ -266,12 +265,17 @@ export class GanaderosPageComponent {
 
   private loadGanaderos() {
     this.errorMessage.set(null);
+    this.loading.set(true);
 
     this.ganaderosService.listGanaderos().subscribe({
-      next: (ganaderos) => this.ganaderos.set(ganaderos),
+      next: (ganaderos) => {
+        this.ganaderos.set(ganaderos);
+        this.loading.set(false);
+      },
       error: () => {
         this.ganaderos.set([]);
         this.errorMessage.set('No pudimos cargar los ganaderos.');
+        this.loading.set(false);
       },
     });
   }

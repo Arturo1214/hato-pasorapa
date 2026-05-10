@@ -25,32 +25,8 @@ h2 {
   gap: 0.75rem;
 }
 
-.timeline-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.timeline-item {
-  display: grid;
-  gap: 0.25rem;
+.table-card {
   padding: 0.75rem;
-  border-radius: 0.75rem;
-  background: #f8fafc;
-}
-
-.timeline-item[data-status='overdue'] {
-  border-left: 4px solid #ef4444;
-}
-
-.timeline-item[data-status='due_today'] {
-  border-left: 4px solid #f59e0b;
-}
-
-.timeline-item[data-status='upcoming'] {
-  border-left: 4px solid #2563eb;
 }
 
 .state-message {

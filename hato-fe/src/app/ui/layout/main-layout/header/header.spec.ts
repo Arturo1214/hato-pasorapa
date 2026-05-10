@@ -1,13 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
+import { signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
+import { GanaderoNotificationsStore } from '../../../../features/ganadero/notifications/data-access/ganadero-notifications.store';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
 import { HeaderComponent } from './header';
 
 describe('HeaderComponent', () => {
   const logout = vi.fn();
   const toggleTheme = vi.fn();
+  const unreadCount = signal(0);
+  const refreshUnreadCount = vi.fn().mockResolvedValue(undefined);
+  const navigateByUrl = vi.fn().mockResolvedValue(true);
   let routerEvents: Subject<NavigationEnd>;
 
   const createSnapshot = ({
@@ -31,10 +36,12 @@ describe('HeaderComponent', () => {
     url,
     rootSnapshot,
     activatedRoute,
+    currentUser = { displayName: 'Admin Root', role: 'ADMIN' },
   }: {
     url: string;
     rootSnapshot?: ActivatedRouteSnapshot;
     activatedRoute?: object;
+    currentUser?: { displayName: string; role: 'ADMIN' | 'GANADERO' };
   }): Promise<ComponentFixture<HeaderComponent>> => {
     await TestBed.configureTestingModule({
       imports: [HeaderComponent],
@@ -44,6 +51,7 @@ describe('HeaderComponent', () => {
           useValue: {
             events: routerEvents.asObservable(),
             url,
+            navigateByUrl,
             routerState: {
               snapshot: {
                 root: rootSnapshot,
@@ -60,8 +68,15 @@ describe('HeaderComponent', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ displayName: 'Admin Root', role: 'ADMIN' }),
+            currentUser: () => currentUser,
             logout,
+          },
+        },
+        {
+          provide: GanaderoNotificationsStore,
+          useValue: {
+            unreadCount,
+            refreshUnreadCount,
           },
         },
         {
@@ -82,6 +97,9 @@ describe('HeaderComponent', () => {
   beforeEach(() => {
     logout.mockClear();
     toggleTheme.mockClear();
+    refreshUnreadCount.mockClear();
+    navigateByUrl.mockClear();
+    unreadCount.set(0);
     routerEvents = new Subject<NavigationEnd>();
   });
 
@@ -105,6 +123,48 @@ describe('HeaderComponent', () => {
     expect(text).toContain('Admin Root');
     expect(text).not.toContain('Pasorapa');
     expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(3);
+    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]')).toBeNull();
+  });
+
+  it('should render a GANADERO-only notification bell with unread badge', async () => {
+    unreadCount.set(5);
+    const dashboardSnapshot = createSnapshot({
+      path: 'ganadero/dashboard',
+      data: {
+        title: 'Dashboard',
+        subtitle: 'Resumen ganadero.',
+      },
+    });
+    const fixture = await configureHeader({
+      url: '/ganadero/dashboard',
+      rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
+      currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
+    });
+    const bell = fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]') as HTMLButtonElement;
+
+    expect(bell).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('5');
+    bell.click();
+    expect(navigateByUrl).toHaveBeenCalledWith('/ganadero/notificaciones');
+    expect(refreshUnreadCount).toHaveBeenCalled();
+  });
+
+  it('should hide the notification badge when the GANADERO unread count is zero', async () => {
+    const dashboardSnapshot = createSnapshot({
+      path: 'ganadero/dashboard',
+      data: {
+        title: 'Dashboard',
+        subtitle: 'Resumen ganadero.',
+      },
+    });
+    const fixture = await configureHeader({
+      url: '/ganadero/dashboard',
+      rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
+      currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
+    });
+
+    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-count"]')).toBeNull();
   });
 
   it('should delegate logout to the auth service from the header action', async () => {

@@ -52,9 +52,7 @@ describe('DataTableComponent', () => {
     const filterChangeSpy = vi.fn();
     component.filterChange.subscribe(filterChangeSpy);
 
-    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
-    input.value = 'Admin';
-    input.dispatchEvent(new Event('input'));
+    component.updateFilter('name', 'Admin');
 
     expect(filterChangeSpy).toHaveBeenCalledWith({ name: 'Admin' });
   });
@@ -72,11 +70,24 @@ describe('DataTableComponent', () => {
     const filterChangeSpy = vi.fn();
     component.filterChange.subscribe(filterChangeSpy);
 
-    const dateInput = fixture.nativeElement.querySelector('input[type="date"]') as HTMLInputElement;
-    dateInput.value = '2024-04-26';
-    dateInput.dispatchEvent(new Event('input'));
+    component.updateFilter('birthDate', '2024-04-26');
 
     expect(filterChangeSpy).toHaveBeenCalledWith({ birthDate: '2024-04-26' });
+  });
+
+  it('should render integrated empty state', () => {
+    fixture.componentRef.setInput('data', []);
+    fixture.componentRef.setInput('emptyMessage', 'Sin registros para mostrar.');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Sin registros para mostrar.');
+  });
+
+  it('should render loading overlay when requested', () => {
+    fixture.componentRef.setInput('loading', true);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.table-shell__loading')).not.toBeNull();
   });
 
   it('should emit page changes when pagination moves', () => {
@@ -91,5 +102,12 @@ describe('DataTableComponent', () => {
       pageSize: 10,
       previousPageIndex: 0,
     });
+  });
+
+  it('should render paginator labels in Spanish', () => {
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Elementos por página');
+    expect(fixture.nativeElement.textContent).toContain('1 – 2 de 2');
   });
 });

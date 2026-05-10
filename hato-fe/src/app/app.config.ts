@@ -22,8 +22,8 @@ import {
 import { SyncOrchestratorService } from './core/offline/sync-orchestrator.service';
 import { CalendarAlertsStore } from './features/admin/calendar/data-access/calendar-alerts.store';
 import { AdminConflictResolutionStore } from './features/admin/conflicts/data-access/admin-conflict-resolution.store';
-import { NotificationInboxStore } from './features/admin/notifications/data-access/notification-inbox.store';
 import { AdminReportingStore } from './features/admin/reporting/data-access/admin-reporting.store';
+import { ensureChartJsRegistered } from './shared/ui/charts/chart-js-setup';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -45,13 +45,15 @@ export const appConfig: ApplicationConfig = {
       useFactory: () => new SyncOrchestratorService(),
     },
     provideAppInitializer(() => {
+      ensureChartJsRegistered();
+    }),
+    provideAppInitializer(() => {
       return initializeApplicationRuntime(
         inject(ApplicationConfigService),
         inject(AuthService),
         inject(SyncOrchestratorService),
         inject(CalendarAlertsStore),
         inject(AdminConflictResolutionStore),
-        inject(NotificationInboxStore),
         inject(AdminReportingStore)
       )();
     }),

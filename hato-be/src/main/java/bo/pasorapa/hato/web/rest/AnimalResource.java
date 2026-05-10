@@ -28,6 +28,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 @Path("/api/animals")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -38,17 +39,19 @@ public class AnimalResource {
     private final AnimalService animalService;
     private final AnimalQueryService animalQueryService;
     private final AnimalMapper animalMapper;
+    private final JsonWebToken jsonWebToken;
 
-    public AnimalResource(AnimalService animalService, AnimalQueryService animalQueryService, AnimalMapper animalMapper) {
+    public AnimalResource(AnimalService animalService, AnimalQueryService animalQueryService, AnimalMapper animalMapper, JsonWebToken jsonWebToken) {
         this.animalService = animalService;
         this.animalQueryService = animalQueryService;
         this.animalMapper = animalMapper;
+        this.jsonWebToken = jsonWebToken;
     }
 
     @POST
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "GANADERO"})
     public Response create(@Valid AnimalRequest request, @Context UriInfo uriInfo) {
-        var result = animalMapper.toResponse(animalService.create(request));
+        var result = animalMapper.toResponse(animalService.create(request, currentUserId()));
         return Response.created(uriInfo.getAbsolutePathBuilder().path(String.valueOf(result.uuid())).build())
                 .entity(result)
                 .build();
@@ -56,9 +59,9 @@ public class AnimalResource {
 
     @PUT
     @Path("/{uuid}")
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "GANADERO"})
     public Response update(@PathParam("uuid") UUID uuid, @Valid AnimalRequest request) {
-        return Response.ok(animalMapper.toResponse(animalService.update(uuid, request))).build();
+        return Response.ok(animalMapper.toResponse(animalService.update(uuid, request, currentUserId()))).build();
     }
 
     @DELETE
@@ -117,5 +120,9 @@ public class AnimalResource {
         } catch (IllegalArgumentException exception) {
             throw new BusinessException("ANIMAL_INVALID_FILTER", exception.getMessage(), Response.Status.BAD_REQUEST);
         }
+    }
+
+    private UUID currentUserId() {
+        return UUID.fromString(jsonWebToken.getSubject());
     }
 }

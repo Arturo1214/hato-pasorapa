@@ -54,6 +54,26 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell__badge {
+  align-items: center;
+  background: var(--mat-sys-error);
+  border-radius: 999px;
+  color: var(--mat-sys-on-error);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0.1rem 0.35rem;
+  position: absolute;
+  right: -0.1rem;
+  top: -0.15rem;
+}
+
 @media (max-width: 767px) {
   .app-header {
     align-items: flex-start;

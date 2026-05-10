@@ -6,6 +6,7 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import type { Role } from '../../../core/auth/data-access/auth.service';
 import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
 import {
   ANIMAL_CATEGORY,
@@ -24,9 +25,16 @@ export const ANIMAL_DIALOG_MODE = {
 
 export type AnimalDialogMode = (typeof ANIMAL_DIALOG_MODE)[keyof typeof ANIMAL_DIALOG_MODE];
 
+export interface AnimalOwnerOption {
+  id: string;
+  label: string;
+}
+
 export interface AnimalDialogData {
   mode: AnimalDialogMode;
   animal?: AnimalItem;
+  currentUserRole: Role;
+  ownerOptions: AnimalOwnerOption[];
 }
 
 export type AnimalDialogResult = AnimalMutationPayload;
@@ -47,12 +55,22 @@ export type AnimalDialogResult = AnimalMutationPayload;
   template: `
     <h2 mat-dialog-title>{{ title() }}</h2>
 
-    <mat-dialog-content>
+    <mat-dialog-content class="dialog-content">
       <form [formGroup]="form" class="dialog-form">
-        <mat-form-field appearance="outline">
-          <mat-label>UUID del ganadero dueño</mat-label>
-          <input matInput formControlName="ownerGanaderoId" />
-        </mat-form-field>
+        @if (canSelectOwner()) {
+          <mat-form-field appearance="outline" class="form-field--full">
+            <mat-label>Ganadero propietario</mat-label>
+            <mat-select formControlName="ownerGanaderoId">
+              @for (owner of data.ownerOptions; track owner.id) {
+                <mat-option [value]="owner.id">{{ owner.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        } @else {
+          <div class="form-note form-field--full" role="status">
+            El propietario se asignará automáticamente con tu sesión de ganadero.
+          </div>
+        }
 
         <mat-form-field appearance="outline">
           <mat-label>Arete</mat-label>
@@ -110,22 +128,24 @@ export type AnimalDialogResult = AnimalMutationPayload;
           <input matInput type="number" min="0" formControlName="weightKg" />
         </mat-form-field>
 
-        <app-form-errors [control]="form.controls.ownerGanaderoId" [messages]="messages.ownerGanaderoId" />
+        @if (canSelectOwner()) {
+          <app-form-errors [control]="form.controls.ownerGanaderoId" [messages]="messages.ownerGanaderoId" />
+        }
         <app-form-errors [control]="form.controls.category" [messages]="messages.category" />
         <app-form-errors [control]="form.controls.sex" [messages]="messages.sex" />
         <app-form-errors [control]="form.controls.admissionDate" [messages]="messages.admissionDate" />
         <app-form-errors [control]="form.controls.weightKg" [messages]="messages.weightKg" />
 
         @if (showVisibleIdentifiersError()) {
-          <div class="form-alert" role="alert">Indicá al menos un identificador visible: arete, marca o tatuaje.</div>
+          <div class="form-alert form-field--full" role="alert">Indicá al menos un identificador visible: arete, marca o tatuaje.</div>
         }
 
         @if (showCategorySexError()) {
-          <div class="form-alert" role="alert">La categoría seleccionada no es compatible con el sexo informado.</div>
+          <div class="form-alert form-field--full" role="alert">La categoría seleccionada no es compatible con el sexo informado.</div>
         }
 
         @if (showBirthDateError()) {
-          <div class="form-alert" role="alert">Ingresá la fecha de nacimiento para terneros/as.</div>
+          <div class="form-alert form-field--full" role="alert">Ingresá la fecha de nacimiento para terneros/as.</div>
         }
       </form>
     </mat-dialog-content>
@@ -139,16 +159,40 @@ export type AnimalDialogResult = AnimalMutationPayload;
   `,
   styles: [
     `
+      .dialog-content {
+        max-height: min(82vh, 52rem);
+        overflow: auto;
+      }
+
       .dialog-form {
         display: grid;
         gap: 1rem;
-        min-width: min(42rem, 85vw);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: min(72rem, 100%);
         padding-top: 0.5rem;
+      }
+
+      .form-field--full {
+        grid-column: 1 / -1;
+      }
+
+      .form-note {
+        padding: 0.875rem 1rem;
+        border-radius: 0.75rem;
+        background: rgba(33, 150, 243, 0.08);
+        color: #0f3d66;
+        font-weight: 500;
       }
 
       .form-alert {
         color: #b3261e;
         font-weight: 500;
+      }
+
+      @media (max-width: 720px) {
+        .dialog-form {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
     `,
   ],
@@ -160,11 +204,15 @@ export class AnimalFormDialogComponent {
 
   readonly categoryOptions = ANIMAL_CATEGORY_OPTIONS;
   readonly sexOptions = ANIMAL_SEX_OPTIONS;
+  readonly canSelectOwner = computed(() => this.data.currentUserRole === 'ADMIN');
   readonly title = computed(() => (this.data.mode === ANIMAL_DIALOG_MODE.CREATE ? 'Nuevo animal' : 'Editar animal'));
   readonly submitLabel = computed(() => (this.data.mode === ANIMAL_DIALOG_MODE.CREATE ? 'Guardar animal' : 'Guardar cambios'));
   readonly form = this.formBuilder.group(
     {
-      ownerGanaderoId: [this.data.animal?.ownerGanaderoId ?? '', [Validators.required]],
+      ownerGanaderoId: [
+        this.data.animal?.ownerGanaderoId ?? this.data.ownerOptions[0]?.id ?? '',
+        this.canSelectOwner() ? [Validators.required] : [],
+      ],
       arete: [this.data.animal?.arete ?? ''],
       marca: [this.data.animal?.marca ?? ''],
       tatuaje: [this.data.animal?.tatuaje ?? ''],
@@ -181,7 +229,7 @@ export class AnimalFormDialogComponent {
   );
 
   readonly messages = {
-    ownerGanaderoId: { required: 'Informá el UUID del ganadero responsable.' },
+    ownerGanaderoId: { required: 'Seleccioná el ganadero responsable.' },
     category: { required: 'Seleccioná la categoría actual del animal.' },
     sex: { required: 'Seleccioná el sexo del animal.' },
     admissionDate: { required: 'Ingresá la fecha de ingreso vigente.' },
@@ -197,7 +245,7 @@ export class AnimalFormDialogComponent {
 
     const value = this.form.getRawValue();
     this.dialogRef.close({
-      ownerGanaderoId: value.ownerGanaderoId?.trim() ?? '',
+      ownerGanaderoId: normalizeOptionalText(value.ownerGanaderoId),
       arete: normalizeOptionalText(value.arete),
       marca: normalizeOptionalText(value.marca),
       tatuaje: normalizeOptionalText(value.tatuaje),

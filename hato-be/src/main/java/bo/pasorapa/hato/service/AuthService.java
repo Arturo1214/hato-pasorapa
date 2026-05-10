@@ -10,16 +10,20 @@ import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginResponse;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthUserResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.security.PasswordHasher;
+import bo.pasorapa.hato.web.rest.observability.RequestCorrelation;
 import io.smallrye.jwt.build.Jwt;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class AuthService {
 
+    private static final Logger LOG = Logger.getLogger(AuthService.class);
     private static final long EXPIRES_IN_SECONDS = Duration.ofHours(8).toSeconds();
     public static final String PASSWORD_POLICY_REGEX = "^(?=.*[A-Z])(?=.*\\d).{8,}$";
     public static final String PASSWORD_POLICY_MESSAGE = "La contraseña debe tener al menos 8 caracteres, 1 mayúscula y 1 número.";
@@ -36,31 +40,28 @@ public class AuthService {
     }
 
     public AuthLoginResponse login(AuthLoginRequest request) {
-        User user = resolveUser(request.username())
-                .orElseThrow(() -> new BusinessException(
-                        "INVALID_CREDENTIALS",
-                        "Las credenciales son inválidas.",
-                        Response.Status.UNAUTHORIZED));
+        String identifier = normalizeIdentifier(request.username());
+        User user = resolveUser(identifier)
+                .orElseThrow(() -> invalidLogin(identifier, "USER_NOT_FOUND", "INVALID_CREDENTIALS", "Las credenciales son inválidas."));
 
         if (!passwordHasher.matches(request.password(), user.getPasswordHash())) {
-            throw new BusinessException(
-                    "INVALID_CREDENTIALS",
-                    "Las credenciales son inválidas.",
-                    Response.Status.UNAUTHORIZED);
+            throw invalidLogin(identifier, "BAD_PASSWORD", "INVALID_CREDENTIALS", "Las credenciales son inválidas.");
         }
 
         if (user.getStatus() == UserStatus.INACTIVE) {
-            throw new BusinessException(
+            throw invalidLogin(
+                    identifier,
+                    "INACTIVE_USER",
                     "ACCOUNT_INACTIVE",
-                    "La cuenta está inactiva. Contactá a un administrador.",
-                    Response.Status.FORBIDDEN);
+                    "La cuenta está inactiva. Contactá a un administrador.");
         }
 
         if (user.getStatus() == UserStatus.BLOCKED) {
-            throw new BusinessException(
+            throw invalidLogin(
+                    identifier,
+                    "BLOCKED_USER",
                     "ACCOUNT_BLOCKED",
-                    "La cuenta está bloqueada. Contactá a un administrador.",
-                    Response.Status.FORBIDDEN);
+                    "La cuenta está bloqueada. Contactá a un administrador.");
         }
 
         return issueToken(user);
@@ -76,6 +77,57 @@ public class AuthService {
                 .map(Ganadero::getEmail)
                 .filter(email -> email != null && !email.isBlank())
                 .flatMap(userRepository::findByUsernameOrEmail);
+    }
+
+    private BusinessException invalidLogin(String identifier, String reasonCategory, String code, String message) {
+        String requestId = RequestCorrelation.currentRequestId();
+        LOG.warnf(
+                "Authentication failed [requestId=%s, identifierType=%s, identifier=%s, reasonCategory=%s]",
+                requestId,
+                inferIdentifierType(identifier),
+                maskIdentifier(identifier),
+                reasonCategory);
+        return new BusinessException(code, message, Response.Status.UNAUTHORIZED);
+    }
+
+    private String normalizeIdentifier(String identifier) {
+        return identifier == null ? "" : identifier.trim();
+    }
+
+    private String inferIdentifierType(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return "EMPTY";
+        }
+        if (identifier.contains("@")) {
+            return "EMAIL";
+        }
+        if (identifier.chars().allMatch(Character::isDigit)) {
+            return "BUSINESS_IDENTIFIER";
+        }
+        return "USERNAME";
+    }
+
+    private String maskIdentifier(String identifier) {
+        if (identifier == null || identifier.isBlank()) {
+            return "<empty>";
+        }
+
+        if (identifier.contains("@")) {
+            String[] parts = identifier.split("@", 2);
+            return maskToken(parts[0]) + "@" + parts[1].toLowerCase(Locale.ROOT);
+        }
+
+        return maskToken(identifier);
+    }
+
+    private String maskToken(String value) {
+        if (value.length() <= 2) {
+            return "**";
+        }
+        if (value.length() <= 4) {
+            return value.charAt(0) + "**" + value.charAt(value.length() - 1);
+        }
+        return value.substring(0, 2) + "***" + value.substring(value.length() - 2);
     }
 
     public void ensurePasswordPolicy(String password) {

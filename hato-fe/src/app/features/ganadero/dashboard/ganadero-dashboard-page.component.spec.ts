@@ -34,10 +34,13 @@ describe('GanaderoDashboardPageComponent', () => {
   it('should render the four dashboard widgets', () => {
     const widgetCards = fixture.nativeElement.querySelectorAll('[data-testid="dashboard-widget"]');
 
-    expect(widgetCards).toHaveLength(4);
+    expect(widgetCards).toHaveLength(5);
+    expect(fixture.nativeElement.textContent).toContain('Panorama operativo');
+    expect(fixture.nativeElement.textContent).toContain('Actividad inmediata');
     expect(fixture.nativeElement.querySelector('app-animals-summary-widget')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('app-upcoming-events-widget')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('app-unread-notifications-widget')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('app-upcoming-visits-widget')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('canvas').length).toBeGreaterThanOrEqual(4);
   });
 });

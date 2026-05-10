@@ -6,8 +6,10 @@ import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { AnimalsPageComponent } from './animals-page.component';
+import { GanaderosService } from '../ganaderos/data-access/ganaderos.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import { AnimalsReproductionEventsService } from './data-access/animals-reproduction-events.service';
 import {
@@ -70,11 +72,16 @@ describe('AnimalsPageComponent', () => {
     addImages: vi.fn(() => of({ outcome: 'queued', message: 'Imágenes encoladas. Se disparó la sincronización automática.' })),
   });
 
+  const createGanaderosServiceMock = () => ({
+    listGanaderos: vi.fn(() => of([{ id: 'ganadero-uuid-1', businessIdentifier: 'NIT-1', name: 'Ganadero Uno' }])),
+  });
+
   const configure = async (
     animalsServiceMock = createAnimalsServiceMock(),
     eventsServiceMock = createEventsServiceMock(),
     reproductionEventsServiceMock = createReproductionEventsServiceMock(),
     imagesServiceMock = createImagesServiceMock(),
+    ganaderosServiceMock = createGanaderosServiceMock(),
   ) => {
     await TestBed.configureTestingModule({
       imports: [AnimalsPageComponent],
@@ -87,7 +94,14 @@ describe('AnimalsPageComponent', () => {
         { provide: AnimalsEventsService, useValue: eventsServiceMock },
         { provide: AnimalsReproductionEventsService, useValue: reproductionEventsServiceMock },
         { provide: AnimalsImagesService, useValue: imagesServiceMock },
+        { provide: GanaderosService, useValue: ganaderosServiceMock },
         { provide: OfflineStatusService, useValue: { message: signal(null) } },
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: () => ({ role: 'ADMIN', status: 'ACTIVE' }),
+          },
+        },
       ],
     }).compileComponents();
 
@@ -111,7 +125,7 @@ describe('AnimalsPageComponent', () => {
     animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
     const { fixture } = await configure(animalsServiceMock);
 
-    expect(fixture.nativeElement.textContent).toContain('Animales');
+    expect(fixture.nativeElement.textContent).toContain('Estado de sync:');
     expect(fixture.nativeElement.textContent).toContain('Sexo');
     expect(fixture.nativeElement.textContent).toContain('HEMBRA');
     expect(fixture.nativeElement.textContent).toContain('AR-100');
@@ -130,6 +144,8 @@ describe('AnimalsPageComponent', () => {
 
     expect(overlayContainer.getContainerElement().textContent).toContain('Nuevo animal');
     expect(overlayContainer.getContainerElement().textContent).toContain('Fecha de nacimiento');
+    expect(overlayContainer.getContainerElement().textContent).toContain('Ganadero propietario');
+    expect(overlayContainer.getContainerElement().textContent).not.toContain('UUID del ganadero dueño');
   });
 
   it('should open the edit dialog pre-populated from the row action', async () => {
@@ -146,8 +162,8 @@ describe('AnimalsPageComponent', () => {
     const overlayText = overlayContainer.getContainerElement().textContent ?? '';
     expect(overlayText).toContain('Editar animal');
     const dialogInputs = Array.from(overlayContainer.getContainerElement().querySelectorAll('input')) as HTMLInputElement[];
-    expect(dialogInputs.some((input) => input.value === 'ganadero-uuid-1')).toBe(true);
     expect(dialogInputs.some((input) => input.value === 'AR-100')).toBe(true);
+    expect(overlayText).toContain('Ganadero propietario');
   });
 
   it('should enqueue an operative event from the row action dialog', async () => {

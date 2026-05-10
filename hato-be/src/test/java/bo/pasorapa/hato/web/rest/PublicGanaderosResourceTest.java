@@ -93,4 +93,27 @@ class PublicGanaderosResourceTest {
                 .statusCode(400)
                 .body("message", equalTo("Error en el registro, intenta más tarde."));
     }
+
+    @Test
+    void shouldRejectInputsThatOverflowMirroredUserColumns() {
+        given()
+                .contentType(ContentType.JSON)
+                .header("X-Forwarded-For", "10.10.10.10")
+                .body("""
+                        {
+                          "businessIdentifier": "12345678",
+                          "name": "Ganadera Norte",
+                          "email": "campo-muy-largo-para-usuario-publico-001@registro-ganadero-pasorapa.bo",
+                          "password": "Ganadera9",
+                          "website": "",
+                          "formIssuedAt": "2026-05-02T22:59:55Z"
+                        }
+                        """)
+                .when()
+                .post("/api/public/ganaderos")
+                .then()
+                .statusCode(400)
+                .body("code", equalTo("REGISTRATION_EMAIL_TOO_LONG"))
+                .body("message", equalTo("El correo supera el máximo permitido de 80 caracteres."));
+    }
 }

@@ -22,7 +22,6 @@ describe('AdminDecisionSupportPageComponent', () => {
   it('should render insight cards with explainability details and offline state', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Soporte de decisión');
     expect(text).toContain('Costo por encima de la línea base');
     expect(text).toContain('Fuentes: COST_LEDGER, PRODUCTIVITY_LEDGER');
     expect(text).toContain('Ventana: 30d');

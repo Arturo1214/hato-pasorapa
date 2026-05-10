@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Definir la emisión ADMIN y el almacenamiento canónico de notificaciones internas con targeting V1 simple para GANADERO.
+Definir la emisión ADMIN y el almacenamiento canónico de notificaciones internas con targeting V1 simple para GANADERO. Incluir resumen de entrega y estado de lectura en los contratos ADMIN.
 
 ## Requirements
 
@@ -50,3 +50,23 @@ The system SHALL provide list views for ADMIN issuance history and recipient-res
 - WHEN ADMIN requests the issuance list
 - THEN notifications are returned in deterministic newest-first order
 - AND each item includes targeting summary and audit metadata
+
+## MODIFIED Requirements
+
+### Requirement: Admin sees delivery summary per notification
+
+(Previously: Admin list view only — no delivery breakdown)
+
+The system MUST include in each ADMIN notification list item a `deliveryMetrics` summary computed from `AdminNotificationRecipient` records: `totalCount`, `readCount`, and `pendingCount`.
+
+#### Scenario: Admin sees delivery summary in notification list
+
+- GIVEN notification N1 was sent to 10 recipients (7 read, 3 pending)
+- WHEN ADMIN lists notifications
+- THEN N1 shows `deliveryMetrics.totalCount: 10`, `deliveryMetrics.readCount: 7`, `deliveryMetrics.pendingCount: 3`
+
+#### Scenario: Notification with no recipients shows zero counts
+
+- GIVEN a notification was created but never sent
+- WHEN ADMIN lists notifications
+- THEN the notification shows `deliveryMetrics.totalCount: 0`, `deliveryMetrics.readCount: 0`, `deliveryMetrics.pendingCount: 0`

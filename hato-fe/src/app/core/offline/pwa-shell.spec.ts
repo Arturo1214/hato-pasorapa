@@ -24,11 +24,13 @@ describe('PWA shell foundation', () => {
 
   it('should register the Angular service worker shell through ngsw-worker.js', () => {
     expect(HATO_SERVICE_WORKER_SCRIPT).toBe('ngsw-worker.js');
-    expect(createServiceWorkerRegistrationOptions(false)).toEqual({
+    expect(createServiceWorkerRegistrationOptions(false, 'hato.bo')).toEqual({
       enabled: true,
       registrationStrategy: 'registerWhenStable:30000',
     });
     expect(createServiceWorkerRegistrationOptions(true).enabled).toBe(false);
+    expect(createServiceWorkerRegistrationOptions(false, 'localhost').enabled).toBe(false);
+    expect(createServiceWorkerRegistrationOptions(false, '127.0.0.1').enabled).toBe(false);
   });
 
   it('should render a visible offline indicator when connectivity is lost after a cached session', async () => {

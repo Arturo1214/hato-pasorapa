@@ -73,7 +73,7 @@ describe('AdminUsersPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('No pudimos cargar los usuarios.');
   });
 
-  it('should show sync visibility and manual refresh guidance for admin conflicts', async () => {
+  it('should not show offline sync state in the admin users list', async () => {
     const serviceMock = createServiceMock();
     serviceMock.syncState.set({
       pending: 1,
@@ -84,8 +84,9 @@ describe('AdminUsersPageComponent', () => {
     });
     const { fixture } = await configure(serviceMock);
 
-    expect(fixture.nativeElement.textContent).toContain('Estado de sync: 1 pendiente(s)');
-    expect(fixture.nativeElement.textContent).toContain('Necesitás refrescar manualmente la lista para resolver el conflicto remoto.');
+    expect(fixture.nativeElement.textContent).not.toContain('Estado de sync');
+    expect(fixture.nativeElement.textContent).not.toContain('Última sync');
+    expect(fixture.nativeElement.textContent).not.toContain('Necesitás refrescar manualmente la lista para resolver el conflicto remoto.');
   });
 
   it('should show queued feedback when a user status change stays offline first', async () => {
@@ -206,7 +207,7 @@ describe('AdminUsersPageComponent', () => {
     expect(serviceMock.updateStatus).toHaveBeenCalledWith('user-1', 'INACTIVE');
   });
 
-  it('should show central sync progress and the latest post-sync message for admin users', async () => {
+  it('should not show offline sync progress in the admin users list', async () => {
     const serviceMock = createServiceMock();
     serviceMock.syncState.set({
       pending: 0,
@@ -217,8 +218,8 @@ describe('AdminUsersPageComponent', () => {
     });
     const { fixture } = await configure(serviceMock);
 
-    expect(fixture.nativeElement.textContent).toContain('Sincronizando cambios offline…');
-    expect(fixture.nativeElement.textContent).toContain('Sincronización central en curso.');
+    expect(fixture.nativeElement.textContent).not.toContain('Sincronizando cambios offline…');
+    expect(fixture.nativeElement.textContent).not.toContain('Sincronización central en curso.');
   });
 
   it('should disable sensitive submit buttons while offline and explain they remain online only', async () => {

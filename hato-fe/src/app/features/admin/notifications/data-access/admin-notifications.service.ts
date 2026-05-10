@@ -14,10 +14,17 @@ export interface AdminNotificationRecord {
   includeUserIds: string[];
   excludeUserIds: string[];
   recipientCount: number;
+  deliveryMetrics: AdminNotificationDeliveryMetrics | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
   publishedAt: string;
+}
+
+export interface AdminNotificationDeliveryMetrics {
+  totalCount: number;
+  readCount: number;
+  pendingCount: number;
 }
 
 export interface AdminNotificationRecipientOption {
@@ -61,25 +68,15 @@ export class AdminNotificationsService {
       .get<AdminNotificationListResponse>(`${this.appConfig.config().apiBaseUrl}/admin/notifications`, {
         headers: this.buildHeaders(),
       })
-      .pipe(map((response) => response.notifications));
+      .pipe(map((response) => response.notifications.map((notification) => this.normalizeNotification(notification))));
   }
 
   createNotification(payload: AdminNotificationCreatePayload): Observable<AdminNotificationRecord> {
-    return this.http.post<AdminNotificationRecord>(`${this.appConfig.config().apiBaseUrl}/admin/notifications`, payload, {
-      headers: this.buildMutationHeaders(),
-    });
-  }
-
-  markRecipientAsRead(recipientId: string): Observable<void> {
-    return this.http.patch<void>(`${this.appConfig.config().apiBaseUrl}/notifications/recipients/${recipientId}/read`, {}, {
-      headers: this.buildHeaders(),
-    });
-  }
-
-  markAllAsRead(): Observable<void> {
-    return this.http.patch<void>(`${this.appConfig.config().apiBaseUrl}/notifications/recipients/read`, {}, {
-      headers: this.buildHeaders(),
-    });
+    return this.http
+      .post<AdminNotificationRecord>(`${this.appConfig.config().apiBaseUrl}/admin/notifications`, payload, {
+        headers: this.buildMutationHeaders(),
+      })
+      .pipe(map((notification) => this.normalizeNotification(notification)));
   }
 
   listActiveGanaderoRecipients(): Observable<AdminNotificationRecipientOption[]> {
@@ -108,5 +105,12 @@ export class AdminNotificationsService {
   private buildHeaders() {
     const token = this.authService.getAccessToken();
     return token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : new HttpHeaders();
+  }
+
+  private normalizeNotification(notification: AdminNotificationRecord): AdminNotificationRecord {
+    return {
+      ...notification,
+      deliveryMetrics: notification.deliveryMetrics ?? null,
+    };
   }
 }

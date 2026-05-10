@@ -518,8 +518,8 @@ public class SyncService {
         try {
             return switch (operation.entityType()) {
                 case ANIMAL -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalCreate(operation), currentUserId);
-                    case UPDATE -> persistReceipt(operation, handleAnimalUpdate(operation, conflictResolutionV2Enabled), currentUserId);
+                    case CREATE -> persistReceipt(operation, handleAnimalCreate(operation, currentUserId), currentUserId);
+                    case UPDATE -> persistReceipt(operation, handleAnimalUpdate(operation, currentUserId, conflictResolutionV2Enabled), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case USER -> switch (operation.opType()) {
@@ -599,7 +599,7 @@ public class SyncService {
         }
     }
 
-    private SyncOperationResult handleAnimalUpdate(SyncOperationRequest operation, boolean conflictResolutionV2Enabled) {
+    private SyncOperationResult handleAnimalUpdate(SyncOperationRequest operation, UUID currentUserId, boolean conflictResolutionV2Enabled) {
         UUID entityUuid = syncPayloadMapper.parseUuid(operation.entityId());
         if (entityUuid == null) {
             return validationError(operation, "Invalid animal uuid.", conflictResolutionV2Enabled);
@@ -618,7 +618,7 @@ public class SyncService {
 
         if (syncPayloadMapper.hasAnimalCorePayload(operation.payload())) {
             AnimalRequest request = syncPayloadMapper.toAnimalRequest(operation.payload());
-            animal = animalService.update(entityUuid, request);
+            animal = animalService.update(entityUuid, request, currentUserId);
         } else {
             syncPayloadMapper.applyLegacyAnimalUpdatePayload(animal, operation.payload());
         }
@@ -628,7 +628,7 @@ public class SyncService {
         return noConflict(operation, operation.entityId(), animal.getVersion().intValue());
     }
 
-    private SyncOperationResult handleAnimalCreate(SyncOperationRequest operation) {
+    private SyncOperationResult handleAnimalCreate(SyncOperationRequest operation, UUID currentUserId) {
         UUID entityUuid = requireUuid(operation.entityId(), "Invalid animal uuid.");
         Animal existingAnimal = animalRepository.findByUuid(entityUuid).orElse(null);
         if (existingAnimal != null) {
@@ -636,7 +636,7 @@ public class SyncService {
         }
 
         AnimalRequest request = syncPayloadMapper.toAnimalRequest(operation.payload());
-        Animal createdAnimal = animalService.createWithUuid(entityUuid, request);
+        Animal createdAnimal = animalService.createWithUuid(entityUuid, request, currentUserId);
         animalRepository.flush();
 
         return noConflict(operation, createdAnimal.getUuid().toString(), createdAnimal.getVersion().intValue());

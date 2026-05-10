@@ -34,7 +34,7 @@ describe('calendar alerts integration', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ role: 'ADMIN', displayName: 'Admin Root' }),
+            currentUser: () => ({ role: 'GANADERO', displayName: 'Ganadero Root' }),
             logout: vi.fn(),
           },
         },
@@ -121,7 +121,6 @@ describe('calendar alerts integration', () => {
 
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Calendario');
     expect(text).toContain('1');
   });
 });

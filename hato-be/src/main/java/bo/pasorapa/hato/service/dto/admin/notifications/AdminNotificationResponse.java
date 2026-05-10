@@ -13,6 +13,7 @@ public record AdminNotificationResponse(
         String createdByUserId,
         String createdAt,
         String updatedAt,
-        String publishedAt
+        String publishedAt,
+        AdminNotificationMetricsResponse deliveryMetrics
 ) {
 }

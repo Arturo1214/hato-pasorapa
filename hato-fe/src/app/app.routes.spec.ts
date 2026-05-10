@@ -39,4 +39,12 @@ describe('app routes', () => {
     expect(routePaths).not.toContain('admin/backups');
     expect(adminConflictsRoute?.canActivate?.length).toBe(1);
   });
+
+  it('should lazy-load the real ganadero notification inbox page', async () => {
+    const protectedShell = routes.find((candidate) => candidate.path === '' && candidate.loadComponent)?.children ?? [];
+    const route = protectedShell.find((candidate) => candidate.path === 'ganadero/notificaciones');
+
+    expect(route?.data?.['title']).toBe('Notificaciones');
+    expect(await route?.loadComponent?.()).toBeDefined();
+  });
 });

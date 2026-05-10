@@ -33,6 +33,11 @@ services:
       DB_PASS: ${POSTGRES_PASSWORD:-postgres}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      QUARKUS_LOG_FILE_ENABLED: ${QUARKUS_LOG_FILE_ENABLED:-true}
+      QUARKUS_LOG_FILE_PATH: ${QUARKUS_LOG_FILE_PATH:-/work/logs/hato-be.log}
+      QUARKUS_LOG_FILE_LEVEL: ${QUARKUS_LOG_FILE_LEVEL:-INFO}
+      QUARKUS_LOG_CONSOLE_JSON_ENABLED: ${QUARKUS_LOG_CONSOLE_JSON_ENABLED:-false}
+      QUARKUS_LOG_FILE_JSON_ENABLED: ${QUARKUS_LOG_FILE_JSON_ENABLED:-false}
       AUTH_LEGACY_TOKEN_ENABLED: ${AUTH_LEGACY_TOKEN_ENABLED:-false}
       HATO_STORAGE_ANIMAL_IMAGES_ENABLED: ${HATO_STORAGE_ANIMAL_IMAGES_ENABLED:-true}
       HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR: ${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}
@@ -41,7 +46,8 @@ services:
     ports:
       - "${DEV_API_PORT:-8081}:8080"
     volumes:
-      - "${HATO_IMAGES_HOST_PATH}:${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}"
+      - "${HATO_IMAGES_HOST_PATH:-../../images}:${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}"
+      - "${HATO_LOGS_HOST_PATH:-../../logs}:/work/logs"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/q/health/ready || exit 1"]
       interval: 15s

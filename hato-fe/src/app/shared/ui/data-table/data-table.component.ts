@@ -5,7 +5,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatPaginator, MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginator, MatPaginatorIntl, MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSort, MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
@@ -38,6 +40,7 @@ export interface DataTableAction {
   icon: string;
   id: string;
   label: string;
+  visible?: (row: DataTableRow) => boolean;
 }
 
 export interface DataTableRowActionEvent {
@@ -55,56 +58,85 @@ export interface DataTableRowActionEvent {
     MatSortModule,
     MatFormFieldModule,
     MatInputModule,
+    MatMenuModule,
     MatSelectModule,
     MatButtonModule,
     MatIconModule,
+    MatProgressSpinnerModule,
+  ],
+  providers: [
+    {
+      provide: MatPaginatorIntl,
+      useFactory: createSpanishPaginatorIntl,
+    },
   ],
   template: `
     <div class="table-shell">
+      @if (loading()) {
+        <div class="table-shell__loading" aria-live="polite" aria-label="Cargando datos">
+          <mat-spinner diameter="44" />
+        </div>
+      }
+
       <div class="table-shell__scroll">
         <table mat-table [dataSource]="dataSource" matSort (matSortChange)="handleSort($event)">
           @for (column of columns(); track column.key) {
             <ng-container [matColumnDef]="column.key">
               <th mat-header-cell *matHeaderCellDef>
                 <div class="header-cell">
-                  <button
-                    class="header-cell__sort"
-                    type="button"
-                    [mat-sort-header]="column.key"
-                    [disabled]="!column.sortable"
-                  >
+                  <span class="header-cell__label" [mat-sort-header]="column.key" [disabled]="!column.sortable">
                     {{ column.label }}
-                  </button>
+                  </span>
 
-                  @if (column.filterType === dataTableFilterType.TEXT) {
-                    <mat-form-field appearance="outline" class="header-filter">
-                      <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
-                      <input
-                        matInput
-                        [value]="filterValue(column.key)"
-                        (input)="updateFilter(column.key, $any($event.target).value)"
-                      />
-                    </mat-form-field>
-                  } @else if (column.filterType === dataTableFilterType.SELECT) {
-                    <mat-form-field appearance="outline" class="header-filter">
-                      <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
-                      <mat-select [value]="filterValue(column.key)" (valueChange)="updateFilter(column.key, $event)">
-                        <mat-option value="">Todos</mat-option>
-                        @for (option of column.filterOptions ?? []; track option.value) {
-                          <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                  @if (column.filterType) {
+                    <button
+                      mat-icon-button
+                      class="header-cell__filter"
+                      type="button"
+                      [class.header-cell__filter--active]="filterValue(column.key)"
+                      [matMenuTriggerFor]="filterMenu"
+                      [attr.aria-label]="'Filtrar ' + column.label.toLowerCase()"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <mat-icon>filter_list</mat-icon>
+                    </button>
+
+                    <mat-menu #filterMenu="matMenu" class="data-table-filter-menu">
+                      <div class="filter-menu" (click)="$event.stopPropagation()">
+                        @if (column.filterType === dataTableFilterType.TEXT) {
+                          <mat-form-field appearance="outline" class="filter-menu__field">
+                            <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
+                            <input
+                              matInput
+                              [value]="filterValue(column.key)"
+                              (input)="updateFilter(column.key, $any($event.target).value)"
+                            />
+                          </mat-form-field>
+                        } @else if (column.filterType === dataTableFilterType.SELECT) {
+                          <mat-form-field appearance="outline" class="filter-menu__field">
+                            <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
+                            <mat-select [value]="filterValue(column.key)" (valueChange)="updateFilter(column.key, $event)">
+                              <mat-option value="">Todos</mat-option>
+                              @for (option of column.filterOptions ?? []; track option.value) {
+                                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+                        } @else if (column.filterType === dataTableFilterType.DATE) {
+                          <mat-form-field appearance="outline" class="filter-menu__field">
+                            <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
+                            <input
+                              matInput
+                              type="date"
+                              [value]="filterValue(column.key)"
+                              (input)="updateFilter(column.key, $any($event.target).value)"
+                            />
+                          </mat-form-field>
                         }
-                      </mat-select>
-                    </mat-form-field>
-                  } @else if (column.filterType === dataTableFilterType.DATE) {
-                    <mat-form-field appearance="outline" class="header-filter">
-                      <mat-label>Filtrar {{ column.label.toLowerCase() }}</mat-label>
-                      <input
-                        matInput
-                        type="date"
-                        [value]="filterValue(column.key)"
-                        (input)="updateFilter(column.key, $any($event.target).value)"
-                      />
-                    </mat-form-field>
+
+                        <button mat-button type="button" (click)="updateFilter(column.key, '')">Limpiar</button>
+                      </div>
+                    </mat-menu>
                   }
                 </div>
               </th>
@@ -118,15 +150,17 @@ export interface DataTableRowActionEvent {
               <td mat-cell *matCellDef="let row">
                 <div class="actions-cell">
                   @for (action of actions(); track action.id) {
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [color]="action.color ?? 'primary'"
-                      (click)="rowAction.emit({ actionId: action.id, row })"
-                    >
-                      <mat-icon>{{ action.icon }}</mat-icon>
-                      {{ action.label }}
-                    </button>
+                    @if (!action.visible || action.visible(row)) {
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        [color]="action.color ?? 'primary'"
+                        (click)="rowAction.emit({ actionId: action.id, row })"
+                      >
+                        <mat-icon>{{ action.icon }}</mat-icon>
+                        {{ action.label }}
+                      </button>
+                    }
                   }
                 </div>
               </td>
@@ -135,6 +169,11 @@ export interface DataTableRowActionEvent {
 
           <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
           <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+          <tr class="mat-row" *matNoDataRow>
+            <td class="mat-cell empty-cell" [attr.colspan]="displayedColumns().length">
+              {{ emptyMessage() }}
+            </td>
+          </tr>
         </table>
       </div>
 
@@ -150,12 +189,25 @@ export interface DataTableRowActionEvent {
   styles: [
     `
       .table-shell {
+        position: relative;
         display: grid;
-        gap: 1rem;
+        gap: 0.75rem;
+        overflow: hidden;
+      }
+
+      .table-shell__loading {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        background: color-mix(in srgb, var(--mat-sys-surface) 78%, transparent);
       }
 
       .table-shell__scroll {
         overflow-x: auto;
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: 1rem;
       }
 
       table {
@@ -163,19 +215,43 @@ export interface DataTableRowActionEvent {
       }
 
       .header-cell {
-        display: grid;
-        gap: 0.75rem;
-        min-width: 12rem;
-        padding: 0.75rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        min-width: 10rem;
+        padding: 0.35rem 0;
       }
 
-      .header-cell__sort {
-        all: unset;
+      .header-cell__label {
         font-weight: 700;
-        cursor: pointer;
       }
 
-      .header-filter {
+      .header-cell__filter {
+        --mat-icon-button-state-layer-size: 32px;
+        width: 32px;
+        height: 32px;
+      }
+
+      .header-cell__filter mat-icon {
+        font-size: 1.125rem;
+        width: 1.125rem;
+        height: 1.125rem;
+      }
+
+      .header-cell__filter--active {
+        color: var(--mat-sys-primary);
+        background: color-mix(in srgb, var(--mat-sys-primary) 10%, transparent);
+      }
+
+      .filter-menu {
+        display: grid;
+        gap: 0.5rem;
+        min-width: 16rem;
+        padding: 0.75rem;
+      }
+
+      .filter-menu__field {
         width: 100%;
       }
 
@@ -188,6 +264,21 @@ export interface DataTableRowActionEvent {
         flex-wrap: wrap;
         gap: 0.5rem;
       }
+
+      .actions-cell button {
+        border-radius: 999px;
+      }
+
+      .actions-cell mat-icon {
+        margin-inline-end: 0.25rem;
+      }
+
+      .empty-cell {
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--mat-sys-on-surface-variant);
+        font-style: italic;
+      }
     `,
   ],
 })
@@ -195,6 +286,8 @@ export class DataTableComponent {
   readonly columns = input.required<readonly DataTableColumn[]>();
   readonly data = input<readonly DataTableRow[]>([]);
   readonly actions = input<readonly DataTableAction[]>([]);
+  readonly loading = input(false);
+  readonly emptyMessage = input('No se encontraron datos.');
   readonly pageSize = input(10);
   readonly pageSizeOptions = input<readonly number[]>([10, 25, 50]);
   readonly dataTableFilterType = DATA_TABLE_FILTER_TYPE;
@@ -224,7 +317,11 @@ export class DataTableComponent {
           return true;
         }
 
-        return this.displayValue(row, column).toLowerCase().includes(filterValue);
+        const rawValue = (row as Record<string, unknown>)[column.key];
+        return (
+          this.displayValue(row, column).toLowerCase().includes(filterValue) ||
+          String(rawValue ?? '').toLowerCase().includes(filterValue)
+        );
       });
     };
 
@@ -284,4 +381,25 @@ export class DataTableComponent {
   handlePage(event: PageEvent) {
     this.pageChange.emit(event);
   }
+}
+
+function createSpanishPaginatorIntl() {
+  const paginatorIntl = new MatPaginatorIntl();
+
+  paginatorIntl.itemsPerPageLabel = 'Elementos por página';
+  paginatorIntl.nextPageLabel = 'Página siguiente';
+  paginatorIntl.previousPageLabel = 'Página anterior';
+  paginatorIntl.firstPageLabel = 'Primera página';
+  paginatorIntl.lastPageLabel = 'Última página';
+  paginatorIntl.getRangeLabel = (page, pageSize, length) => {
+    if (length === 0 || pageSize === 0) {
+      return `0 de ${length}`;
+    }
+
+    const startIndex = page * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, length);
+    return `${startIndex + 1} – ${endIndex} de ${length}`;
+  };
+
+  return paginatorIntl;
 }

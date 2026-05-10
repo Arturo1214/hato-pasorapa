@@ -1,7 +1,9 @@
 package bo.pasorapa.hato.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
 import bo.pasorapa.hato.domain.Role;
@@ -106,6 +108,97 @@ class AdminNotificationServiceTest {
     }
 
     @Test
+    void shouldListIssuedNotificationsWithDeliveryMetrics() {
+        var created = adminNotificationService.create(
+                new AdminNotificationCreateRequest(
+                        "Lectura de potreros",
+                        "Confirmar recepción.",
+                        AdminNotificationTargetingMode.EXPLICIT_LIST,
+                        List.of(GANADERO_A, GANADERO_B),
+                        List.of()),
+                UUID.fromString("c3f6c2e1-59df-48aa-b493-7ee1f3c4d901"),
+                ADMIN_ID);
+
+        QuarkusTransaction.requiringNew().run(() -> adminNotificationRepository
+                .getEntityManager()
+                .createQuery("from AdminNotificationRecipient where notification.id = :notificationId", AdminNotificationRecipient.class)
+                .setParameter("notificationId", UUID.fromString(created.data().id()))
+                .setMaxResults(1)
+                .getSingleResult()
+                .setRead(true));
+
+        var listed = adminNotificationService.listIssuedNotifications().notifications().getFirst();
+
+        assertEquals(created.data().id(), listed.id());
+        assertEquals(2, listed.deliveryMetrics().totalCount());
+        assertEquals(1, listed.deliveryMetrics().readCount());
+        assertEquals(1, listed.deliveryMetrics().pendingCount());
+    }
+
+    @Test
+    void shouldReturnOwnedInboxNewestFirstAndUnreadCount() {
+        var older = adminNotificationService.create(
+                new AdminNotificationCreateRequest(
+                        "Aviso antiguo",
+                        "Primero.",
+                        AdminNotificationTargetingMode.EXPLICIT_LIST,
+                        List.of(GANADERO_A),
+                        List.of()),
+                UUID.fromString("a8eff98f-3c90-4cfc-a8cd-e36814963001"),
+                ADMIN_ID);
+        var newer = adminNotificationService.create(
+                new AdminNotificationCreateRequest(
+                        "Aviso reciente",
+                        "Segundo.",
+                        AdminNotificationTargetingMode.EXPLICIT_LIST,
+                        List.of(GANADERO_A),
+                        List.of()),
+                UUID.fromString("a8eff98f-3c90-4cfc-a8cd-e36814963002"),
+                ADMIN_ID);
+        adminNotificationService.create(
+                new AdminNotificationCreateRequest(
+                        "Ajeno",
+                        "No debe aparecer.",
+                        AdminNotificationTargetingMode.EXPLICIT_LIST,
+                        List.of(GANADERO_B),
+                        List.of()),
+                UUID.fromString("a8eff98f-3c90-4cfc-a8cd-e36814963003"),
+                ADMIN_ID);
+
+        adminNotificationService.markRecipientAsRead(recipientIdForNotification(older.data().id()), GANADERO_A);
+
+        var inbox = adminNotificationService.getInbox(GANADERO_A);
+
+        assertEquals(2, inbox.items().size());
+        assertEquals(newer.data().id(), inbox.items().get(0).id());
+        assertEquals(older.data().id(), inbox.items().get(1).id());
+        assertEquals(false, inbox.items().get(0).read());
+        assertEquals(true, inbox.items().get(1).read());
+        assertNotNull(inbox.items().get(1).readAt());
+        assertEquals(1, adminNotificationService.getUnreadCount(GANADERO_A).unreadCount());
+    }
+
+    @Test
+    void shouldSetUpdatedAtWhenMarkingRecipientAsRead() {
+        var created = adminNotificationService.create(
+                new AdminNotificationCreateRequest(
+                        "Lectura con fecha",
+                        "Debe tocar updatedAt.",
+                        AdminNotificationTargetingMode.EXPLICIT_LIST,
+                        List.of(GANADERO_A),
+                        List.of()),
+                UUID.fromString("d959a527-57e8-437a-b0e8-5232e8ddbe01"),
+                ADMIN_ID);
+        UUID recipientId = recipientIdForNotification(created.data().id());
+        LocalDateTime beforeRead = recipientUpdatedAt(recipientId);
+
+        adminNotificationService.markRecipientAsRead(recipientId, GANADERO_A);
+
+        LocalDateTime afterRead = recipientUpdatedAt(recipientId);
+        assertTrue(afterRead.isAfter(beforeRead));
+    }
+
+    @Test
     void shouldRejectExplicitTargetingOverTheV1RecipientLimit() {
         List<UUID> tooManyRecipients = java.util.stream.IntStream.range(0, 201)
                 .mapToObj(index -> UUID.nameUUIDFromBytes(("recipient-" + index).getBytes(java.nio.charset.StandardCharsets.UTF_8)))
@@ -136,5 +229,22 @@ class AdminNotificationServiceTest {
         user.setCreatedAt(LocalDateTime.of(2026, 4, 27, 8, 0));
         user.setUpdatedAt(LocalDateTime.of(2026, 4, 27, 8, 0));
         return user;
+    }
+
+    private UUID recipientIdForNotification(String notificationId) {
+        return QuarkusTransaction.requiringNew().call(() -> adminNotificationRepository
+                .getEntityManager()
+                .createQuery("from AdminNotificationRecipient where notification.id = :notificationId", AdminNotificationRecipient.class)
+                .setParameter("notificationId", UUID.fromString(notificationId))
+                .setMaxResults(1)
+                .getSingleResult()
+                .getId());
+    }
+
+    private LocalDateTime recipientUpdatedAt(UUID recipientId) {
+        return QuarkusTransaction.requiringNew().call(() -> adminNotificationRepository
+                .getEntityManager()
+                .find(AdminNotificationRecipient.class, recipientId)
+                .getUpdatedAt());
     }
 }

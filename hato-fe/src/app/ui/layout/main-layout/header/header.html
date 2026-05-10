@@ -17,6 +17,24 @@
         <strong>{{ greeting() }}</strong>
       </div>
 
+      @if (isGanadero()) {
+        <button
+          mat-icon-button
+          class="notification-bell"
+          matTooltip="Ver notificaciones"
+          data-testid="ganadero-notification-bell"
+          type="button"
+          (click)="navigateToNotifications()"
+        >
+          <mat-icon>notifications</mat-icon>
+          @if (notificationsStore.unreadCount() > 0) {
+            <span class="notification-bell__badge" data-testid="ganadero-notification-count">
+              {{ notificationsStore.unreadCount() }}
+            </span>
+          }
+        </button>
+      }
+
       <button mat-icon-button matTooltip="Cambiar tema" (click)="themeService.toggleTheme()">
         <mat-icon>{{
           themeService.currentTheme() === 'dark' ? 'light_mode' : 'dark_mode'

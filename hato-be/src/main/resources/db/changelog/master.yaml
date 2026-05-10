@@ -29,3 +29,5 @@ databaseChangeLog:
       file: db/changelog/014-role-based-navigation-and-ownership-v1.yaml
   - include:
       file: db/changelog/015-animal-category-workflow-v2.yaml
+  - include:
+      file: db/changelog/016-notification-recipient-workflow-v1.yaml

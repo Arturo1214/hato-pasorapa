@@ -11,12 +11,8 @@ import { AdminDecisionSupportStore } from './data-access/admin-decision-support.
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="decision-support-page">
-      <header>
-        <h1>Soporte de decisión</h1>
-        <p>{{ scopeGuardMessage() }}</p>
-      </header>
-
       <mat-card appearance="outlined">
+        <p>{{ scopeGuardMessage() }}</p>
         <p>Última sync: {{ freshness().lastSyncAt ?? 'Sin sync previa' }}</p>
         <p>Último cálculo: {{ freshness().lastComputedAt ?? 'Todavía no calculado' }}</p>
         @if (statusMessage()) {

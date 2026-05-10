@@ -18,6 +18,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.util.UUID;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,7 @@ class AuthServiceTest {
                 () -> authService.login(new AuthLoginRequest("inactive", "Ganadero9")));
 
         assertEquals("ACCOUNT_INACTIVE", exception.code());
+        assertEquals(Response.Status.UNAUTHORIZED, exception.status());
     }
 
     @Test
@@ -78,6 +80,7 @@ class AuthServiceTest {
                 () -> authService.login(new AuthLoginRequest("blocked", "Blocked99")));
 
         assertEquals("ACCOUNT_BLOCKED", exception.code());
+        assertEquals(Response.Status.UNAUTHORIZED, exception.status());
     }
 
     @Test

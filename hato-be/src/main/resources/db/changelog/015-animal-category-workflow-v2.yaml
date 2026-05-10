@@ -2,6 +2,7 @@ databaseChangeLog:
   - changeSet:
       id: 015-animal-category-workflow-v2
       author: openai
+      validCheckSum: ANY
       changes:
         - sql:
             sql: |
@@ -15,8 +16,18 @@ databaseChangeLog:
                 ELSE category
               END;
         - sql:
+            dbms: postgresql
             sql: |
               UPDATE animals
-              SET birth_date = DATEADD('MONTH', -6, admission_date)
+              SET birth_date = (admission_date - INTERVAL '6 months')::date
               WHERE category = 'TERNERO'
-                AND birth_date IS NULL;
+                AND birth_date IS NULL
+                AND admission_date IS NOT NULL;
+        - sql:
+            dbms: h2
+            sql: |
+              UPDATE animals
+              SET birth_date = CAST(DATEADD('MONTH', -6, admission_date) AS DATE)
+              WHERE category = 'TERNERO'
+                AND birth_date IS NULL
+                AND admission_date IS NOT NULL;

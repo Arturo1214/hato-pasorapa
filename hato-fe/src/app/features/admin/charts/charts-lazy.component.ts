@@ -4,6 +4,9 @@ import { MatCardModule } from '@angular/material/card';
 import { BaseChartDirective } from 'ng2-charts';
 import type { ChartConfiguration } from 'chart.js';
 import type { AdminDashboardMetrics } from '../dashboard/data-access/admin-dashboard.service';
+import { ensureChartJsRegistered } from '../../../shared/ui/charts/chart-js-setup';
+
+ensureChartJsRegistered();
 
 @Component({
   selector: 'app-charts-lazy',
@@ -13,12 +16,16 @@ import type { AdminDashboardMetrics } from '../dashboard/data-access/admin-dashb
     <div class="charts-grid">
       <mat-card appearance="outlined">
         <h2>Usuarios por rol</h2>
-        <canvas baseChart [data]="rolesChartData()" [options]="chartOptions" [type]="'bar'"></canvas>
+        <div class="chart-frame">
+          <canvas baseChart [data]="rolesChartData()" [options]="chartOptions" [type]="'bar'"></canvas>
+        </div>
       </mat-card>
 
       <mat-card appearance="outlined">
         <h2>Estado de ganaderos</h2>
-        <canvas baseChart [data]="ganaderosChartData()" [options]="chartOptions" [type]="'doughnut'"></canvas>
+        <div class="chart-frame">
+          <canvas baseChart [data]="ganaderosChartData()" [options]="chartOptions" [type]="'doughnut'"></canvas>
+        </div>
       </mat-card>
     </div>
   `,
@@ -28,6 +35,11 @@ import type { AdminDashboardMetrics } from '../dashboard/data-access/admin-dashb
         display: grid;
         gap: 1rem;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+
+      .chart-frame {
+        position: relative;
+        min-height: 18rem;
       }
     `,
   ],

@@ -8,6 +8,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, PRIMARY_OUTLET, Router } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
+import { GanaderoNotificationsStore } from '../../../../features/ganadero/notifications/data-access/ganadero-notifications.store';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
 
 interface RouteViewMeta {
@@ -31,6 +32,7 @@ export class HeaderComponent {
   private readonly activatedRoute = inject(ActivatedRoute);
   readonly authService = inject(AuthService);
   readonly themeService = inject(ThemeService);
+  readonly notificationsStore = inject(GanaderoNotificationsStore);
   readonly toggleSidebar = output<void>();
 
   readonly routeData = toSignal(
@@ -45,6 +47,17 @@ export class HeaderComponent {
   );
 
   readonly greeting = computed(() => this.authService.currentUser()?.displayName ?? 'Equipo Hato');
+  readonly isGanadero = computed(() => this.authService.currentUser()?.role === 'GANADERO');
+
+  constructor() {
+    if (this.isGanadero()) {
+      void this.notificationsStore.refreshUnreadCount();
+    }
+  }
+
+  navigateToNotifications() {
+    void this.router.navigateByUrl('/ganadero/notificaciones');
+  }
 
   private resolveRouteViewMeta(): RouteViewMeta {
     const rootSnapshot = this.router.routerState.snapshot?.root ?? this.activatedRoute.snapshot ?? null;

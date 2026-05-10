@@ -1,9 +1,4 @@
 <section class="admin-page">
-  <header class="page-header">
-    <h1>Calendario</h1>
-    <p>Agenda offline/local-first derivada de snapshots existentes. V1 sin push remota, sin motor experto y sin estado cross-device.</p>
-  </header>
-
   <mat-card appearance="outlined" class="summary-card">
     <div class="badge-row">
       <span>Upcoming: {{ counts().byStatus.upcoming }}</span>
@@ -46,35 +41,35 @@
     </div>
   </mat-card>
 
-  <mat-card appearance="outlined">
+  <mat-card appearance="outlined" class="table-card">
     <h2>Timeline {{ range() === 'today' ? 'día' : range() === 'next_7_days' ? 'semana' : 'mes' }}</h2>
 
     @if (isEmpty()) {
       <p class="state-message">No hay ítems visibles para la ventana seleccionada.</p>
     } @else {
-      <ul class="timeline-list">
-        @for (item of timeline(); track item.id) {
-          <li class="timeline-item" [attr.data-status]="item.status">
-            <strong>{{ item.title }}</strong>
-            <span>{{ item.animalLabel ?? item.animalUuid }}</span>
-            <span>{{ item.dueAt }}</span>
-            <span>{{ item.status }}</span>
-          </li>
-        }
-      </ul>
+      <app-data-table
+        [columns]="timelineColumns"
+        [data]="timelineRows()"
+        [filters]="timelineFilters()"
+        [loading]="loading()"
+        emptyMessage="No hay ítems visibles para la ventana seleccionada."
+        (filterChange)="timelineFilters.set($event)"
+      />
     }
   </mat-card>
 
-  <mat-card appearance="outlined">
+  <mat-card appearance="outlined" class="table-card">
     <h2>Alertas in-app</h2>
     @if (inAppAlerts().length === 0) {
       <p class="state-message">No hay alertas in-app activas.</p>
     } @else {
-      <ul class="timeline-list">
-        @for (item of inAppAlerts(); track item.id) {
-          <li class="timeline-item" [attr.data-status]="item.status">{{ item.title }} · {{ item.status }}</li>
-        }
-      </ul>
+      <app-data-table
+        [columns]="inAppAlertColumns"
+        [data]="inAppAlertRows()"
+        [filters]="inAppAlertFilters()"
+        emptyMessage="No hay alertas in-app activas."
+        (filterChange)="inAppAlertFilters.set($event)"
+      />
     }
   </mat-card>
 </section>

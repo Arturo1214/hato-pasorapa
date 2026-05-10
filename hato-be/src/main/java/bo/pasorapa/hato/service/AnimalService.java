@@ -2,12 +2,15 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -28,6 +31,7 @@ public class AnimalService {
     private final AnimalRepository animalRepository;
     private final AnimalEventRepository animalEventRepository;
     private final GanaderoRepository ganaderoRepository;
+    private final UserRepository userRepository;
     private final AnimalMapper animalMapper;
     private final AnimalEventMapper animalEventMapper;
 
@@ -35,23 +39,35 @@ public class AnimalService {
             AnimalRepository animalRepository,
             AnimalEventRepository animalEventRepository,
             GanaderoRepository ganaderoRepository,
+            UserRepository userRepository,
             AnimalMapper animalMapper,
             AnimalEventMapper animalEventMapper) {
         this.animalRepository = animalRepository;
         this.animalEventRepository = animalEventRepository;
         this.ganaderoRepository = ganaderoRepository;
+        this.userRepository = userRepository;
         this.animalMapper = animalMapper;
         this.animalEventMapper = animalEventMapper;
     }
 
     @Transactional
     public Animal create(AnimalRequest request) {
-        return createWithUuid(null, request);
+        return createWithUuid(null, request, null);
+    }
+
+    @Transactional
+    public Animal create(AnimalRequest request, UUID currentUserId) {
+        return createWithUuid(null, request, currentUserId);
     }
 
     @Transactional
     public Animal createWithUuid(UUID uuid, AnimalRequest request) {
-        var ownerGanadero = resolveOwner(request.ownerGanaderoId());
+        return createWithUuid(uuid, request, null);
+    }
+
+    @Transactional
+    public Animal createWithUuid(UUID uuid, AnimalRequest request, UUID currentUserId) {
+        var ownerGanadero = resolveOwner(request.ownerGanaderoId(), currentUserId);
         Animal animal = animalMapper.toEntity(request);
         if (uuid != null) {
             animal.setUuid(uuid);
@@ -63,9 +79,14 @@ public class AnimalService {
 
     @Transactional
     public Animal update(UUID uuid, AnimalRequest request) {
+        return update(uuid, request, null);
+    }
+
+    @Transactional
+    public Animal update(UUID uuid, AnimalRequest request, UUID currentUserId) {
         Animal animal = findByUuid(uuid);
 
-        var ownerGanadero = resolveOwner(request.ownerGanaderoId());
+        var ownerGanadero = resolveOwner(request.ownerGanaderoId(), currentUserId);
         applyCoreState(animal, request, ownerGanadero);
         return animal;
     }
@@ -139,7 +160,40 @@ public class AnimalService {
         animal.setTag(resolveLegacyTag(animal, normalizedArete));
     }
 
-    private bo.pasorapa.hato.domain.Ganadero resolveOwner(UUID ownerGanaderoId) {
+    private bo.pasorapa.hato.domain.Ganadero resolveOwner(UUID ownerGanaderoId, UUID currentUserId) {
+        if (currentUserId == null) {
+            return requireRequestedOwner(ownerGanaderoId);
+        }
+
+        User currentUser = userRepository.findByIdOptional(currentUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+
+        if (currentUser.getRole() == Role.ADMIN) {
+            return requireRequestedOwner(ownerGanaderoId);
+        }
+
+        if (currentUser.getRole() == Role.GANADERO) {
+            bo.pasorapa.hato.domain.Ganadero authenticatedGanadero = ganaderoRepository.findByEmail(currentUser.getEmail())
+                    .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND));
+
+            if (ownerGanaderoId != null && !authenticatedGanadero.getId().equals(ownerGanaderoId)) {
+                throw new BusinessException(
+                        "ANIMAL_OWNER_OVERRIDE_FORBIDDEN",
+                        "El ganadero autenticado no puede asignar animales a otro propietario.",
+                        Response.Status.FORBIDDEN);
+            }
+
+            return authenticatedGanadero;
+        }
+
+        throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no puede administrar animales.", Response.Status.FORBIDDEN);
+    }
+
+    private bo.pasorapa.hato.domain.Ganadero requireRequestedOwner(UUID ownerGanaderoId) {
+        if (ownerGanaderoId == null) {
+            throw new BusinessException("ANIMAL_OWNER_GANADERO_ID_REQUIRED", "Necesitamos identificar al ganadero propietario.", Response.Status.BAD_REQUEST);
+        }
+
         return ganaderoRepository.findByIdOptional(ownerGanaderoId)
                 .orElseThrow(() -> new BusinessException("ANIMAL_OWNER_NOT_FOUND", "No encontramos el ganadero propietario indicado.", Response.Status.NOT_FOUND));
     }

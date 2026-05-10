@@ -50,7 +50,10 @@ describe('AnimalsService', () => {
         },
         {
           provide: AuthService,
-          useValue: { getAccessToken: () => 'token' },
+          useValue: {
+            getAccessToken: () => 'token',
+            currentUser: () => ({ id: 'user-1', role: 'ADMIN', status: 'ACTIVE' }),
+          },
         },
         {
           provide: OfflineStatusService,
@@ -256,6 +259,49 @@ describe('AnimalsService', () => {
     ]);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
     expect(service.syncState().pending).toBe(1);
+  });
+
+  it('should allow ganadero payloads without owner uuid and keep a local pending placeholder', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        AnimalsService,
+        SyncMetricsStore,
+        { provide: HttpClient, useValue: { get: vi.fn(), post: vi.fn(), put: vi.fn() } },
+        { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
+        {
+          provide: AuthService,
+          useValue: {
+            getAccessToken: () => 'token',
+            currentUser: () => ({ id: 'ganadero-user-1', role: 'GANADERO', status: 'ACTIVE' }),
+          },
+        },
+        { provide: OfflineStatusService, useValue: { isOnline: () => false } },
+      ],
+    });
+
+    const service = TestBed.inject(AnimalsService);
+    const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
+    service.configureForTesting({ store });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('99999999-2222-4333-8444-555555555555');
+
+    await firstValueFrom(
+      service.createAnimal({
+        arete: 'AR-551',
+        category: ANIMAL_CATEGORY.VACA,
+        sex: ANIMAL_SEX.HEMBRA,
+        active: true,
+        admissionDate: '2026-04-26',
+      })
+    );
+
+    const outbox = await store.listOutbox();
+    expect(outbox[0]?.payload).not.toHaveProperty('ownerGanaderoId');
+    await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ ownerGanaderoId: 'SESSION_GANADERO' }),
+      }),
+    ]);
   });
 
   it('should queue animal updates by canonical uuid, preserve the snapshot key and reflect the optimistic pending state', async () => {

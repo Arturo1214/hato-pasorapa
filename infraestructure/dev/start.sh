@@ -8,6 +8,17 @@ ENV_FILE="$SCRIPT_DIR/.env"
 EXAMPLE_FILE="$SCRIPT_DIR/.env.example"
 COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 
+resolve_host_path() {
+  local raw_path="$1"
+
+  if [[ "$raw_path" == /* ]]; then
+    printf '%s\n' "$raw_path"
+    return 0
+  fi
+
+  printf '%s\n' "$SCRIPT_DIR/$raw_path"
+}
+
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
@@ -36,6 +47,7 @@ confirm_reset() {
 
   printf 'ADVERTENCIA: esto va a borrar el volumen PostgreSQL de desarrollo y TODOS los datos dev.\n' >&2
   printf 'No toca el bind mount de imágenes (%s).\n' "$HATO_IMAGES_HOST_PATH" >&2
+  printf 'No toca el bind mount de logs BE (%s).\n' "$HATO_LOGS_HOST_PATH" >&2
   printf 'Escribí RESET-DEV-DB para continuar: ' >&2
 
   local confirmation
@@ -69,15 +81,14 @@ set -a
 source "$ENV_FILE"
 set +a
 
-HATO_IMAGES_HOST_PATH="${HATO_IMAGES_HOST_PATH:-$PROJECT_ROOT/images}"
-
-if [[ "$HATO_IMAGES_HOST_PATH" != /* ]]; then
-  HATO_IMAGES_HOST_PATH="$PROJECT_ROOT/$HATO_IMAGES_HOST_PATH"
-fi
+HATO_IMAGES_HOST_PATH="$(resolve_host_path "${HATO_IMAGES_HOST_PATH:-../../images}")"
+HATO_LOGS_HOST_PATH="$(resolve_host_path "${HATO_LOGS_HOST_PATH:-../../logs}")"
 
 export HATO_IMAGES_HOST_PATH
+export HATO_LOGS_HOST_PATH
 
 mkdir -p "$HATO_IMAGES_HOST_PATH"
+mkdir -p "$HATO_LOGS_HOST_PATH"
 
 case "${1:-up}" in
   up)
@@ -87,6 +98,7 @@ case "${1:-up}" in
     printf 'BE directo: http://localhost:%s/q/health\n' "${DEV_API_PORT:-8081}"
     printf 'DB:        localhost:%s\n' "${DEV_DB_PORT:-5434}"
     printf 'Imágenes:  %s -> %s\n' "$HATO_IMAGES_HOST_PATH" "${HATO_STORAGE_ANIMAL_IMAGES_ROOT_DIR:-/work/storage/animal-images}"
+    printf 'Logs BE:   %s -> %s\n' "$HATO_LOGS_HOST_PATH" "${QUARKUS_LOG_FILE_PATH:-/work/logs/hato-be.log}"
     ;;
   down)
     compose down --remove-orphans

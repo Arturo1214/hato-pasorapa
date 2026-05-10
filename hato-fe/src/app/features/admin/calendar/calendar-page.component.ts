@@ -1,13 +1,19 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { CalendarAlertsStore } from './data-access/calendar-alerts.store';
+import {
+  DataTableComponent,
+  DATA_TABLE_FILTER_TYPE,
+  type DataTableColumn,
+  type DataTableRow,
+} from '../../../shared/ui/data-table/data-table.component';
 
 @Component({
   selector: 'app-calendar-page',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatCardModule],
+  imports: [CommonModule, MatButtonModule, MatCardModule, DataTableComponent],
   templateUrl: './calendar-page.component.html',
   styleUrl: './calendar-page.component.scss',
 })
@@ -21,6 +27,36 @@ export class CalendarPageComponent {
   readonly preferences = this.store.preferences;
   readonly inAppAlerts = this.store.inAppAlerts;
   readonly isEmpty = computed(() => !this.loading() && this.timeline().length === 0);
+  readonly timelineRows = computed(() => this.timeline() as unknown as DataTableRow[]);
+  readonly inAppAlertRows = computed(() => this.inAppAlerts() as unknown as DataTableRow[]);
+  readonly timelineFilters = signal<Record<string, string>>({});
+  readonly inAppAlertFilters = signal<Record<string, string>>({});
+  readonly timelineColumns: DataTableColumn[] = [
+    { key: 'title', label: 'Evento', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'animalLabel',
+      label: 'Animal',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (value, row) => String(value || (row as { animalUuid?: string }).animalUuid || '—'),
+    },
+    { key: 'dueAt', label: 'Vence', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+    {
+      key: 'status',
+      label: 'Estado',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [
+        { label: 'Próximo', value: 'upcoming' },
+        { label: 'Hoy', value: 'due_today' },
+        { label: 'Atrasado', value: 'overdue' },
+      ],
+    },
+  ];
+  readonly inAppAlertColumns: DataTableColumn[] = [
+    { key: 'title', label: 'Alerta', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    { key: 'status', label: 'Estado', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.SELECT, filterOptions: this.timelineColumns[3].filterOptions },
+  ];
 
   constructor() {
     void this.store.ensureFresh();

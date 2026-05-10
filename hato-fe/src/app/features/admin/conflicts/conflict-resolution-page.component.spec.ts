@@ -22,7 +22,6 @@ describe('ConflictResolutionPageComponent', () => {
   it('should render diff visual and only policy-allowed actions', () => {
     const text = fixture.nativeElement.textContent;
 
-    expect(text).toContain('Resolución manual de conflictos');
     expect(text).toContain('tag');
     expect(text).toContain('accept_server');
     expect(text).toContain('retry_local');

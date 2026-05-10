@@ -27,8 +27,9 @@ describe('AdminReportingPageComponent', () => {
     expect(text).toContain('Ventana activa: 7d');
     expect(text).toContain('Preset activo: all');
     expect(text).toContain('Evento sanitario · Vaccination');
-    expect(text).toContain('Lotes: 1');
-    expect(text).toContain('Costo acumulado: 80');
+    expect(text).toContain('Lotes');
+    expect(text).toContain('Costo acumulado');
+    expect(text).toContain('80');
     expect(text).toContain('V2 descriptivo: sin filtros libres');
   });
 
@@ -81,6 +82,7 @@ function createFakeStore() {
     freshness: freshnessState.asReadonly(),
     stale: signal(false).asReadonly(),
     error: signal<string | null>(null).asReadonly(),
+    loading: signal(false).asReadonly(),
     statusMessage: signal<string | null>(null).asReadonly(),
     selectedWindow: selectedWindowState.asReadonly(),
     selectedPreset: selectedPresetState.asReadonly(),

@@ -10,10 +10,6 @@ describe('initializeApplicationRuntime', () => {
       callSequence.push('calendar');
     });
     const calendarRebuild = vi.fn(async () => undefined);
-    const notificationsInitializer = vi.fn(async () => {
-      callSequence.push('notifications');
-    });
-    const notificationsRebuild = vi.fn(async () => undefined);
     const conflictsInitializer = vi.fn(async () => {
       callSequence.push('conflicts');
     });
@@ -47,10 +43,6 @@ describe('initializeApplicationRuntime', () => {
         rebuild: conflictsRebuild,
       },
       {
-        initialize: notificationsInitializer,
-        rebuild: notificationsRebuild,
-      },
-      {
         initialize: reportingInitializer,
         rebuild: reportingRebuild,
       }
@@ -59,14 +51,12 @@ describe('initializeApplicationRuntime', () => {
     await run();
     await runOfflineRestoreRehydration();
 
-    expect(callSequence).toEqual(['config', 'session', 'sync', 'calendar', 'conflicts', 'notifications', 'reporting']);
-    expect(calendarRebuild).toHaveBeenCalledBefore(notificationsRebuild);
-    expect(notificationsRebuild).toHaveBeenCalledBefore(reportingRebuild);
+    expect(callSequence).toEqual(['config', 'session', 'sync', 'calendar', 'conflicts', 'reporting']);
+    expect(calendarRebuild).toHaveBeenCalledBefore(reportingRebuild);
     expect(reportingRebuild).toHaveBeenCalledBefore(conflictsRebuild);
     expect(syncInitializer).toHaveBeenCalledTimes(1);
     expect(calendarInitializer).toHaveBeenCalledTimes(1);
     expect(conflictsInitializer).toHaveBeenCalledTimes(1);
-    expect(notificationsInitializer).toHaveBeenCalledTimes(1);
     expect(reportingInitializer).toHaveBeenCalledTimes(1);
   });
 });

@@ -51,6 +51,8 @@ interface AuthApiResponse {
 interface AuthApiError {
   code?: string;
   message?: string;
+  details?: string;
+  stack?: string;
 }
 
 export interface AuthErrorState {
@@ -122,8 +124,12 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
     'La contraseña debe tener al menos 8 caracteres, 1 mayúscula y 1 número.',
   EMAIL_ALREADY_EXISTS: 'Ya existe una cuenta con ese correo.',
   GANADERO_ALREADY_EXISTS: 'Ya existe un ganadero con ese identificador.',
+  REGISTRATION_BUSINESS_IDENTIFIER_TOO_LONG: 'El identificador supera el máximo permitido de 80 caracteres.',
+  REGISTRATION_NAME_TOO_LONG: 'El nombre supera el máximo permitido de 120 caracteres.',
+  REGISTRATION_EMAIL_TOO_LONG: 'El correo supera el máximo permitido de 80 caracteres.',
   ANTI_SPAM_REJECTED: 'Error en el registro, intenta más tarde.',
   ANTI_SPAM_RATE_LIMITED: 'Error en el registro, intenta más tarde.',
+  INTERNAL_SERVER_ERROR: 'No pudimos completar la operación en este momento. Reintentá en unos minutos.',
   BOOTSTRAP_ALREADY_COMPLETED:
     'La configuración inicial ya fue completada. Iniciá sesión con una cuenta activa.',
 };
@@ -324,8 +330,8 @@ export class AuthService {
   }
 
   private mapError(error: HttpErrorResponse): AuthActionResult {
-    const apiError = (error.error as AuthApiError | null) ?? {};
-    const code = apiError.code ?? 'UNKNOWN_AUTH_ERROR';
+    const apiError = extractAuthApiError(error.error);
+    const code = apiError.code ?? inferAuthErrorCode(error.status);
 
     const storage = getStorage();
     storage?.removeItem(this.storageKey);
@@ -338,7 +344,12 @@ export class AuthService {
       success: false,
       error: {
         code,
-        message: AUTH_ERROR_MESSAGES[code] ?? apiError.message ?? 'No pudimos completar la operación.',
+        message:
+          AUTH_ERROR_MESSAGES[code] ??
+          apiError.message ??
+          (error.status >= 500
+            ? 'No pudimos iniciar sesión en este momento. Reintentá en unos minutos.'
+            : 'No pudimos completar la operación.'),
       },
     };
   }
@@ -421,4 +432,36 @@ export class AuthService {
 
     storage.removeItem(this.sessionEnvelopeStorageKey);
   }
+}
+
+function inferAuthErrorCode(status: number) {
+  if (status === 401) {
+    return 'INVALID_CREDENTIALS';
+  }
+  if (status >= 500) {
+    return 'INTERNAL_SERVER_ERROR';
+  }
+  return 'UNKNOWN_AUTH_ERROR';
+}
+
+function extractAuthApiError(rawError: unknown): AuthApiError {
+  if (typeof rawError === 'string') {
+    try {
+      return extractAuthApiError(JSON.parse(rawError));
+    } catch {
+      return {};
+    }
+  }
+
+  if (!rawError || typeof rawError !== 'object') {
+    return {};
+  }
+
+  const candidate = rawError as Partial<AuthApiError>;
+  return {
+    code: typeof candidate.code === 'string' ? candidate.code : undefined,
+    message: typeof candidate.message === 'string' ? candidate.message : undefined,
+    details: typeof candidate.details === 'string' ? candidate.details : undefined,
+    stack: typeof candidate.stack === 'string' ? candidate.stack : undefined,
+  };
 }

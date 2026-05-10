@@ -75,7 +75,7 @@ export interface AnimalListFilters {
 }
 
 export interface AnimalMutationPayload {
-  ownerGanaderoId: string;
+  ownerGanaderoId?: string | null;
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
@@ -112,7 +112,7 @@ export interface AnimalsSyncState {
 export interface AnimalsServiceDependencies {
   http: Pick<HttpClient, 'get' | 'post' | 'put'>;
   appConfig: Pick<ApplicationConfigService, 'config'>;
-  authService: Pick<AuthService, 'getAccessToken'>;
+  authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
   offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
   store: OfflineStoreService;
   metricsStore: SyncMetricsStore;
@@ -124,7 +124,7 @@ export interface AnimalsServiceDependencies {
 export class AnimalsService {
   private http: Pick<HttpClient, 'get' | 'post' | 'put'> = inject(HttpClient);
   private appConfig: Pick<ApplicationConfigService, 'config'> = inject(ApplicationConfigService);
-  private authService: Pick<AuthService, 'getAccessToken'> = inject(AuthService);
+  private authService: Pick<AuthService, 'getAccessToken' | 'currentUser'> = inject(AuthService);
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
   private store: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
   private metricsStore = inject(SyncMetricsStore);
@@ -238,7 +238,9 @@ export class AnimalsService {
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
-    await this.saveAnimalSnapshot(applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now));
+    await this.saveAnimalSnapshot(
+      applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now)
+    );
     await this.refreshPendingState({
       lastMessage: this.offlineStatus.isOnline()
         ? 'Actualización de animal encolada. Se disparó la sincronización automática.'
@@ -311,7 +313,7 @@ function createOptimisticAnimalSnapshot(
 ): AnimalItem {
   return {
     uuid,
-    ownerGanaderoId: payload.ownerGanaderoId,
+    ownerGanaderoId: payload.ownerGanaderoId ?? 'SESSION_GANADERO',
     motherAnimalUuid: null,
     fatherAnimalUuid: null,
     arete: payload.arete ?? null,
@@ -340,7 +342,7 @@ function applyOptimisticAnimalUpdate(
 ): AnimalItem {
   return {
     uuid,
-    ownerGanaderoId: payload.ownerGanaderoId,
+    ownerGanaderoId: payload.ownerGanaderoId ?? currentSnapshot?.ownerGanaderoId ?? 'SESSION_GANADERO',
     motherAnimalUuid: currentSnapshot?.motherAnimalUuid ?? null,
     fatherAnimalUuid: currentSnapshot?.fatherAnimalUuid ?? null,
     arete: payload.arete ?? null,
@@ -474,8 +476,9 @@ function decorateAnimalSnapshot(animal: AnimalItem, outbox: Awaited<ReturnType<O
 }
 
 function sanitizeMutationPayload(payload: AnimalMutationPayload): AnimalOfflineMutationPayload {
+  const ownerGanaderoId = normalizeOptionalText(payload.ownerGanaderoId);
   return {
-    ownerGanaderoId: payload.ownerGanaderoId.trim(),
+    ...(ownerGanaderoId ? { ownerGanaderoId } : {}),
     arete: normalizeOptionalText(payload.arete),
     marca: normalizeOptionalText(payload.marca),
     tatuaje: normalizeOptionalText(payload.tatuaje),

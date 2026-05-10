@@ -14,11 +14,6 @@ import type { ManualResolutionAction } from '../../../core/offline/offline-types
   imports: [CommonModule, ReactiveFormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule],
   template: `
     <section class="conflicts-page">
-      <header class="page-header">
-        <h1>Resolución manual de conflictos</h1>
-        <p>Compará diff local vs server y decidí si aceptás server, reintentás el payload original o descartás local.</p>
-      </header>
-
       <mat-card appearance="outlined">
         <p>Conflictos pendientes: {{ store.unresolvedCount() }}</p>
         @if (store.statusMessage()) {

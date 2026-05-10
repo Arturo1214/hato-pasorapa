@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 016-notification-recipient-workflow-v1-indexes
+      author: opencode
+      changes:
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_user_read
+            columns:
+              - column:
+                  name: recipient_user_id
+              - column:
+                  name: read
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_notification_read
+            columns:
+              - column:
+                  name: notification_id
+              - column:
+                  name: read

@@ -112,6 +112,9 @@ class AdminNotificationsResourceTest {
                 .statusCode(200)
                 .body("notifications", hasSize(2))
                 .body("notifications[0].title", equalTo("Segundo aviso"))
+                .body("notifications[0].deliveryMetrics.totalCount", equalTo(2))
+                .body("notifications[0].deliveryMetrics.readCount", equalTo(0))
+                .body("notifications[0].deliveryMetrics.pendingCount", equalTo(2))
                 .body("notifications[1].title", equalTo("Primer aviso"));
     }
 

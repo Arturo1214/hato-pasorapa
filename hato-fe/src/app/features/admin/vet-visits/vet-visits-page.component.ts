@@ -24,6 +24,11 @@ import {
   type FieldVetChecklistItem,
 } from '../../../core/offline/offline-types';
 import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
+import {
+  DataTableComponent,
+  DATA_TABLE_FILTER_TYPE,
+  type DataTableColumn,
+} from '../../../shared/ui/data-table/data-table.component';
 import { AnimalsHealthEventsService, type AnimalHealthEventItem } from '../animals/data-access/animals-health-events.service';
 import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mapper';
 
@@ -41,14 +46,10 @@ import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mappe
     MatInputModule,
     MatSelectModule,
     FormErrorsComponent,
+    DataTableComponent,
   ],
   template: `
     <section class="admin-page">
-      <header class="page-header">
-        <h1>Visitas veterinarias</h1>
-        <p>Flujo offline-first para checklist fijo, nota clínica y protocolo básico por visitId.</p>
-      </header>
-
       <mat-card appearance="outlined">
         <div class="card-title-row">
           <div>
@@ -167,25 +168,15 @@ import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mappe
       }
 
       @if (visits().length) {
-        <mat-card appearance="outlined">
+        <mat-card appearance="outlined" class="table-card">
           <h2>Listado</h2>
-          <ul>
-            @for (visit of visits(); track visit.id) {
-              <li>
-                <strong>{{ visit.visitId ?? visit.operationId }}</strong>
-                · {{ visit.occurredAt }}
-                @if (visit.treatmentStatus) {
-                  <span> · {{ visit.treatmentStatus === 'closed' ? 'CLOSED' : 'ACTIVE' }}</span>
-                }
-                @if (visit.nextDueAt) {
-                  <span> · próximo {{ visit.nextDueAt }}</span>
-                }
-                @if (visit.notes) {
-                  <span> · {{ visit.notes }}</span>
-                }
-              </li>
-            }
-          </ul>
+          <app-data-table
+            [columns]="visitColumns"
+            [data]="visits()"
+            [filters]="visitFilters()"
+            emptyMessage="No hay visitas para los filtros seleccionados."
+            (filterChange)="visitFilters.set($event)"
+          />
         </mat-card>
       }
     </section>
@@ -240,6 +231,10 @@ import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mappe
       .inline-actions {
         align-self: end;
       }
+
+      .table-card {
+        padding: 0.75rem;
+      }
     `,
   ],
 })
@@ -253,6 +248,30 @@ export class VetVisitsPageComponent {
   readonly visits = signal<AnimalHealthEventItem[]>([]);
   readonly submitting = signal(false);
   readonly feedbackMessage = signal<string | null>(null);
+  readonly visitFilters = signal<Record<string, string>>({});
+  readonly visitColumns: DataTableColumn[] = [
+    {
+      key: 'visitId',
+      label: 'Visita',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (value, row) => String(value || (row as AnimalHealthEventItem).operationId),
+    },
+    { key: 'occurredAt', label: 'Fecha/hora', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+    {
+      key: 'treatmentStatus',
+      label: 'Estado',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [
+        { label: 'ACTIVE', value: 'active' },
+        { label: 'CLOSED', value: 'closed' },
+      ],
+      formatter: (value) => (value === 'closed' ? 'CLOSED' : value === 'active' ? 'ACTIVE' : '—'),
+    },
+    { key: 'nextDueAt', label: 'Próximo control', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+    { key: 'notes', label: 'Notas', filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+  ];
 
   readonly filtersForm = this.formBuilder.group({
     animalUuid: ['', [Validators.required]],

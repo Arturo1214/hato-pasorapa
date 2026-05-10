@@ -181,9 +181,9 @@ export class GanaderoRegistrationPageComponent {
   readonly feedbackMessage = signal<string | null>(null);
   readonly form = this.formBuilder.nonNullable.group(
     {
-      businessIdentifier: ['', [Validators.required]],
-      name: ['', [Validators.required]],
-      email: ['', [Validators.required, Validators.email]],
+      businessIdentifier: ['', [Validators.required, Validators.maxLength(80)]],
+      name: ['', [Validators.required, Validators.maxLength(120)]],
+      email: ['', [Validators.required, Validators.email, Validators.maxLength(80)]],
       password: ['', passwordPolicyValidators],
       confirmPassword: ['', [Validators.required]],
       website: [''],
@@ -195,9 +195,19 @@ export class GanaderoRegistrationPageComponent {
   );
   readonly passwordMismatch = computed(() => this.form.hasError('passwordMismatch'));
   readonly messages = {
-    businessIdentifier: { required: 'Ingresá tu CI o identificador.' },
-    name: { required: 'Ingresá tu nombre completo.' },
-    email: { required: 'Ingresá un correo válido.', email: 'Ingresá un correo válido.' },
+    businessIdentifier: {
+      required: 'Ingresá tu CI o identificador.',
+      maxlength: 'El identificador no puede superar 80 caracteres.',
+    },
+    name: {
+      required: 'Ingresá tu nombre completo.',
+      maxlength: 'El nombre no puede superar 120 caracteres.',
+    },
+    email: {
+      required: 'Ingresá un correo válido.',
+      email: 'Ingresá un correo válido.',
+      maxlength: 'El correo no puede superar 80 caracteres.',
+    },
     password: {
       required: 'Ingresá una contraseña segura.',
       minlength: PASSWORD_POLICY_MESSAGE,

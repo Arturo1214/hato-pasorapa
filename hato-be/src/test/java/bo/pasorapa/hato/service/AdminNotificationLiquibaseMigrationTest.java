@@ -31,6 +31,8 @@ class AdminNotificationLiquibaseMigrationTest {
             assertTrue(columnExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "READ"));
             assertTrue(indexExists(connection, "ADMIN_NOTIFICATIONS", "IDX_ADMIN_NOTIFICATIONS_UPDATED_ID"));
             assertTrue(indexExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "IDX_ADMIN_NOTIFICATION_RECIPIENT_PULL"));
+            assertTrue(indexExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "IDX_ADMIN_NOTIFICATION_RECIPIENT_USER_READ"));
+            assertTrue(indexExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "IDX_ADMIN_NOTIFICATION_RECIPIENT_NOTIFICATION_READ"));
             assertTrue(uniqueConstraintExists(connection, "ADMIN_NOTIFICATION_RECIPIENTS", "UK_ADMIN_NOTIFICATION_RECIPIENT_ONCE"));
         }
     }

@@ -1,62 +1,100 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { OverlayContainer } from '@angular/cdk/overlay';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { AdminNotificationsService } from './data-access/admin-notifications.service';
-import { NotificationInboxStore } from './data-access/notification-inbox.store';
 import { AdminNotificationsPageComponent } from './admin-notifications-page.component';
 
 describe('AdminNotificationsPageComponent', () => {
   let fixture: ComponentFixture<AdminNotificationsPageComponent>;
+  let overlayContainer: OverlayContainer;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AdminNotificationsPageComponent],
       providers: [
         {
-          provide: NotificationInboxStore,
-          useValue: { items: signal([]).asReadonly(), unreadCount: () => 0, rebuild: vi.fn(), markAsRead: vi.fn() },
-        },
-        {
           provide: AdminNotificationsService,
           useValue: {
-            listHistory: () => of([]),
+            listHistory: () =>
+              of([
+                {
+                  id: 'notification-a',
+                  title: 'Aviso sanitario',
+                  body: 'Vacunación programada',
+                  targetingMode: 'ALL_ACTIVE_GANADEROS',
+                  includeUserIds: [],
+                  excludeUserIds: [],
+                  recipientCount: 10,
+                  deliveryMetrics: { totalCount: 10, readCount: 7, pendingCount: 3 },
+                  createdByUserId: 'admin-a',
+                  createdAt: '2026-05-10T09:00:00Z',
+                  updatedAt: '2026-05-10T09:00:00Z',
+                  publishedAt: '2026-05-10T09:00:00Z',
+                },
+                {
+                  id: 'notification-b',
+                  title: 'Borrador sin destinatarios',
+                  body: 'Pendiente de envío',
+                  targetingMode: 'EXPLICIT_LIST',
+                  includeUserIds: [],
+                  excludeUserIds: [],
+                  recipientCount: 0,
+                  deliveryMetrics: null,
+                  createdByUserId: 'admin-a',
+                  createdAt: '2026-05-10T08:00:00Z',
+                  updatedAt: '2026-05-10T08:00:00Z',
+                  publishedAt: '2026-05-10T08:00:00Z',
+                },
+              ]),
             listActiveGanaderoRecipients: () => of([]),
             createNotification: () => of({}),
-            markRecipientAsRead: () => of(undefined),
-            markAllAsRead: () => of(undefined),
           },
         },
         { provide: AuthService, useValue: { currentUser: () => ({ role: 'ADMIN' }) } },
         { provide: OfflineStatusService, useValue: { message: signal<string | null>(null) } },
+        provideNoopAnimations(),
       ],
     }).compileComponents();
 
+    overlayContainer = TestBed.inject(OverlayContainer);
     fixture = TestBed.createComponent(AdminNotificationsPageComponent);
     fixture.detectChanges();
   });
 
-  it('should have 3 tabs and render administration by default', () => {
-    const tabButtons = fixture.nativeElement.querySelectorAll('[data-testid="admin-notifications-tab"]');
-
-    expect(tabButtons).toHaveLength(3);
-    expect(fixture.nativeElement.textContent).toContain('Administración');
-  });
-
-  it('should switch to creation tab on click', () => {
-    const createTab = fixture.nativeElement.querySelector('[data-tab="creation"]') as HTMLButtonElement;
-    createTab.click();
-    fixture.detectChanges();
-
+  it('should render the real admin notification workflow by default', () => {
     expect(fixture.nativeElement.textContent).toContain('Nueva notificación');
+    expect(fixture.nativeElement.textContent).toContain('Historial emitido');
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="admin-notifications-tab"]')).toHaveLength(0);
   });
 
-  it('should switch to history tab on click', () => {
-    const historyTab = fixture.nativeElement.querySelector('[data-tab="history"]') as HTMLButtonElement;
-    historyTab.click();
+  it('should show delivery metrics in the admin history without local inbox concepts', () => {
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Aviso sanitario');
+    expect(text).toContain('Total destinatarios');
+    expect(text).toContain('Leídas');
+    expect(text).toContain('Pendientes');
+    expect(text).toContain('10');
+    expect(text).toContain('7');
+    expect(text).toContain('3');
+    expect(text).toContain('Borrador sin destinatarios');
+    expect(text).not.toContain('No leídas');
+    expect(text).not.toContain('Refrescar inbox');
+    expect(text).not.toContain('Bandeja local');
+  });
+
+  it('should open the create notification modal from the toolbar action', () => {
+    const createButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find((button) =>
+      button.textContent?.includes('Nueva notificación')
+    ) as HTMLButtonElement;
+
+    createButton.click();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Historial emitido');
+    expect(overlayContainer.getContainerElement().textContent).toContain('Publicar notificación');
   });
 });

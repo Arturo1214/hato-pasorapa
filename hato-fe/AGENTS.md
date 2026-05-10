@@ -2,6 +2,7 @@
 
 > Skills locales recomendados:
 > - [`angular-hato`](../skills/angular-hato/SKILL.md)
+> - [`hato-admin-ux`](../skills/hato-admin-ux/SKILL.md)
 
 ## Auto-invoke Skills
 
@@ -9,6 +10,7 @@
 |--------|-------|
 | Crear componentes, directivas o pipes en Angular | `angular-hato` |
 | Crear o modificar rutas y guards | `angular-hato` |
+| Crear o modificar pantallas operativas visuales/listas admin o ganadero | `angular-hato`, `hato-admin-ux` |
 | Implementar formularios reactivos y validaciones | `angular-hato` |
 | Escribir tests unitarios de Angular | `angular-hato` |
 

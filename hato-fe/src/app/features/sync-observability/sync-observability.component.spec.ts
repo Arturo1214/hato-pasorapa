@@ -85,7 +85,6 @@ describe('SyncObservabilityComponent', () => {
     await configure();
 
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Observabilidad de sync');
     expect(text).toContain('Trigger: manual');
     expect(text).toContain('pending: 2');
     expect(text).toContain('VERSION_CONFLICT · 2');

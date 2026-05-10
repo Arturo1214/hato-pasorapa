@@ -417,7 +417,7 @@ export interface OfflineFailureDescriptor {
 }
 
 export interface AnimalOfflineMutationPayload extends Record<string, unknown> {
-  ownerGanaderoId: string;
+  ownerGanaderoId?: string;
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;

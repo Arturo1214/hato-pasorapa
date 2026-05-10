@@ -2,7 +2,9 @@ package bo.pasorapa.hato.service.mapper;
 
 import bo.pasorapa.hato.domain.AdminNotification;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
+import bo.pasorapa.hato.service.dto.admin.notifications.AdminNotificationMetricsResponse;
 import bo.pasorapa.hato.service.dto.admin.notifications.AdminNotificationResponse;
+import bo.pasorapa.hato.service.dto.admin.notifications.GanaderoNotificationInboxItemResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,6 +26,10 @@ public class AdminNotificationMapper {
     }
 
     public AdminNotificationResponse toResponse(AdminNotification notification) {
+        return toResponse(notification, null);
+    }
+
+    public AdminNotificationResponse toResponse(AdminNotification notification, AdminNotificationMetricsResponse deliveryMetrics) {
         return new AdminNotificationResponse(
                 notification.getId().toString(),
                 notification.getTitle(),
@@ -35,6 +41,19 @@ public class AdminNotificationMapper {
                 notification.getCreatedByUserId().toString(),
                 notification.getCreatedAt().atOffset(ZoneOffset.UTC).toString(),
                 notification.getUpdatedAt().atOffset(ZoneOffset.UTC).toString(),
+                notification.getPublishedAt().atOffset(ZoneOffset.UTC).toString(),
+                deliveryMetrics);
+    }
+
+    public GanaderoNotificationInboxItemResponse toInboxItem(AdminNotificationRecipient recipient) {
+        AdminNotification notification = recipient.getNotification();
+        return new GanaderoNotificationInboxItemResponse(
+                recipient.getId().toString(),
+                notification.getId().toString(),
+                notification.getTitle(),
+                notification.getBody(),
+                recipient.isRead(),
+                recipient.isRead() ? recipient.getUpdatedAt().atOffset(ZoneOffset.UTC).toString() : null,
                 notification.getPublishedAt().atOffset(ZoneOffset.UTC).toString());
     }
 

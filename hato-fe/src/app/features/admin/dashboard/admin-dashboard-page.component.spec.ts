@@ -38,7 +38,6 @@ describe('AdminDashboardPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Seguimiento rápido de usuarios');
     expect(fixture.nativeElement.textContent).toContain('Usuarios por rol');
     expect(fixture.nativeElement.querySelectorAll('canvas')).toHaveLength(2);
   });

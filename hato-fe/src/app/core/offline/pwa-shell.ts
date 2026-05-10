@@ -42,9 +42,20 @@ export const HATO_PWA_MANIFEST: PwaManifestDefinition = {
   ],
 };
 
-export function createServiceWorkerRegistrationOptions(isDevelopmentMode: boolean) {
+function isLoopbackHostname(hostname: string | undefined) {
+  if (!hostname) {
+    return false;
+  }
+
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+export function createServiceWorkerRegistrationOptions(
+  isDevelopmentMode: boolean,
+  hostname = globalThis.location?.hostname
+) {
   return {
-    enabled: !isDevelopmentMode,
+    enabled: !isDevelopmentMode && !isLoopbackHostname(hostname),
     registrationStrategy: 'registerWhenStable:30000',
   } as const;
 }

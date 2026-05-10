@@ -39,6 +39,7 @@ class AuthResourceTest {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("admin", "admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "Admin123"));
             userRepository.persist(buildUser("ganadero@hato.bo", "ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
+            userRepository.persist(buildUser("inactivo", "inactive@hato.bo", Role.GANADERO, UserStatus.INACTIVE, "Inactive99"));
             userRepository.persist(buildUser("bloqueado", "blocked@hato.bo", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));
 
             Ganadero ganadero = new Ganadero();
@@ -153,8 +154,25 @@ class AuthResourceTest {
                 .when()
                 .post("/api/auth/login")
                 .then()
-                .statusCode(403)
+                .statusCode(401)
                 .body("code", equalTo("ACCOUNT_BLOCKED"));
+    }
+
+    @Test
+    void shouldRejectInactiveAccountWithUnauthorizedStatus() {
+        given()
+                .contentType("application/json")
+                .body("""
+                        {
+                          "username": "inactivo",
+                          "password": "Inactive99"
+                        }
+                        """)
+                .when()
+                .post("/api/auth/login")
+                .then()
+                .statusCode(401)
+                .body("code", equalTo("ACCOUNT_INACTIVE"));
     }
 
     private User buildUser(String username, String email, Role role, UserStatus status, String password) {

@@ -109,7 +109,7 @@ export const routes: Routes = [
           ),
         data: {
           title: 'Notificaciones',
-          subtitle: 'Centralizá avisos del equipo y seguí el estado de lectura del inbox operativo.',
+          subtitle: 'Creá avisos internos y revisá el historial emitido con métricas de lectura.',
         },
       },
       {
@@ -145,16 +145,6 @@ export const routes: Routes = [
         },
       },
       {
-        path: 'ganadero/ganaderos',
-        canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
-        loadComponent: () =>
-          import('./features/admin/ganaderos/ganaderos-page.component').then((m) => m.GanaderosPageComponent),
-        data: {
-          title: 'Ganaderos',
-          subtitle: 'Consultá el padrón ganadero operativo asociado a tu trabajo diario.',
-        },
-      },
-      {
         path: 'ganadero/calendario',
         canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
         loadComponent: () =>
@@ -168,8 +158,8 @@ export const routes: Routes = [
         path: 'ganadero/notificaciones',
         canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
         loadComponent: () =>
-          import('./features/admin/notifications/notification-inbox.page').then(
-            (m) => m.NotificationInboxPageComponent
+          import('./features/ganadero/notifications/ganadero-inbox-page.component').then(
+            (m) => m.GanaderoInboxPageComponent
           ),
         data: {
           title: 'Notificaciones',

@@ -12,11 +12,6 @@ import { BackupImportError, BackupValidationError } from '../../../core/offline/
   imports: [CommonModule, MatButtonModule, MatCardModule],
   template: `
     <section class="backup-page">
-      <header class="page-header">
-        <h1>Backups locales</h1>
-        <p>Exportá o restaurá el estado offline del dispositivo con validación fuerte e integridad SHA-256.</p>
-      </header>
-
       @if (!enabled()) {
         <mat-card appearance="outlined">
           <p>La feature flag offlineBackupV1Enabled está desactivada para este runtime.</p>

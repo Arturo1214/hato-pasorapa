@@ -35,6 +35,9 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class AnimalResourceTest {
 
+    private static final UUID OWNER_A_ID = UUID.fromString("e469411a-c4cb-4718-b60b-b5c157af5292");
+    private static final UUID OWNER_B_ID = UUID.fromString("20c7b2ef-f6ff-454b-976b-cbbfa293e3cf");
+
     @Inject
     UserRepository userRepository;
 
@@ -58,7 +61,9 @@ class AnimalResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("animal-admin", "animal-admin@hato.bo", "AdminAnimal9"));
-            ganaderoRepository.persist(buildGanadero(UUID.fromString("e469411a-c4cb-4718-b60b-b5c157af5292"), "NIT-ANIMAL-001", "Ganadero Animal"));
+            userRepository.persist(buildGanaderoUser("animal-ganadero", "ganadero-animal@hato.bo", "GanaderoAnimal9"));
+            ganaderoRepository.persist(buildGanadero(OWNER_A_ID, "NIT-ANIMAL-001", "Ganadero Animal", "ganadero-animal@hato.bo"));
+            ganaderoRepository.persist(buildGanadero(OWNER_B_ID, "NIT-ANIMAL-002", "Ganadero Sur", "ganadero-sur@hato.bo"));
         });
     }
 
@@ -160,6 +165,54 @@ class AnimalResourceTest {
     }
 
     @Test
+    void shouldDeriveOwnerFromAuthenticatedGanaderoWhenAnimalIsCreatedWithoutOwnerInPayload() {
+        String token = loginAs("animal-ganadero", "GanaderoAnimal9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "arete": "BO-9102",
+                          "category": "VACA",
+                          "sex": "HEMBRA",
+                          "active": true,
+                          "admissionDate": "2024-02-01",
+                          "weightKg": 410.50
+                        }
+                        """)
+                .when()
+                .post("/api/animals")
+                .then()
+                .statusCode(201)
+                .body("ownerGanaderoId", equalTo("e469411a-c4cb-4718-b60b-b5c157af5292"));
+    }
+
+    @Test
+    void shouldRejectGanaderoOwnerSpoofingThroughRestApi() {
+        String token = loginAs("animal-ganadero", "GanaderoAnimal9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "ownerGanaderoId": "20c7b2ef-f6ff-454b-976b-cbbfa293e3cf",
+                          "arete": "BO-9103",
+                          "category": "VACA",
+                          "sex": "HEMBRA",
+                          "active": true,
+                          "admissionDate": "2024-02-01",
+                          "weightKg": 410.50
+                        }
+                        """)
+                .when()
+                .post("/api/animals")
+                .then()
+                .statusCode(403);
+    }
+
+    @Test
     void shouldRejectCreateAnimalWithoutSex() {
         String token = loginAs("animal-admin", "AdminAnimal9");
 
@@ -185,11 +238,10 @@ class AnimalResourceTest {
     @Test
     void shouldFilterAnimalsByVisibleOwnerActiveAndCategory() {
         String token = loginAs("animal-admin", "AdminAnimal9");
-        UUID ownerA = UUID.fromString("e469411a-c4cb-4718-b60b-b5c157af5292");
-        UUID ownerB = UUID.fromString("20c7b2ef-f6ff-454b-976b-cbbfa293e3cf");
+        UUID ownerA = OWNER_A_ID;
+        UUID ownerB = OWNER_B_ID;
 
         QuarkusTransaction.requiringNew().run(() -> {
-            ganaderoRepository.persist(buildGanadero(ownerB, "NIT-ANIMAL-002", "Ganadero Sur"));
             animalRepository.persist(buildAnimal(
                     UUID.fromString("d9a81b4e-faed-4a59-a55d-5fd65f6a3c11"),
                     "legacy-a",
@@ -341,11 +393,22 @@ class AnimalResourceTest {
         return user;
     }
 
+    private User buildGanaderoUser(String username, String email, String password) {
+        User user = buildUser(username, email, password);
+        user.setRole(Role.GANADERO);
+        return user;
+    }
+
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name) {
+        return buildGanadero(id, businessIdentifier, name, name.toLowerCase().replace(" ", "-") + "@hato.bo");
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
         ganadero.setId(id);
         ganadero.setBusinessIdentifier(businessIdentifier);
         ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
     }

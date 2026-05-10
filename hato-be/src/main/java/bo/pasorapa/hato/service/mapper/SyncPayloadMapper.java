@@ -169,7 +169,7 @@ public class SyncPayloadMapper {
     }
 
     public AnimalRequest toAnimalRequest(Map<String, Object> payload) {
-        UUID ownerGanaderoId = requireUuid(payload.get("ownerGanaderoId"), "ANIMAL_OWNER_GANADERO_ID_REQUIRED");
+        UUID ownerGanaderoId = readOptionalUuid(payload.get("ownerGanaderoId"), "ANIMAL_OWNER_GANADERO_ID_INVALID");
         AnimalCategory category = readAnimalCategory(payload);
         AnimalSex sex = readAnimalSex(payload);
         Boolean active = readAnimalActive(payload);
@@ -298,6 +298,22 @@ public class SyncPayloadMapper {
         UUID uuid = parseUuid(value);
         if (uuid == null) {
             throw new IllegalArgumentException(errorCode);
+        }
+
+        return uuid;
+    }
+
+    private UUID readOptionalUuid(Object rawValue, String invalidCode) {
+        if (rawValue == null) {
+            return null;
+        }
+        if (!(rawValue instanceof String value) || value.isBlank()) {
+            throw new IllegalArgumentException(invalidCode);
+        }
+
+        UUID uuid = parseUuid(value);
+        if (uuid == null) {
+            throw new IllegalArgumentException(invalidCode);
         }
 
         return uuid;

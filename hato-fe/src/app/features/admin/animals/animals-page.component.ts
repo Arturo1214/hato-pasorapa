@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { finalize, firstValueFrom } from 'rxjs';
+import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import {
   DataTableComponent,
@@ -37,7 +38,9 @@ import {
   ANIMAL_DIALOG_MODE,
   AnimalFormDialogComponent,
   type AnimalDialogResult,
+  type AnimalOwnerOption,
 } from './animal-form-dialog.component';
+import { GanaderosService } from '../ganaderos/data-access/ganaderos.service';
 
 const ANIMAL_TABLE_ACTION = {
   OPERATIVE_EVENT: 'operative-event',
@@ -53,11 +56,6 @@ const ANIMAL_TABLE_ACTION = {
   imports: [CommonModule, MatButtonModule, MatCardModule, DataTableComponent],
   template: `
     <section class="admin-page">
-      <header class="page-header">
-        <h1>Animales</h1>
-        <p>Gestión tabular de animales con acciones de ficha, eventos e imágenes.</p>
-      </header>
-
       <mat-card appearance="outlined">
         <p>Estado de sync: {{ syncSummary() }}</p>
         @if (syncState().syncing) {
@@ -120,10 +118,14 @@ export class AnimalsPageComponent {
   private readonly animalsEventsService = inject(AnimalsEventsService);
   private readonly animalsReproductionEventsService = inject(AnimalsReproductionEventsService);
   private readonly animalsImagesService = inject(AnimalsImagesService);
+  private readonly ganaderosService = inject(GanaderosService);
+  private readonly authService = inject(AuthService);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
 
   readonly animals = signal<AnimalItem[]>([]);
+  readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
+  readonly ownerOptionsError = signal<string | null>(null);
   readonly imageTimelines = signal<Record<string, AnimalImageItem[]>>({});
   readonly errorMessage = signal<string | null>(null);
   readonly feedbackMessage = signal<string | null>(null);
@@ -179,11 +181,21 @@ export class AnimalsPageComponent {
 
   constructor() {
     this.loadAnimals();
+    this.loadOwnerOptionsIfNeeded();
   }
 
   openCreateDialog() {
+    if (!this.canOpenAnimalDialog()) {
+      return;
+    }
+
     this.dialog
-      .open(AnimalFormDialogComponent, { data: { mode: ANIMAL_DIALOG_MODE.CREATE } })
+      .open(AnimalFormDialogComponent, {
+        width: 'min(72rem, 98vw)',
+        maxWidth: '98vw',
+        maxHeight: '92vh',
+        data: this.buildAnimalDialogData({ mode: ANIMAL_DIALOG_MODE.CREATE }),
+      })
       .afterClosed()
       .subscribe((result: AnimalDialogResult | undefined) => {
         if (!result) {
@@ -219,8 +231,17 @@ export class AnimalsPageComponent {
   }
 
   private openEditDialog(animal: AnimalItem) {
+    if (!this.canOpenAnimalDialog()) {
+      return;
+    }
+
     this.dialog
-      .open(AnimalFormDialogComponent, { data: { mode: ANIMAL_DIALOG_MODE.EDIT, animal } })
+      .open(AnimalFormDialogComponent, {
+        width: 'min(72rem, 98vw)',
+        maxWidth: '98vw',
+        maxHeight: '92vh',
+        data: this.buildAnimalDialogData({ mode: ANIMAL_DIALOG_MODE.EDIT, animal }),
+      })
       .afterClosed()
       .subscribe((result: AnimalDialogResult | undefined) => {
         if (!result) {
@@ -369,6 +390,49 @@ export class AnimalsPageComponent {
       animals.map(async (animal) => [animal.uuid, await firstValueFrom(this.animalsImagesService.listImages(animal.uuid))] as const),
     );
     this.imageTimelines.set(Object.fromEntries(entries));
+  }
+
+  private buildAnimalDialogData(base: { mode: typeof ANIMAL_DIALOG_MODE.CREATE | typeof ANIMAL_DIALOG_MODE.EDIT; animal?: AnimalItem }) {
+    return {
+      ...base,
+      currentUserRole: this.authService.currentUser()?.role ?? 'GANADERO',
+      ownerOptions: this.ownerOptions(),
+    };
+  }
+
+  private loadOwnerOptionsIfNeeded() {
+    if (this.authService.currentUser()?.role !== 'ADMIN') {
+      return;
+    }
+
+    this.ganaderosService.listGanaderos().subscribe({
+      next: (ganaderos) => {
+        this.ownerOptions.set(
+          ganaderos.map((ganadero) => ({
+            id: ganadero.id,
+            label: `${ganadero.name} · ${ganadero.businessIdentifier}`,
+          }))
+        );
+        this.ownerOptionsError.set(null);
+      },
+      error: () => {
+        this.ownerOptions.set([]);
+        this.ownerOptionsError.set('No pudimos cargar el listado de ganaderos para asignar el propietario.');
+      },
+    });
+  }
+
+  private canOpenAnimalDialog() {
+    if (this.authService.currentUser()?.role !== 'ADMIN') {
+      return true;
+    }
+
+    if (this.ownerOptions().length > 0) {
+      return true;
+    }
+
+    this.errorMessage.set(this.ownerOptionsError() ?? 'Necesitás al menos un ganadero registrado para asignar el animal.');
+    return false;
   }
 }
 

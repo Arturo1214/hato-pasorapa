@@ -10,7 +10,6 @@ import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { CalendarAlertsStore } from '../../../../features/admin/calendar/data-access/calendar-alerts.store';
 import { AdminConflictResolutionStore } from '../../../../features/admin/conflicts/data-access/admin-conflict-resolution.store';
-import { NotificationInboxStore } from '../../../../features/admin/notifications/data-access/notification-inbox.store';
 import { BrandLockupComponent } from '../../../../shared/ui/brand-lockup/brand-lockup.component';
 
 interface MenuItem {
@@ -27,7 +26,7 @@ interface StaticMenuItem {
   icon: string;
   route: string;
   description: string;
-  badgeKey?: 'conflicts' | 'calendar' | 'notifications';
+  badgeKey?: 'conflicts' | 'calendar';
 }
 
 const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
@@ -54,7 +53,6 @@ const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
     icon: 'notifications',
     route: '/admin/notificaciones',
     description: 'Administrá envíos, creación e historial de notificaciones internas.',
-    badgeKey: 'notifications',
   },
   {
     label: 'Reportes',
@@ -84,12 +82,6 @@ const GANADERO_MENU_ITEMS: StaticMenuItem[] = [
     description: 'Seguimiento de controles, visitas y observaciones clínicas del campo.',
   },
   {
-    label: 'Ganaderos',
-    icon: 'groups',
-    route: '/ganadero/ganaderos',
-    description: 'Referencia operativa del padrón ganadero asociado a tu trabajo diario.',
-  },
-  {
     label: 'Calendario',
     icon: 'calendar_month',
     route: '/ganadero/calendario',
@@ -101,7 +93,6 @@ const GANADERO_MENU_ITEMS: StaticMenuItem[] = [
     icon: 'notifications',
     route: '/ganadero/notificaciones',
     description: 'Bandeja de avisos recibidos con seguimiento de lectura y prioridades.',
-    badgeKey: 'notifications',
   },
   {
     label: 'Sincronización',
@@ -146,7 +137,6 @@ export class SidebarComponent {
   readonly appConfig = inject(ApplicationConfigService);
   readonly calendarAlertsStore = inject(CalendarAlertsStore);
   readonly conflictResolutionStore = inject(AdminConflictResolutionStore);
-  readonly notificationInboxStore = inject(NotificationInboxStore);
   readonly navigate = output<void>();
 
   readonly menuItems = computed(() =>
@@ -166,12 +156,6 @@ export class SidebarComponent {
           ...item,
           badge: this.calendarAlertsStore.totalPending(),
           severity: this.calendarAlertsStore.badgeSeverity(),
-        };
-      case 'notifications':
-        return {
-          ...item,
-          badge: this.notificationInboxStore.unreadCount(),
-          severity: this.notificationInboxStore.badgeSeverity(),
         };
       default:
         return item;

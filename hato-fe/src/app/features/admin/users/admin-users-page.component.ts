@@ -3,6 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
+import { MatIconModule } from '@angular/material/icon';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
 import {
@@ -21,36 +22,23 @@ import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from
     CommonModule,
     MatButtonModule,
     MatCardModule,
+    MatIconModule,
     DataTableComponent,
   ],
   template: `
     <section class="admin-page">
-      <header class="page-header">
-        <h1>Usuarios</h1>
-        <p>Alta y gestión mínima de administradores y ganaderos usuario.</p>
-      </header>
-
-      <mat-card appearance="outlined">
-        <p>Estado de sync: {{ syncSummary() }}</p>
-        @if (syncState().syncing) {
-          <p>Sincronizando cambios offline…</p>
-        }
+      <mat-card appearance="outlined" class="status-card">
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
         }
-        @if (syncState().lastMessage) {
-          <p>{{ syncState().lastMessage }}</p>
-        }
         @if (sensitiveActionsOnlineOnly()) {
           <p>Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.</p>
-        }
-        @if (syncState().manualRefreshRequired) {
-          <p>Necesitás refrescar manualmente la lista para resolver el conflicto remoto.</p>
         }
       </mat-card>
 
       <div class="toolbar-actions">
         <button mat-flat-button color="primary" type="button" [disabled]="sensitiveActionsOnlineOnly()" (click)="openCreateDialog()">
+          <mat-icon>person_add</mat-icon>
           Crear usuario
         </button>
       </div>
@@ -61,20 +49,20 @@ import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from
 
       @if (errorMessage()) {
         <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
-      } @else if (!users().length) {
-        <mat-card appearance="outlined"><p>Todavía no hay usuarios administrados.</p></mat-card>
-      } @else {
-        <mat-card appearance="outlined">
-          <app-data-table
-            [columns]="columns"
-            [data]="users()"
-            [filters]="filters()"
-            [actions]="actions"
-            (filterChange)="filters.set($event)"
-            (rowAction)="handleRowAction($event)"
-          />
-        </mat-card>
       }
+
+      <mat-card appearance="outlined" class="table-card">
+        <app-data-table
+          [columns]="columns"
+          [data]="users()"
+          [filters]="filters()"
+          [actions]="actions"
+          [loading]="loading()"
+          emptyMessage="Todavía no hay usuarios administrados."
+          (filterChange)="filters.set($event)"
+          (rowAction)="handleRowAction($event)"
+        />
+      </mat-card>
     </section>
   `,
   styles: [
@@ -86,8 +74,24 @@ import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from
       }
 
       .toolbar-actions {
-        display: grid;
-        gap: 1rem;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .toolbar-actions button {
+        border-radius: 999px;
+      }
+
+      .toolbar-actions mat-icon {
+        margin-inline-end: 0.35rem;
+      }
+
+      .status-card p {
+        margin: 0.25rem 0;
+      }
+
+      .table-card {
+        padding: 0.75rem;
       }
     `,
   ],
@@ -100,15 +104,10 @@ export class AdminUsersPageComponent {
   readonly users = signal<ManagedUser[]>([]);
   readonly errorMessage = signal<string | null>(null);
   readonly feedbackMessage = signal<string | null>(null);
-  readonly syncState = this.adminUsersService.syncState;
+  readonly loading = signal(false);
   readonly offlineMessage = this.offlineStatus.message;
   readonly sensitiveActionsOnlineOnly = computed(() => this.offlineMessage() !== null);
   readonly filters = signal<Record<string, string>>({});
-  readonly syncSummary = computed(() => {
-    const syncState = this.syncState();
-    const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
-    return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
-  });
   readonly columns: DataTableColumn[] = [
     { key: 'username', label: 'Usuario', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
     { key: 'email', label: 'Correo', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
@@ -253,11 +252,16 @@ export class AdminUsersPageComponent {
 
   private loadUsers() {
     this.errorMessage.set(null);
+    this.loading.set(true);
     this.adminUsersService.listUsers().subscribe({
-      next: (users) => this.users.set(users),
+      next: (users) => {
+        this.users.set(users);
+        this.loading.set(false);
+      },
       error: () => {
         this.users.set([]);
         this.errorMessage.set('No pudimos cargar los usuarios.');
+        this.loading.set(false);
       },
     });
   }

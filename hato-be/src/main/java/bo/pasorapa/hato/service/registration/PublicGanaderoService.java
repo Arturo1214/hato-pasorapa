@@ -20,6 +20,10 @@ import jakarta.ws.rs.core.Response;
 @ApplicationScoped
 public class PublicGanaderoService {
 
+    static final int BUSINESS_IDENTIFIER_MAX_LENGTH = 80;
+    static final int DISPLAY_NAME_MAX_LENGTH = 120;
+    static final int USERNAME_MAX_LENGTH = 80;
+
     private final GanaderoRepository ganaderoRepository;
     private final UserRepository userRepository;
     private final AuthService authService;
@@ -42,6 +46,9 @@ public class PublicGanaderoService {
 
         String normalizedEmail = request.email().trim().toLowerCase();
         String normalizedBusinessIdentifier = request.businessIdentifier().trim();
+        String normalizedName = request.name().trim();
+
+        validateNormalizedLengths(normalizedBusinessIdentifier, normalizedName, normalizedEmail);
 
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail) || ganaderoRepository.findByEmail(normalizedEmail).isPresent()) {
             throw new BusinessException("EMAIL_ALREADY_EXISTS", "El correo ya existe.", Response.Status.CONFLICT);
@@ -53,7 +60,7 @@ public class PublicGanaderoService {
 
         Ganadero ganadero = new Ganadero();
         ganadero.setBusinessIdentifier(normalizedBusinessIdentifier);
-        ganadero.setName(request.name().trim());
+        ganadero.setName(normalizedName);
         ganadero.setEmail(normalizedEmail);
         ganadero.setActive(true);
         ganaderoRepository.persist(ganadero);
@@ -61,7 +68,7 @@ public class PublicGanaderoService {
         User user = new User();
         user.setUsername(normalizedEmail);
         user.setEmail(normalizedEmail);
-        user.setDisplayName(request.name().trim());
+        user.setDisplayName(normalizedName);
         user.setRole(Role.GANADERO);
         user.setStatus(UserStatus.ACTIVE);
         user.setPasswordHash(authService.hashPassword(request.password()));
@@ -81,5 +88,28 @@ public class PublicGanaderoService {
                         authResponse.user().displayName(),
                         authResponse.user().role(),
                         authResponse.user().status()));
+    }
+
+    private void validateNormalizedLengths(String businessIdentifier, String name, String email) {
+        if (businessIdentifier.length() > BUSINESS_IDENTIFIER_MAX_LENGTH) {
+            throw new BusinessException(
+                    "REGISTRATION_BUSINESS_IDENTIFIER_TOO_LONG",
+                    "El identificador supera el máximo permitido de 80 caracteres.",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        if (name.length() > DISPLAY_NAME_MAX_LENGTH) {
+            throw new BusinessException(
+                    "REGISTRATION_NAME_TOO_LONG",
+                    "El nombre supera el máximo permitido de 120 caracteres.",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        if (email.length() > USERNAME_MAX_LENGTH) {
+            throw new BusinessException(
+                    "REGISTRATION_EMAIL_TOO_LONG",
+                    "El correo supera el máximo permitido de 80 caracteres.",
+                    Response.Status.BAD_REQUEST);
+        }
     }
 }

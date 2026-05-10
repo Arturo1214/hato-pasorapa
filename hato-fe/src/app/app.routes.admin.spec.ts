@@ -43,7 +43,6 @@ describe('admin routes', () => {
       'ganadero/dashboard',
       'ganadero/animales',
       'ganadero/visitas',
-      'ganadero/ganaderos',
       'ganadero/calendario',
       'ganadero/notificaciones',
       'ganadero/sincronizacion',

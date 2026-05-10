@@ -371,6 +371,24 @@ describe('AuthService', () => {
     expect(service.isAuthenticated()).toBe(false);
   });
 
+  it('should fall back to a safe auth message when the backend returns a legacy 500 envelope', async () => {
+    const resultPromise = firstValueFrom(service.login({ username: 'admin', password: 'wrong' }));
+    const request = httpController.expectOne('/api/auth/login');
+
+    request.flush(
+      { details: 'Error id 123', stack: '' },
+      { status: 500, statusText: 'Internal Server Error' }
+    );
+
+    await expect(resultPromise).resolves.toEqual({
+      success: false,
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'No pudimos completar la operación en este momento. Reintentá en unos minutos.',
+      },
+    });
+  });
+
   it('should call bootstrap endpoint and keep ADMIN session ready', async () => {
     const resultPromise = firstValueFrom(
       service.bootstrap({

@@ -9,11 +9,6 @@ import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admi
   imports: [CommonModule, MatCardModule, ChartsLazyComponent],
   template: `
     <section class="admin-page">
-      <header class="page-header">
-        <h1>Dashboard</h1>
-        <p>Seguimiento rápido de usuarios y estado operativo del padrón ganadero.</p>
-      </header>
-
       @if (errorMessage()) {
         <mat-card appearance="outlined">
           <p>{{ errorMessage() }}</p>

@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record AnimalRequest(
-        @NotNull UUID ownerGanaderoId,
+        UUID ownerGanaderoId,
         String arete,
         String marca,
         String tatuaje,

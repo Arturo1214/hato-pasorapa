@@ -6,7 +6,6 @@ import { ApplicationConfigService } from '../../../../core/config/application-co
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { CalendarAlertsStore } from '../../../../features/admin/calendar/data-access/calendar-alerts.store';
 import { AdminConflictResolutionStore } from '../../../../features/admin/conflicts/data-access/admin-conflict-resolution.store';
-import { NotificationInboxStore } from '../../../../features/admin/notifications/data-access/notification-inbox.store';
 import { SidebarComponent } from './sidebar';
 
 describe('SidebarComponent', () => {
@@ -30,13 +29,6 @@ describe('SidebarComponent', () => {
             provide: AdminConflictResolutionStore,
             useValue: {
               unresolvedCount: () => 3,
-            },
-          },
-          {
-            provide: NotificationInboxStore,
-            useValue: {
-              unreadCount: () => 1,
-              badgeSeverity: () => 'info',
             },
           },
           {
@@ -86,14 +78,13 @@ describe('SidebarComponent', () => {
       'Dashboard',
       'Animales',
       'Visitas veterinarias',
-      'Ganaderos',
       'Calendario',
       'Notificaciones',
       'Sincronización',
       'Backups',
       'Conflictos',
     ]);
-    expect(labels).toHaveLength(9);
+    expect(labels).toHaveLength(8);
   });
 
   it('should render the operational badge for calendario entries', async () => {
@@ -102,6 +93,6 @@ describe('SidebarComponent', () => {
     const badges = Array.from(fixture.nativeElement.querySelectorAll('.menu-badge')) as HTMLElement[];
     expect(badges.some((badge) => badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high')).toBe(true);
     expect(badges.some((badge) => badge.textContent?.includes('2') && badge.getAttribute('data-severity') === 'overdue')).toBe(true);
-    expect(badges.some((badge) => badge.textContent?.includes('1') && badge.getAttribute('data-severity') === 'info')).toBe(true);
+    expect(badges.some((badge) => badge.textContent?.includes('1') && badge.getAttribute('data-severity') === 'info')).toBe(false);
   });
 });

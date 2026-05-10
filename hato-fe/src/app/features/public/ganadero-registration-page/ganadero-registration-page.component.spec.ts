@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { GanaderoRegistrationPageComponent } from './ganadero-registration-page.component';
@@ -14,6 +14,8 @@ describe('GanaderoRegistrationPageComponent', () => {
   };
 
   beforeEach(async () => {
+    vi.clearAllMocks();
+
     await TestBed.configureTestingModule({
       imports: [GanaderoRegistrationPageComponent],
       providers: [
@@ -81,5 +83,32 @@ describe('GanaderoRegistrationPageComponent', () => {
       website: '',
       formIssuedAt: '2026-05-02T22:59:55.000Z',
     });
+  });
+
+  it('should confirm successful registration and route the ganadero to the dashboard', async () => {
+    vi.useFakeTimers();
+    const router = TestBed.inject(Router);
+    const navigateByUrl = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const component = fixture.componentInstance;
+    component.form.setValue({
+      businessIdentifier: '12345678',
+      name: 'Ganadera Norte',
+      email: 'ganadera@hato.bo',
+      password: 'Ganadera9',
+      confirmPassword: 'Ganadera9',
+      website: '',
+      formIssuedAt: '2026-05-02T22:59:55.000Z',
+    });
+
+    component.submit();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Usuario creado exitosamente. Entrando al dashboard…');
+    expect(navigateByUrl).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(navigateByUrl).toHaveBeenCalledWith('/ganadero/dashboard');
+    vi.useRealTimers();
   });
 });

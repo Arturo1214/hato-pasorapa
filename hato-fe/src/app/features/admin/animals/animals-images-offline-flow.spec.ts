@@ -16,6 +16,7 @@ import { AnimalsImagesService } from './data-access/animals-images.service';
 
 const currentUser: SessionUser = {
   id: 'user-1',
+  ganaderoId: null,
   username: 'admin',
   email: 'admin@hato.bo',
   displayName: 'Admin',

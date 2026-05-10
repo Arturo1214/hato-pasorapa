@@ -5,6 +5,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
+import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
@@ -109,10 +110,12 @@ describe('AnimalsPageComponent', () => {
     const fixture = TestBed.createComponent(AnimalsPageComponent);
     fixture.detectChanges();
     await fixture.whenStable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
     return {
       fixture,
       component: fixture.componentInstance,
+      router: TestBed.inject(Router),
       animalsServiceMock,
       eventsServiceMock,
       reproductionEventsServiceMock,
@@ -127,43 +130,58 @@ describe('AnimalsPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Estado de sync:');
     expect(fixture.nativeElement.textContent).toContain('Sexo');
-    expect(fixture.nativeElement.textContent).toContain('HEMBRA');
+    expect(fixture.nativeElement.textContent).toContain('Hembra');
     expect(fixture.nativeElement.textContent).toContain('AR-100');
     expect(fixture.nativeElement.textContent).not.toContain('UUID owner actual');
     expect(fixture.nativeElement.textContent).not.toContain('Estado operativo');
   });
 
-  it('should open the create dialog from the toolbar button', async () => {
+  it('should navigate to the role-aware full-page create form from the toolbar button', async () => {
     const { fixture } = await configure();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     const createButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
       (button as HTMLButtonElement).textContent?.includes('Nuevo animal'),
     ) as HTMLButtonElement;
+
+    expect(createButton.classList).toContain('primary-action-button');
+    expect(createButton.querySelector('mat-icon')?.textContent?.trim()).toBe('add');
+
     createButton.click();
     await fixture.whenStable();
 
-    expect(overlayContainer.getContainerElement().textContent).toContain('Nuevo animal');
-    expect(overlayContainer.getContainerElement().textContent).toContain('Fecha de nacimiento');
-    expect(overlayContainer.getContainerElement().textContent).toContain('Ganadero propietario');
-    expect(overlayContainer.getContainerElement().textContent).not.toContain('UUID del ganadero dueño');
+    expect(navigateSpy).toHaveBeenCalledWith('/admin/animales/nuevo');
   });
 
-  it('should open the edit dialog pre-populated from the row action', async () => {
+  it('should navigate to the role-aware full-page edit form from the row action', async () => {
     const animalsServiceMock = createAnimalsServiceMock();
     animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal({ category: ANIMAL_CATEGORY.TERNERA, sex: ANIMAL_SEX.HEMBRA })]));
-    const { fixture } = await configure(animalsServiceMock);
+    const { fixture, router } = await configure(animalsServiceMock);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
     const editButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
-      (button as HTMLButtonElement).textContent?.includes('Ver/Editar ficha'),
+      (button as HTMLButtonElement).textContent?.includes('Editar ficha'),
     ) as HTMLButtonElement;
     editButton.click();
     await fixture.whenStable();
 
-    const overlayText = overlayContainer.getContainerElement().textContent ?? '';
-    expect(overlayText).toContain('Editar animal');
-    const dialogInputs = Array.from(overlayContainer.getContainerElement().querySelectorAll('input')) as HTMLInputElement[];
-    expect(dialogInputs.some((input) => input.value === 'AR-100')).toBe(true);
-    expect(overlayText).toContain('Ganadero propietario');
+    expect(navigateSpy).toHaveBeenCalledWith('/admin/animales/animal-uuid-1/editar');
+  });
+
+  it('should navigate to the role-aware animal detail page from the view row action', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal({ uuid: 'animal-detail-1' })]));
+    const { fixture, router } = await configure(animalsServiceMock);
+    const navigateSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+
+    const viewButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
+      (button as HTMLButtonElement).textContent?.includes('Ver ficha'),
+    ) as HTMLButtonElement;
+    viewButton.click();
+    await fixture.whenStable();
+
+    expect(navigateSpy).toHaveBeenCalledWith('/admin/animales/animal-detail-1');
   });
 
   it('should enqueue an operative event from the row action dialog', async () => {
@@ -309,5 +327,58 @@ describe('AnimalsPageComponent', () => {
 
     expect(imagesServiceMock.addImages).toHaveBeenCalledWith('animal-uuid-1', [file]);
     expect(fixture.nativeElement.textContent).toContain('Imágenes encoladas. Se disparó la sincronización automática.');
+  });
+
+  it('should render animal rows with a first-image thumbnail preview and stronger identity block', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    const imagesServiceMock = createImagesServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
+    imagesServiceMock.listImages.mockReturnValue(
+      of([
+        {
+          id: 'image-1',
+          animalUuid: 'animal-uuid-1',
+          operationId: 'image-1',
+          fileName: 'vaca-1.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1200,
+          checksumSha256: 'a'.repeat(64),
+          capturedAt: '2026-04-26T10:00:00.000Z',
+          sourceChannel: 'ONLINE',
+          binaryRef: 'image-1',
+          previewUrl: 'blob:image-1',
+          clientCreatedAt: '2026-04-26T10:00:00.000Z',
+          createdAt: '2026-04-26T10:00:00.000Z',
+          updatedAt: '2026-04-26T10:00:00.000Z',
+          syncState: 'SYNCED',
+          syncMessage: null,
+        },
+      ] satisfies AnimalImageItem[]),
+    );
+
+    const { fixture } = await configure(
+      animalsServiceMock,
+      createEventsServiceMock(),
+      createReproductionEventsServiceMock(),
+      imagesServiceMock,
+    );
+
+    const thumbnail = fixture.nativeElement.querySelector('.animal-thumbnail img') as HTMLImageElement;
+    expect(thumbnail.getAttribute('src')).toBe('blob:image-1');
+    expect(thumbnail.getAttribute('alt')).toContain('AR-100');
+    expect(fixture.nativeElement.querySelector('.animal-identity__primary')?.textContent).toContain('AR-100');
+    expect(fixture.nativeElement.querySelector('.animal-identity__meta')?.textContent).toContain('Marca Sur');
+    expect(fixture.nativeElement.textContent).toContain('420 kg');
+  });
+
+  it('should render a clear livestock placeholder when an animal has no images', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal({ uuid: 'animal-without-image' })]));
+    const { fixture } = await configure(animalsServiceMock);
+
+    const placeholder = fixture.nativeElement.querySelector('.animal-thumbnail--placeholder');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder.textContent).toContain('pets');
+    expect(placeholder.getAttribute('aria-label')).toBe('Sin foto del animal');
   });
 });

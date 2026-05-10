@@ -13,6 +13,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 @Path("/api/animals/{uuid}/health-events")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -21,9 +22,11 @@ import java.util.UUID;
 public class AnimalHealthEventResource {
 
     private final AnimalHealthEventService animalHealthEventService;
+    private final JsonWebToken jsonWebToken;
 
-    public AnimalHealthEventResource(AnimalHealthEventService animalHealthEventService) {
+    public AnimalHealthEventResource(AnimalHealthEventService animalHealthEventService, JsonWebToken jsonWebToken) {
         this.animalHealthEventService = animalHealthEventService;
+        this.jsonWebToken = jsonWebToken;
     }
 
     @GET
@@ -33,6 +36,17 @@ public class AnimalHealthEventResource {
             @QueryParam("occurredFrom") OffsetDateTime occurredFrom,
             @QueryParam("occurredTo") OffsetDateTime occurredTo,
             @QueryParam("visitId") String visitId) {
-        return new AnimalHealthEventListResponse(animalHealthEventService.list(animalUuid, healthEventType, occurredFrom, occurredTo, visitId));
+        return new AnimalHealthEventListResponse(animalHealthEventService.list(
+                animalUuid,
+                healthEventType,
+                occurredFrom,
+                occurredTo,
+                visitId,
+                currentUserId(),
+                jsonWebToken.getGroups().contains("GANADERO")));
+    }
+
+    private UUID currentUserId() {
+        return UUID.fromString(jsonWebToken.getSubject());
     }
 }

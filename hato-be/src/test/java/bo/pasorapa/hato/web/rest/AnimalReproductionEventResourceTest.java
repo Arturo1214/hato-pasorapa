@@ -3,6 +3,7 @@ package bo.pasorapa.hato.web.rest;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.notNullValue;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
@@ -121,6 +122,151 @@ class AnimalReproductionEventResourceTest {
                 .body("items[0].operationId", equalTo("00000000-0000-0000-0000-000000000400"));
     }
 
+    @Test
+    void shouldCreateNaturalMountServiceEventForFemaleAnimal() {
+        UUID animalUuid = UUID.fromString("850009bb-f226-42e2-aaf3-c52edcfd16fc");
+        UUID sireUuid = UUID.fromString("23df2de0-1095-4480-9f57-c43fdd60abe2");
+        seedAnimal(animalUuid, AnimalSex.HEMBRA, OWNER_ID);
+        seedAnimal(sireUuid, AnimalSex.MACHO, OWNER_ID);
+
+        String token = loginAs("animal-repro-admin", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "occurredAt": "2026-05-10T09:30:00Z",
+                          "serviceMethod": "MONTA_NATURAL",
+                          "fatherAnimalUuid": "%s",
+                          "notes": "Servicio reproductivo controlado"
+                        }
+                        """.formatted(sireUuid))
+                .when()
+                .post("/api/animals/{uuid}/reproduction-events", animalUuid)
+                .then()
+                .statusCode(201)
+                .body("id", notNullValue())
+                .body("animalUuid", equalTo(animalUuid.toString()))
+                .body("reproductionEventType", equalTo("SERVICE"))
+                .body("metadata.serviceMethod", equalTo("MONTA_NATURAL"))
+                .body("metadata.fatherAnimalUuid", equalTo(sireUuid.toString()));
+    }
+
+    @Test
+    void shouldRejectArtificialInseminationServiceForMaleAnimal() {
+        UUID animalUuid = UUID.fromString("d431f469-2572-469f-bad1-bef3e52ec9dd");
+        seedAnimal(animalUuid, AnimalSex.MACHO, OWNER_ID);
+
+        String token = loginAs("animal-repro-admin", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "occurredAt": "2026-05-10T09:30:00Z",
+                          "serviceMethod": "INSEMINACION_ARTIFICIAL",
+                          "semenReference": "Pajuela IA-88"
+                        }
+                        """)
+                .when()
+                .post("/api/animals/{uuid}/reproduction-events", animalUuid)
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void shouldCreatePositivePregnancyDiagnosisForFemaleAnimal() {
+        UUID animalUuid = UUID.fromString("a431f469-2572-469f-bad1-bef3e52ec9aa");
+        seedAnimal(animalUuid, AnimalSex.HEMBRA, OWNER_ID);
+        UUID serviceEventId = seedEvent(
+                animalUuid,
+                AnimalReproductionEventType.SERVICE,
+                "2026-05-01T09:00:00",
+                "event-600",
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "semenReference", "IA-88"));
+
+        String token = loginAs("animal-repro-admin", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "diagnosisDate": "2026-05-10T09:30:00Z",
+                          "result": "PRENADA",
+                          "expectedBirthDate": "2027-02-14T00:00:00Z",
+                          "serviceEventUuid": "%s",
+                          "notes": "Ecografía positiva"
+                        }
+                        """.formatted(serviceEventId))
+                .when()
+                .post("/api/animals/{uuid}/reproduction-events/pregnancy-diagnosis", animalUuid)
+                .then()
+                .statusCode(201)
+                .body("reproductionEventType", equalTo("PREGNANCY_DIAGNOSIS"))
+                .body("metadata.result", equalTo("PRENADA"))
+                .body("metadata.expectedBirthDate", equalTo("2027-02-14T00:00Z"))
+                .body("metadata.serviceEventUuid", equalTo(serviceEventId.toString()));
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisWhenLinkedEventIsNotAService() {
+        UUID animalUuid = UUID.fromString("a431f469-2572-469f-bad1-bef3e52ec9ac");
+        seedAnimal(animalUuid, AnimalSex.HEMBRA, OWNER_ID);
+        UUID diagnosisEventId = seedEvent(
+                animalUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                "2026-05-01T09:00:00",
+                "event-700",
+                Map.of("diagnosisDate", "2026-05-01T09:00:00Z", "result", "PRENADA"));
+
+        String token = loginAs("animal-repro-admin", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "diagnosisDate": "2026-05-10T09:30:00Z",
+                          "result": "PRENADA",
+                          "serviceEventUuid": "%s"
+                        }
+                        """.formatted(diagnosisEventId))
+                .when()
+                .post("/api/animals/{uuid}/reproduction-events/pregnancy-diagnosis", animalUuid)
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void shouldCreateNegativePregnancyDiagnosisWithFailureMetadata() {
+        UUID animalUuid = UUID.fromString("b431f469-2572-469f-bad1-bef3e52ec9bb");
+        seedAnimal(animalUuid, AnimalSex.HEMBRA, OWNER_ID);
+
+        String token = loginAs("animal-repro-admin", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "diagnosisDate": "2026-05-10T09:30:00Z",
+                          "result": "NO_PRENADA",
+                          "notes": "No preñada al tacto"
+                        }
+                        """)
+                .when()
+                .post("/api/animals/{uuid}/reproduction-events/pregnancy-diagnosis", animalUuid)
+                .then()
+                .statusCode(201)
+                .body("reproductionEventType", equalTo("PREGNANCY_DIAGNOSIS"))
+                .body("metadata.result", equalTo("NO_PRENADA"))
+                .body("metadata.status", equalTo("fallo"))
+                .body("metadata.negativeResult", equalTo(true));
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)
@@ -160,6 +306,10 @@ class AnimalReproductionEventResourceTest {
     }
 
     private void seedAnimal(UUID animalUuid) {
+        seedAnimal(animalUuid, AnimalSex.HEMBRA, OWNER_ID);
+    }
+
+    private void seedAnimal(UUID animalUuid, AnimalSex sex, UUID ownerId) {
         QuarkusTransaction.requiringNew().run(() -> {
             Animal animal = new Animal();
             animal.setUuid(animalUuid);
@@ -169,9 +319,9 @@ class AnimalReproductionEventResourceTest {
             animal.setAreteNormalized(animal.getArete().toLowerCase());
             animal.setMarca("Marca Norte");
             animal.setMarcaNormalized("marca norte");
-            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.VACA);
-            animal.setSex(AnimalSex.HEMBRA);
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
+            animal.setCategory(sex == AnimalSex.HEMBRA ? AnimalCategory.VACA : AnimalCategory.TORO);
+            animal.setSex(sex);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("410.00"));
@@ -182,10 +332,11 @@ class AnimalReproductionEventResourceTest {
         });
     }
 
-    private void seedEvent(UUID animalUuid, AnimalReproductionEventType type, String occurredAt, String suffix, Map<String, Object> metadata) {
-        QuarkusTransaction.requiringNew().run(() -> {
+    private UUID seedEvent(UUID animalUuid, AnimalReproductionEventType type, String occurredAt, String suffix, Map<String, Object> metadata) {
+        return QuarkusTransaction.requiringNew().call(() -> {
             AnimalReproductionEvent event = new AnimalReproductionEvent();
-            event.setEventId(UUID.randomUUID());
+            UUID eventId = UUID.randomUUID();
+            event.setEventId(eventId);
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
             event.setReproductionEventType(type);
             event.setOccurredAt(LocalDateTime.parse(occurredAt));
@@ -198,6 +349,7 @@ class AnimalReproductionEventResourceTest {
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(suffix.endsWith("100") ? 1 : suffix.endsWith("200") ? 2 : 3));
             event.setUpdatedAt(event.getCreatedAt());
             animalReproductionEventRepository.persist(event);
+            return eventId;
         });
     }
 }

@@ -2,9 +2,14 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
+import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -23,14 +28,20 @@ public class AnimalReproductionEventService {
     private final AnimalReproductionEventRepository animalReproductionEventRepository;
     private final AnimalRepository animalRepository;
     private final AnimalReproductionEventMapper animalReproductionEventMapper;
+    private final UserRepository userRepository;
+    private final GanaderoRepository ganaderoRepository;
 
     public AnimalReproductionEventService(
             AnimalReproductionEventRepository animalReproductionEventRepository,
             AnimalRepository animalRepository,
-            AnimalReproductionEventMapper animalReproductionEventMapper) {
+            AnimalReproductionEventMapper animalReproductionEventMapper,
+            UserRepository userRepository,
+            GanaderoRepository ganaderoRepository) {
         this.animalReproductionEventRepository = animalReproductionEventRepository;
         this.animalRepository = animalRepository;
         this.animalReproductionEventMapper = animalReproductionEventMapper;
+        this.userRepository = userRepository;
+        this.ganaderoRepository = ganaderoRepository;
     }
 
     @Transactional
@@ -49,9 +60,14 @@ public class AnimalReproductionEventService {
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
 
         UUID effectivePerformedByUserId = resolvePerformedByUserId(request, authenticatedUserId);
+        enforceAnimalOwnership(animal, authenticatedUserId);
         animalReproductionEventMapper.validateMetadata(request.reproductionEventType(), request.metadata());
 
-        if (request.reproductionEventType() == AnimalReproductionEventType.BIRTH) {
+        if (request.reproductionEventType() == AnimalReproductionEventType.SERVICE) {
+            validateServiceEvent(animal, request.metadata());
+        } else if (request.reproductionEventType() == AnimalReproductionEventType.PREGNANCY_DIAGNOSIS) {
+            validatePregnancyDiagnosisEvent(animal, request.metadata());
+        } else if (request.reproductionEventType() == AnimalReproductionEventType.BIRTH) {
             projectBirth(request.metadata());
         }
 
@@ -99,6 +115,34 @@ public class AnimalReproductionEventService {
         return effectiveUserId;
     }
 
+    private void enforceAnimalOwnership(Animal animal, UUID authenticatedUserId) {
+        UUID allowedGanaderoId = resolveAllowedGanaderoId(authenticatedUserId);
+        if (allowedGanaderoId != null && !allowedGanaderoId.equals(animal.getOwnerGanadero().getId())) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN",
+                    "El ganadero autenticado no puede registrar eventos reproductivos para animales de otro propietario.",
+                    Response.Status.FORBIDDEN);
+        }
+    }
+
+    private UUID resolveAllowedGanaderoId(UUID authenticatedUserId) {
+        if (authenticatedUserId == null) {
+            return null;
+        }
+
+        User user = userRepository.findByIdOptional(authenticatedUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+        if (user.getRole() == Role.ADMIN) {
+            return null;
+        }
+        if (user.getRole() == Role.GANADERO) {
+            return ganaderoRepository.findByEmail(user.getEmail())
+                    .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND))
+                    .getId();
+        }
+        throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no puede registrar eventos reproductivos.", Response.Status.FORBIDDEN);
+    }
+
     private void projectBirth(Map<String, Object> metadata) {
         AnimalReproductionEventMapper.BirthMetadata birthMetadata = animalReproductionEventMapper.readBirthMetadata(metadata);
 
@@ -128,6 +172,103 @@ public class AnimalReproductionEventService {
                 offspring.setFatherAnimalUuid(birthMetadata.fatherAnimalUuid());
             }
             offspring.setBirthDate(birthMetadata.birthDate());
+        }
+    }
+
+    private void validateServiceEvent(Animal animal, Map<String, Object> metadata) {
+        if (animal.getSex() != AnimalSex.HEMBRA) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_FEMALE_REQUIRED",
+                    "Sólo una hembra puede registrar un servicio reproductivo.",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        String serviceMethod = String.valueOf(metadata.get("serviceMethod"));
+        if ("MONTA_NATURAL".equals(serviceMethod)) {
+            validateNaturalMountSire(animal, metadata.get("fatherAnimalUuid"));
+        }
+    }
+
+    private void validatePregnancyDiagnosisEvent(Animal animal, Map<String, Object> metadata) {
+        if (animal.getSex() != AnimalSex.HEMBRA) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_FEMALE_REQUIRED",
+                    "Sólo una hembra puede registrar un diagnóstico de preñez.",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        UUID serviceEventUuid = readOptionalUuid(
+                metadata.get("serviceEventUuid") != null ? metadata.get("serviceEventUuid") : metadata.get("relatedServiceEventId"),
+                "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_INVALID");
+        if (serviceEventUuid == null) {
+            return;
+        }
+
+        AnimalReproductionEvent serviceEvent = animalReproductionEventRepository.findByEventIdOrOperationId(serviceEventUuid)
+                .orElseThrow(() -> new BusinessException(
+                        "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_NOT_FOUND",
+                        "No encontramos el servicio reproductivo asociado al diagnóstico.",
+                        Response.Status.BAD_REQUEST));
+        if (serviceEvent.getReproductionEventType() != AnimalReproductionEventType.SERVICE) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_TYPE_INVALID",
+                    "El evento asociado al diagnóstico debe ser un servicio reproductivo.",
+                    Response.Status.BAD_REQUEST);
+        }
+        if (!animal.getUuid().equals(serviceEvent.getAnimal().getUuid())) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_ANIMAL_MISMATCH",
+                    "El servicio reproductivo asociado debe pertenecer al mismo animal.",
+                    Response.Status.BAD_REQUEST);
+        }
+        if (!animal.getOwnerGanadero().getId().equals(serviceEvent.getAnimal().getOwnerGanadero().getId())) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_OWNER_MISMATCH",
+                    "El servicio reproductivo asociado debe pertenecer al mismo ganadero.",
+                    Response.Status.BAD_REQUEST);
+        }
+    }
+
+    private void validateNaturalMountSire(Animal femaleAnimal, Object rawFatherAnimalUuid) {
+        UUID fatherAnimalUuid = readRequiredUuid(rawFatherAnimalUuid, "ANIMAL_REPRODUCTION_EVENT_SERVICE_SIRE_REQUIRED");
+        Animal sire = animalRepository.findByUuid(fatherAnimalUuid)
+                .orElseThrow(() -> new BusinessException(
+                        "ANIMAL_REPRODUCTION_EVENT_SERVICE_SIRE_NOT_FOUND",
+                        "No encontramos el toro/padre informado para la monta natural.",
+                        Response.Status.BAD_REQUEST));
+        if (!femaleAnimal.getOwnerGanadero().getId().equals(sire.getOwnerGanadero().getId())) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_SERVICE_SIRE_OWNER_MISMATCH",
+                    "El toro/padre debe pertenecer al mismo ganadero que la hembra.",
+                    Response.Status.BAD_REQUEST);
+        }
+        if (sire.getSex() != AnimalSex.MACHO) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_SERVICE_SIRE_SEX_INVALID",
+                    "Sólo un macho puede registrarse como toro/padre de la monta natural.",
+                    Response.Status.BAD_REQUEST);
+        }
+    }
+
+    private UUID readRequiredUuid(Object value, String errorCode) {
+        UUID uuid = readOptionalUuid(value, errorCode);
+        if (uuid == null) {
+            throw new BusinessException(errorCode, "Necesitamos identificar el toro/padre de la monta natural.", Response.Status.BAD_REQUEST);
+        }
+        return uuid;
+    }
+
+    private UUID readOptionalUuid(Object value, String errorCode) {
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof String text) || text.isBlank()) {
+            throw new BusinessException(errorCode, "El identificador informado no es válido.", Response.Status.BAD_REQUEST);
+        }
+        try {
+            return UUID.fromString(text);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(errorCode, "El identificador informado no es válido.", Response.Status.BAD_REQUEST);
         }
     }
 

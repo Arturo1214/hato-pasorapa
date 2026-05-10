@@ -206,4 +206,48 @@ describe('LoginPageComponent', () => {
 
     expect(navigateByUrlSpy).toHaveBeenCalledWith('/admin/dashboard');
   });
+
+  it('should route ganadero users to their dashboard after login without returnUrl', async () => {
+    await TestBed.resetTestingModule();
+    installStorageMock();
+
+    await TestBed.configureTestingModule({
+      imports: [LoginPageComponent],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api' }) },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            loading: () => false,
+            currentUser: () => ({ role: 'GANADERO' }),
+            login: () => of({ success: true, error: null }),
+          },
+        },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              queryParamMap: convertToParamMap({}),
+            },
+            queryParamMap: of(convertToParamMap({})),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const ganaderoFixture = TestBed.createComponent(LoginPageComponent);
+    const ganaderoRouter = TestBed.inject(Router);
+    const navigateByUrlSpy = vi.spyOn(ganaderoRouter, 'navigateByUrl').mockResolvedValue(true);
+
+    ganaderoFixture.componentInstance.form.setValue({ username: 'ganadero@hato.bo', password: 'Ganadero9' });
+    ganaderoFixture.componentInstance.submit();
+
+    expect(navigateByUrlSpy).toHaveBeenCalledWith('/ganadero/dashboard');
+  });
 });

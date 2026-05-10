@@ -12,7 +12,11 @@ import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
+import bo.pasorapa.hato.service.dto.AnimalGenealogyResponse;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
+import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
+import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationRequest;
+import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.mapper.AnimalEventMapper;
 import bo.pasorapa.hato.service.mapper.AnimalMapper;
@@ -20,8 +24,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -34,6 +42,7 @@ public class AnimalService {
     private final UserRepository userRepository;
     private final AnimalMapper animalMapper;
     private final AnimalEventMapper animalEventMapper;
+    private final AnimalReproductionEventService animalReproductionEventService;
 
     public AnimalService(
             AnimalRepository animalRepository,
@@ -41,13 +50,15 @@ public class AnimalService {
             GanaderoRepository ganaderoRepository,
             UserRepository userRepository,
             AnimalMapper animalMapper,
-            AnimalEventMapper animalEventMapper) {
+            AnimalEventMapper animalEventMapper,
+            AnimalReproductionEventService animalReproductionEventService) {
         this.animalRepository = animalRepository;
         this.animalEventRepository = animalEventRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.userRepository = userRepository;
         this.animalMapper = animalMapper;
         this.animalEventMapper = animalEventMapper;
+        this.animalReproductionEventService = animalReproductionEventService;
     }
 
     @Transactional
@@ -84,7 +95,7 @@ public class AnimalService {
 
     @Transactional
     public Animal update(UUID uuid, AnimalRequest request, UUID currentUserId) {
-        Animal animal = findByUuid(uuid);
+        Animal animal = findByUuid(uuid, currentUserId);
 
         var ownerGanadero = resolveOwner(request.ownerGanaderoId(), currentUserId);
         applyCoreState(animal, request, ownerGanadero);
@@ -97,6 +108,83 @@ public class AnimalService {
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
         applyAutoTransitionOnRead(animal);
         return animal;
+    }
+
+    @Transactional
+    public Animal findByUuid(UUID uuid, UUID currentUserId) {
+        Animal animal = findByUuid(uuid);
+        enforceAnimalOwnershipForCurrentUser(animal, currentUserId);
+        return animal;
+    }
+
+    @Transactional
+    public AnimalGenealogyResponse findGenealogy(UUID uuid, UUID currentUserId) {
+        Animal animal = findByUuid(uuid);
+        UUID allowedGanaderoId = resolveAllowedGanaderoId(currentUserId);
+        enforceAnimalOwnership(animal, allowedGanaderoId);
+
+        Animal mother = animal.getMotherAnimalUuid() == null
+                ? null
+                : animalRepository.findByUuid(animal.getMotherAnimalUuid()).filter(relative -> canExposeRelative(relative, allowedGanaderoId)).orElse(null);
+        Animal father = animal.getFatherAnimalUuid() == null
+                ? null
+                : animalRepository.findByUuid(animal.getFatherAnimalUuid()).filter(relative -> canExposeRelative(relative, allowedGanaderoId)).orElse(null);
+        List<Animal> offspring = animalRepository.listOffspringByParentUuid(uuid).stream()
+                .filter(relative -> canExposeRelative(relative, allowedGanaderoId))
+                .toList();
+
+        return new AnimalGenealogyResponse(
+                animalMapper.toResponse(animal),
+                mother == null ? null : animalMapper.toResponse(mother),
+                father == null ? null : animalMapper.toResponse(father),
+                offspring.stream().map(animalMapper::toResponse).toList());
+    }
+
+    @Transactional
+    public BirthRegistrationResponse registerBirth(UUID motherUuid, BirthRegistrationRequest request, UUID currentUserId) {
+        Animal mother = findByUuid(motherUuid, currentUserId);
+        if (mother.getSex() != AnimalSex.HEMBRA) {
+            throw new BusinessException(
+                    "ANIMAL_BIRTH_MOTHER_SEX_INVALID",
+                    "Sólo una hembra puede registrarse como madre de un parto.",
+                    Response.Status.BAD_REQUEST);
+        }
+
+        Animal father = resolveBirthFather(request.fatherAnimalUuid(), mother.getOwnerGanadero().getId());
+        List<Animal> offspring = request.offspring().stream()
+                .map(offspringRequest -> createWithUuid(null, new AnimalRequest(
+                        mother.getOwnerGanadero().getId(),
+                        motherUuid,
+                        father == null ? null : father.getUuid(),
+                        offspringRequest.arete(),
+                        offspringRequest.marca(),
+                        offspringRequest.tatuaje(),
+                        offspringRequest.category(),
+                        offspringRequest.sex(),
+                        offspringRequest.active(),
+                        offspringRequest.admissionDate() == null ? request.birthDate() : offspringRequest.admissionDate(),
+                        offspringRequest.weightKg(),
+                        request.birthDate()), currentUserId))
+                .toList();
+
+        var event = animalReproductionEventService.create(new AnimalReproductionEventRequest(
+                motherUuid,
+                bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType.BIRTH,
+                request.birthDate().atStartOfDay().atOffset(ZoneOffset.UTC),
+                request.notes(),
+                currentUserId,
+                "ONLINE",
+                UUID.randomUUID(),
+                birthMetadata(request, motherUuid, father, offspring),
+                OffsetDateTime.now(ZoneOffset.UTC)), currentUserId);
+
+        return new BirthRegistrationResponse(
+                event.getEventId(),
+                motherUuid,
+                father == null ? null : father.getUuid(),
+                request.birthDate(),
+                offspring.size(),
+                offspring.stream().map(animalMapper::toResponse).toList());
     }
 
     @Transactional
@@ -139,6 +227,8 @@ public class AnimalService {
 
         AnimalRequest normalizedRequest = new AnimalRequest(
                 request.ownerGanaderoId(),
+                request.motherAnimalUuid(),
+                request.fatherAnimalUuid(),
                 normalizedArete,
                 normalizedMarca,
                 normalizedTatuaje,
@@ -151,6 +241,7 @@ public class AnimalService {
 
         applyCategorySexValidation(normalizedRequest.category(), normalizedRequest.sex());
         validateBirthDateForYoungAnimals(normalizedRequest);
+        validateParents(normalizedRequest, ownerGanadero.getId(), animal.getUuid());
 
         animalMapper.updateEntity(animal, normalizedRequest, ownerGanadero);
         animal.setAreteNormalized(toNormalizedKey(normalizedArete));
@@ -158,6 +249,59 @@ public class AnimalService {
         animal.setTatuajeNormalized(toNormalizedKey(normalizedTatuaje));
         animal.setCode(resolveLegacyCode(animal));
         animal.setTag(resolveLegacyTag(animal, normalizedArete));
+    }
+
+    public UUID resolveAuthenticatedGanaderoId(UUID currentUserId) {
+        User currentUser = userRepository.findByIdOptional(currentUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+
+        if (currentUser.getRole() != Role.GANADERO) {
+            throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no pertenece a un ganadero.", Response.Status.FORBIDDEN);
+        }
+
+        return ganaderoRepository.findByEmail(currentUser.getEmail())
+                .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND))
+                .getId();
+    }
+
+    private void enforceAnimalOwnershipForCurrentUser(Animal animal, UUID currentUserId) {
+        enforceAnimalOwnership(animal, resolveAllowedGanaderoId(currentUserId));
+    }
+
+    private UUID resolveAllowedGanaderoId(UUID currentUserId) {
+        if (currentUserId == null) {
+            return null;
+        }
+
+        User currentUser = userRepository.findByIdOptional(currentUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+
+        if (currentUser.getRole() == Role.ADMIN) {
+            return null;
+        }
+
+        if (currentUser.getRole() == Role.GANADERO) {
+            return resolveAuthenticatedGanaderoId(currentUserId);
+        }
+
+        throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no puede consultar animales.", Response.Status.FORBIDDEN);
+    }
+
+    private void enforceAnimalOwnership(Animal animal, UUID allowedGanaderoId) {
+        if (allowedGanaderoId == null) {
+            return;
+        }
+
+        if (!allowedGanaderoId.equals(animal.getOwnerGanadero().getId())) {
+            throw new BusinessException(
+                    "ANIMAL_OWNER_FORBIDDEN",
+                    "El ganadero autenticado no puede consultar animales de otro propietario.",
+                    Response.Status.FORBIDDEN);
+        }
+    }
+
+    private boolean canExposeRelative(Animal animal, UUID allowedGanaderoId) {
+        return allowedGanaderoId == null || allowedGanaderoId.equals(animal.getOwnerGanadero().getId());
     }
 
     private bo.pasorapa.hato.domain.Ganadero resolveOwner(UUID ownerGanaderoId, UUID currentUserId) {
@@ -173,7 +317,8 @@ public class AnimalService {
         }
 
         if (currentUser.getRole() == Role.GANADERO) {
-            bo.pasorapa.hato.domain.Ganadero authenticatedGanadero = ganaderoRepository.findByEmail(currentUser.getEmail())
+            UUID authenticatedGanaderoId = resolveAuthenticatedGanaderoId(currentUserId);
+            bo.pasorapa.hato.domain.Ganadero authenticatedGanadero = ganaderoRepository.findByIdOptional(authenticatedGanaderoId)
                     .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND));
 
             if (ownerGanaderoId != null && !authenticatedGanadero.getId().equals(ownerGanaderoId)) {
@@ -198,6 +343,34 @@ public class AnimalService {
                 .orElseThrow(() -> new BusinessException("ANIMAL_OWNER_NOT_FOUND", "No encontramos el ganadero propietario indicado.", Response.Status.NOT_FOUND));
     }
 
+    private Animal resolveBirthFather(UUID fatherAnimalUuid, UUID motherOwnerGanaderoId) {
+        if (fatherAnimalUuid == null) {
+            return null;
+        }
+
+        Animal father = animalRepository.findByUuid(fatherAnimalUuid)
+                .orElseThrow(() -> new BusinessException("ANIMAL_BIRTH_FATHER_NOT_FOUND", "No encontramos el padre informado para el parto.", Response.Status.BAD_REQUEST));
+        if (!motherOwnerGanaderoId.equals(father.getOwnerGanadero().getId())) {
+            throw new BusinessException("ANIMAL_BIRTH_PARENT_OWNER_MISMATCH", "El padre debe pertenecer al mismo ganadero que la madre.", Response.Status.BAD_REQUEST);
+        }
+        if (father.getSex() != AnimalSex.MACHO) {
+            throw new BusinessException("ANIMAL_BIRTH_FATHER_SEX_INVALID", "Sólo un macho puede registrarse como padre del parto.", Response.Status.BAD_REQUEST);
+        }
+        return father;
+    }
+
+    private Map<String, Object> birthMetadata(BirthRegistrationRequest request, UUID motherUuid, Animal father, List<Animal> offspring) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("birthDate", request.birthDate().atStartOfDay().atOffset(ZoneOffset.UTC).toString());
+        metadata.put("offspringCount", offspring.size());
+        metadata.put("motherAnimalUuid", motherUuid.toString());
+        if (father != null) {
+            metadata.put("fatherAnimalUuid", father.getUuid().toString());
+        }
+        metadata.put("offspringAnimalUuids", offspring.stream().map(animal -> animal.getUuid().toString()).toList());
+        return metadata;
+    }
+
     private void applyCategorySexValidation(AnimalCategory category, AnimalSex sex) {
         boolean valid = switch (sex) {
             case HEMBRA -> category == AnimalCategory.TERNERA || category == AnimalCategory.VAQUILLONA || category == AnimalCategory.VACA;
@@ -219,6 +392,37 @@ public class AnimalService {
                     "BIRTH_DATE_REQUIRED_FOR_YOUNG_ANIMAL",
                     "birthDate es requerido para TERNERO/TERNERA",
                     Response.Status.BAD_REQUEST);
+        }
+    }
+
+    private void validateParents(AnimalRequest request, UUID ownerGanaderoId, UUID currentAnimalUuid) {
+        validateParent(request.motherAnimalUuid(), ownerGanaderoId, currentAnimalUuid, AnimalSex.HEMBRA, "ANIMAL_MOTHER_NOT_FOUND", "ANIMAL_MOTHER_SEX_INVALID");
+        validateParent(request.fatherAnimalUuid(), ownerGanaderoId, currentAnimalUuid, AnimalSex.MACHO, "ANIMAL_FATHER_NOT_FOUND", "ANIMAL_FATHER_SEX_INVALID");
+    }
+
+    private void validateParent(
+            UUID parentUuid,
+            UUID ownerGanaderoId,
+            UUID currentAnimalUuid,
+            AnimalSex requiredSex,
+            String notFoundCode,
+            String invalidSexCode
+    ) {
+        if (parentUuid == null) {
+            return;
+        }
+
+        if (currentAnimalUuid != null && currentAnimalUuid.equals(parentUuid)) {
+            throw new BusinessException("ANIMAL_PARENT_SELF_REFERENCE", "Un animal no puede ser su propio progenitor.", Response.Status.BAD_REQUEST);
+        }
+
+        Animal parent = animalRepository.findByUuid(parentUuid)
+                .orElseThrow(() -> new BusinessException(notFoundCode, "No encontramos el progenitor informado.", Response.Status.BAD_REQUEST));
+        if (!ownerGanaderoId.equals(parent.getOwnerGanadero().getId())) {
+            throw new BusinessException("ANIMAL_PARENT_OWNER_MISMATCH", "El progenitor debe pertenecer al mismo ganadero.", Response.Status.BAD_REQUEST);
+        }
+        if (parent.getSex() != requiredSex) {
+            throw new BusinessException(invalidSexCode, "El sexo del progenitor no coincide con el rol informado.", Response.Status.BAD_REQUEST);
         }
     }
 

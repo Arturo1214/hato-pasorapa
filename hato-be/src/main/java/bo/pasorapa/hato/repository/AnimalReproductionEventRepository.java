@@ -17,6 +17,10 @@ public class AnimalReproductionEventRepository implements PanacheRepositoryBase<
         return find("operationId", operationId).firstResultOptional();
     }
 
+    public Optional<AnimalReproductionEvent> findByEventIdOrOperationId(UUID eventUuid) {
+        return find("eventId = ?1 or operationId = ?1", eventUuid).firstResultOptional();
+    }
+
     public List<AnimalReproductionEvent> listHistory(
             UUID animalUuid,
             AnimalReproductionEventType reproductionEventType,

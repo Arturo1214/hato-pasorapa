@@ -38,7 +38,9 @@ import org.junit.jupiter.api.Test;
 class AnimalHealthEventResourceTest {
 
     private static final UUID OWNER_ID = UUID.fromString("ae2cb895-826c-4983-b769-df6948df379e");
+    private static final UUID OTHER_OWNER_ID = UUID.fromString("7b946121-9858-4130-b206-8fb1f27e16b1");
     private static final UUID USER_ID = UUID.fromString("8a20f320-0247-4df1-9b1f-4920d7b4bd14");
+    private static final UUID GANADERO_USER_ID = UUID.fromString("b24cf2ba-ff0c-4822-a7a0-040d60850449");
 
     @Inject
     UserRepository userRepository;
@@ -66,7 +68,9 @@ class AnimalHealthEventResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("animal-health-admin", "animal-health-admin@hato.bo", "AnimalHealth9"));
-            ganaderoRepository.persist(buildGanadero());
+            userRepository.persist(buildUser(GANADERO_USER_ID, "animal-health-ganadero", "animal-health-ganadero@hato.bo", "AnimalHealthGanadero9", Role.GANADERO));
+            ganaderoRepository.persist(buildGanadero(OWNER_ID, "NIT-HEALTH-OWNER", "Ganadero Salud", "animal-health-ganadero@hato.bo"));
+            ganaderoRepository.persist(buildGanadero(OTHER_OWNER_ID, "NIT-HEALTH-OTHER", "Ganadero Otro", "animal-health-other@hato.bo"));
         });
     }
 
@@ -142,6 +146,35 @@ class AnimalHealthEventResourceTest {
                 .body("items[0].operationId", equalTo("00000000-0000-0000-0000-000000000400"));
     }
 
+    @Test
+    void shouldRejectGanaderoHealthEventReadForAnotherOwnersAnimal() {
+        UUID ownAnimalUuid = UUID.fromString("2959a10f-0a3a-4b54-b11b-3e55b6cf794c");
+        UUID otherAnimalUuid = UUID.fromString("34ebfce9-9fb9-4307-91d8-58184174a281");
+        seedAnimal(ownAnimalUuid, OWNER_ID);
+        seedAnimal(otherAnimalUuid, OTHER_OWNER_ID);
+        seedEvent(ownAnimalUuid, AnimalHealthEventType.FIELD_VET_VISIT, "2026-04-26T10:00:00", "event-600", fieldVetMetadata("VISIT-OWN", "STARTED", null));
+        seedEvent(otherAnimalUuid, AnimalHealthEventType.FIELD_VET_VISIT, "2026-04-26T11:00:00", "event-700", fieldVetMetadata("VISIT-OTHER", "STARTED", null));
+
+        String ganaderoToken = loginAs("animal-health-ganadero", "AnimalHealthGanadero9");
+
+        given()
+                .auth().oauth2(ganaderoToken)
+                .when()
+                .get("/api/animals/{uuid}/health-events", ownAnimalUuid)
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].animalUuid", equalTo(ownAnimalUuid.toString()));
+
+        given()
+                .auth().oauth2(ganaderoToken)
+                .when()
+                .get("/api/animals/{uuid}/health-events", otherAnimalUuid)
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("ANIMAL_NOT_FOUND"));
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)
@@ -160,27 +193,36 @@ class AnimalHealthEventResourceTest {
     }
 
     private User buildUser(String username, String email, String password) {
+        return buildUser(USER_ID, username, email, password, Role.ADMIN);
+    }
+
+    private User buildUser(UUID id, String username, String email, String password, Role role) {
         User user = new User();
-        user.setId(USER_ID);
+        user.setId(id);
         user.setUsername(username);
         user.setEmail(email);
         user.setDisplayName(username);
         user.setPasswordHash(passwordHasher.hash(password));
-        user.setRole(Role.ADMIN);
+        user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
     }
 
-    private Ganadero buildGanadero() {
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
-        ganadero.setId(OWNER_ID);
-        ganadero.setBusinessIdentifier("NIT-HEALTH-OWNER");
-        ganadero.setName("Ganadero Salud");
+        ganadero.setId(id);
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
     }
 
     private void seedAnimal(UUID animalUuid) {
+        seedAnimal(animalUuid, OWNER_ID);
+    }
+
+    private void seedAnimal(UUID animalUuid, UUID ownerId) {
         QuarkusTransaction.requiringNew().run(() -> {
             Animal animal = new Animal();
             animal.setUuid(animalUuid);
@@ -190,7 +232,7 @@ class AnimalHealthEventResourceTest {
             animal.setAreteNormalized(animal.getArete().toLowerCase());
             animal.setMarca("Marca Norte");
             animal.setMarcaNormalized("marca norte");
-            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
             animal.setCategory(AnimalCategory.VACA);
             animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);

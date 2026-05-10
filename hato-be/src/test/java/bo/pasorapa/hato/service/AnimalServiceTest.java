@@ -17,6 +17,8 @@ import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
+import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationRequest;
+import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationOffspringRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -25,6 +27,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,6 +85,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                        null,
+                        null,
                         "BO-2000",
                         null,
                         null,
@@ -100,6 +105,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         PRIMARY_GANADERO_ID,
+                        null,
+                        null,
                         " ",
                         null,
                         null,
@@ -118,6 +125,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         SECONDARY_GANADERO_ID,
+                        null,
+                        null,
                         "bo-1000",
                         "Otra Marca",
                         null,
@@ -136,6 +145,8 @@ class AnimalServiceTest {
         assertDoesNotThrow(() -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         SECONDARY_GANADERO_ID,
+                        null,
+                        null,
                         "BO-3000",
                         "Marca Base",
                         "Tatuaje Base",
@@ -159,6 +170,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         PRIMARY_GANADERO_ID,
+                        null,
+                        null,
                         "BO-6000",
                         null,
                         null,
@@ -177,6 +190,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         PRIMARY_GANADERO_ID,
+                        null,
+                        null,
                         "BO-7000",
                         null,
                         null,
@@ -225,6 +240,8 @@ class AnimalServiceTest {
         Animal created = QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         null,
+                        null,
+                        null,
                         "BO-9000",
                         null,
                         null,
@@ -243,6 +260,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         SECONDARY_GANADERO_ID,
+                        null,
+                        null,
                         "BO-9100",
                         null,
                         null,
@@ -262,6 +281,8 @@ class AnimalServiceTest {
         BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
                 animalService.create(new AnimalRequest(
                         null,
+                        null,
+                        null,
                         "BO-9200",
                         null,
                         null,
@@ -274,6 +295,81 @@ class AnimalServiceTest {
 
         assertEquals("ANIMAL_OWNER_GANADERO_ID_REQUIRED", exception.code());
         assertEquals(Response.Status.BAD_REQUEST, exception.status());
+    }
+
+    @Test
+    void shouldRegisterBirthCreatingOffspringWithMotherFatherAndEvent() {
+        UUID motherUuid = UUID.fromString("70d54995-e6e2-4813-bd75-e23cc0da6010");
+        UUID fatherUuid = UUID.fromString("5aa94e7b-4532-424d-bc50-1dd7b5d469ad");
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal mother = buildAnimal(motherUuid, PRIMARY_GANADERO_ID, "MADRE-001", "Marca Madre", null);
+            mother.setCategory(AnimalCategory.VACA);
+            mother.setSex(AnimalSex.HEMBRA);
+            animalRepository.persist(mother);
+
+            Animal father = buildAnimal(fatherUuid, PRIMARY_GANADERO_ID, "PADRE-001", "Marca Padre", null);
+            father.setCategory(AnimalCategory.TORO);
+            father.setSex(AnimalSex.MACHO);
+            animalRepository.persist(father);
+        });
+
+        var response = QuarkusTransaction.requiringNew().call(() -> animalService.registerBirth(
+                motherUuid,
+                new BirthRegistrationRequest(
+                        LocalDate.of(2026, 5, 10),
+                        fatherUuid,
+                        List.of(new BirthRegistrationOffspringRequest(
+                                "CRIA-001",
+                                null,
+                                null,
+                                AnimalCategory.TERNERA,
+                                AnimalSex.HEMBRA,
+                                true,
+                                null,
+                                new BigDecimal("32.40"))),
+                        "Parto registrado en campo"),
+                ADMIN_USER_ID));
+
+        assertEquals(1, response.offspring().size());
+        assertEquals(motherUuid, response.offspring().getFirst().motherAnimalUuid());
+        assertEquals(fatherUuid, response.offspring().getFirst().fatherAnimalUuid());
+        assertEquals(LocalDate.of(2026, 5, 10), response.offspring().getFirst().birthDate());
+        assertEquals(AnimalCategory.TERNERA, response.offspring().getFirst().category());
+        assertEquals("CRIA-001", response.offspring().getFirst().arete());
+        assertEquals(motherUuid, response.motherAnimalUuid());
+        assertEquals(fatherUuid, response.fatherAnimalUuid());
+        assertEquals(1, response.offspringCount());
+        assertDoesNotThrow(response::eventId);
+    }
+
+    @Test
+    void shouldRejectBirthRegistrationWhenMotherIsNotFemale() {
+        UUID motherUuid = UUID.fromString("0b79206a-ec9c-4ebc-bb90-0992f57f9687");
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal mother = animalRepository.findByUuid(motherUuid).orElseThrow();
+            mother.setCategory(AnimalCategory.TORO);
+            mother.setSex(AnimalSex.MACHO);
+        });
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
+                animalService.registerBirth(
+                        motherUuid,
+                        new BirthRegistrationRequest(
+                                LocalDate.of(2026, 5, 10),
+                                null,
+                                List.of(new BirthRegistrationOffspringRequest(
+                                        "CRIA-MACHO-001",
+                                        null,
+                                        null,
+                                        AnimalCategory.TERNERO,
+                                        AnimalSex.MACHO,
+                                        true,
+                                        null,
+                                        new BigDecimal("30.00"))),
+                                null),
+                        ADMIN_USER_ID)));
+
+        assertEquals("ANIMAL_BIRTH_MOTHER_SEX_INVALID", exception.code());
     }
 
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {

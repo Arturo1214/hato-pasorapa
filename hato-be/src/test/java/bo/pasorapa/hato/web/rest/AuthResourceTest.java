@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class AuthResourceTest {
 
+    private static final UUID GANADERO_ID = UUID.fromString("18f25f31-a7da-4d7f-8c5d-78d17e3c778f");
+
     @Inject
     UserRepository userRepository;
 
@@ -43,6 +45,7 @@ class AuthResourceTest {
             userRepository.persist(buildUser("bloqueado", "blocked@hato.bo", Role.ADMIN, UserStatus.BLOCKED, "Blocked99"));
 
             Ganadero ganadero = new Ganadero();
+            ganadero.setId(GANADERO_ID);
             ganadero.setBusinessIdentifier("12345678");
             ganadero.setName("Ganadero Norte");
             ganadero.setEmail("ganadero@hato.bo");
@@ -67,6 +70,7 @@ class AuthResourceTest {
                 .body("accessToken", org.hamcrest.Matchers.not(org.hamcrest.Matchers.blankOrNullString()))
                 .body("expiresInSeconds", equalTo(28800))
                 .body("user.username", equalTo("admin"))
+                .body("user.ganaderoId", org.hamcrest.Matchers.nullValue())
                 .body("user.role", equalTo("ADMIN"))
                 .body("user.status", equalTo("ACTIVE"));
     }
@@ -86,6 +90,7 @@ class AuthResourceTest {
                 .then()
                 .statusCode(200)
                 .body("user.username", equalTo("ganadero@hato.bo"))
+                .body("user.ganaderoId", equalTo(GANADERO_ID.toString()))
                 .body("user.role", equalTo("GANADERO"));
     }
 
@@ -104,6 +109,7 @@ class AuthResourceTest {
                 .then()
                 .statusCode(200)
                 .body("user.username", equalTo("ganadero@hato.bo"))
+                .body("user.ganaderoId", equalTo(GANADERO_ID.toString()))
                 .body("user.role", equalTo("GANADERO"));
     }
 

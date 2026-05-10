@@ -35,6 +35,7 @@ class RoleRedirectAuthServiceStub {
     this.offlineSessionStatus.set('active');
     this.currentUserState.set({
       id: 'user-id',
+      ganaderoId: role === 'GANADERO' ? 'ganadero-id' : null,
       username: role.toLowerCase(),
       email: role.toLowerCase() + '@hato.bo',
       displayName: role,

@@ -30,6 +30,10 @@ public class AnimalRepository implements PanacheRepositoryBase<Animal, Long> {
         return find("areteNormalized", normalizedArete.toLowerCase()).firstResultOptional();
     }
 
+    public List<Animal> listOffspringByParentUuid(UUID parentUuid) {
+        return list("motherAnimalUuid = ?1 or fatherAnimalUuid = ?1", parentUuid);
+    }
+
     public List<Animal> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorUuid, int limitPlusOne) {
         if (cursorUpdatedAt == null) {
             return find("from Animal order by updatedAt asc, uuid asc").page(0, limitPlusOne).list();

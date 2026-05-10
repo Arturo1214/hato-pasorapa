@@ -2,9 +2,13 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
+import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -23,14 +27,20 @@ public class AnimalHealthEventService {
 
     private final AnimalHealthEventRepository animalHealthEventRepository;
     private final AnimalRepository animalRepository;
+    private final UserRepository userRepository;
+    private final GanaderoRepository ganaderoRepository;
     private final AnimalHealthEventMapper animalHealthEventMapper;
 
     public AnimalHealthEventService(
             AnimalHealthEventRepository animalHealthEventRepository,
             AnimalRepository animalRepository,
+            UserRepository userRepository,
+            GanaderoRepository ganaderoRepository,
             AnimalHealthEventMapper animalHealthEventMapper) {
         this.animalHealthEventRepository = animalHealthEventRepository;
         this.animalRepository = animalRepository;
+        this.userRepository = userRepository;
+        this.ganaderoRepository = ganaderoRepository;
         this.animalHealthEventMapper = animalHealthEventMapper;
     }
 
@@ -67,6 +77,21 @@ public class AnimalHealthEventService {
             OffsetDateTime occurredFrom,
             OffsetDateTime occurredTo,
             String visitId) {
+        return list(animalUuid, healthEventType, occurredFrom, occurredTo, visitId, null, false);
+    }
+
+    public List<AnimalHealthEventResponse> list(
+            UUID animalUuid,
+            AnimalHealthEventType healthEventType,
+            OffsetDateTime occurredFrom,
+            OffsetDateTime occurredTo,
+            String visitId,
+            UUID currentUserId,
+            boolean ganaderoScoped) {
+        if (ganaderoScoped) {
+            requireAnimalOwnedByAuthenticatedGanadero(animalUuid, currentUserId);
+        }
+
         List<AnimalHealthEvent> timeline = animalHealthEventRepository.listHistory(
                 animalUuid,
                 healthEventType,
@@ -86,6 +111,23 @@ public class AnimalHealthEventService {
                             projection == null ? animalHealthEventMapper.readNextDueAt(metadata) : projection.nextDueAt());
                 })
                 .toList();
+    }
+
+    private void requireAnimalOwnedByAuthenticatedGanadero(UUID animalUuid, UUID currentUserId) {
+        Animal animal = animalRepository.findByUuid(animalUuid)
+                .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        User currentUser = userRepository.findByIdOptional(currentUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+        if (currentUser.getRole() != Role.GANADERO) {
+            throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no pertenece a un ganadero.", Response.Status.FORBIDDEN);
+        }
+
+        UUID authenticatedGanaderoId = ganaderoRepository.findByEmail(currentUser.getEmail())
+                .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND))
+                .getId();
+        if (!authenticatedGanaderoId.equals(animal.getOwnerGanadero().getId())) {
+            throw new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND);
+        }
     }
 
     public Map<String, Object> toPullItem(AnimalHealthEvent event) {

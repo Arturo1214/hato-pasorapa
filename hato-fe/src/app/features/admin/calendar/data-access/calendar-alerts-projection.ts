@@ -163,6 +163,8 @@ function readReproductionDueAt(event: AnimalReproductionEventSnapshotPayload) {
   // Default decision documented for V1: no implicit reproductive milestones.
   // Missing explicit metadata means the item does not enter the derived schedule.
   switch (event.reproductionEventType) {
+    case 'PREGNANCY_DIAGNOSIS':
+      return isPositivePregnancyDiagnosis(event) ? event.metadata.expectedBirthDate : null;
     case 'PREGNANCY_CONFIRMED':
       return event.metadata.confirmationDate;
     case 'BIRTH':
@@ -170,6 +172,10 @@ function readReproductionDueAt(event: AnimalReproductionEventSnapshotPayload) {
     default:
       return null;
   }
+}
+
+function isPositivePregnancyDiagnosis(event: AnimalReproductionEventSnapshotPayload) {
+  return event.metadata.result === 'PRENADA' && event.metadata.negativeResult !== true && event.metadata.status !== 'fallo';
 }
 
 function normalizeDueAt(value: string | null | undefined) {
@@ -194,6 +200,7 @@ function reproductionEventTitle(type: AnimalReproductionEventSnapshotPayload['re
   return (
     {
       SERVICE: 'Servicio registrado',
+      PREGNANCY_DIAGNOSIS: 'Fecha probable de parto',
       PREGNANCY_CONFIRMED: 'Control de preñez',
       PREGNANCY_LOSS: 'Seguimiento de pérdida',
       BIRTH: 'Parto programado',

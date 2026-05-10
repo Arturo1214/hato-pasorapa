@@ -26,10 +26,41 @@ export interface AnimalBirthMetadata extends Record<string, unknown> {
   offspringAnimalUuids?: string[];
 }
 
+export const REPRODUCTIVE_SERVICE_METHOD = {
+  MONTA_NATURAL: 'MONTA_NATURAL',
+  INSEMINACION_ARTIFICIAL: 'INSEMINACION_ARTIFICIAL',
+} as const;
+
+export type ReproductiveServiceMethod = (typeof REPRODUCTIVE_SERVICE_METHOD)[keyof typeof REPRODUCTIVE_SERVICE_METHOD];
+
+export const PREGNANCY_DIAGNOSIS_RESULT = {
+  PRENADA: 'PRENADA',
+  NO_PRENADA: 'NO_PRENADA',
+} as const;
+
+export type PregnancyDiagnosisResult = (typeof PREGNANCY_DIAGNOSIS_RESULT)[keyof typeof PREGNANCY_DIAGNOSIS_RESULT];
+
+export interface AnimalServiceMetadata extends Record<string, unknown> {
+  serviceMethod: ReproductiveServiceMethod;
+  fatherAnimalUuid?: string;
+  semenReference?: string;
+  bullReference?: string;
+}
+
+export interface AnimalPregnancyDiagnosisMetadata extends Record<string, unknown> {
+  diagnosisDate: string;
+  result: PregnancyDiagnosisResult;
+  expectedBirthDate?: string;
+  serviceEventUuid?: string;
+  relatedServiceEventId?: string;
+  negativeResult?: boolean;
+  status?: 'fallo';
+}
+
 export interface AnimalReproductionEventItem {
   id: string;
   animalUuid: string;
-  reproductionEventType: 'SERVICE' | 'PREGNANCY_CONFIRMED' | 'PREGNANCY_LOSS' | 'BIRTH';
+  reproductionEventType: 'SERVICE' | 'PREGNANCY_DIAGNOSIS' | 'PREGNANCY_CONFIRMED' | 'PREGNANCY_LOSS' | 'BIRTH';
   occurredAt: string;
   notes: string | null;
   performedByUserId: string;
@@ -272,11 +303,60 @@ export function buildBirthMetadata(input: {
   };
 }
 
+export function buildServiceMetadata(input: {
+  serviceMethod: ReproductiveServiceMethod;
+  fatherAnimalUuid?: string | null;
+  semenReference?: string | null;
+  bullReference?: string | null;
+}): AnimalServiceMetadata {
+  if (input.serviceMethod === REPRODUCTIVE_SERVICE_METHOD.MONTA_NATURAL) {
+    return {
+      serviceMethod: input.serviceMethod,
+      fatherAnimalUuid: normalizeOptionalText(input.fatherAnimalUuid) ?? undefined,
+    };
+  }
+
+  return {
+    serviceMethod: input.serviceMethod,
+    semenReference: normalizeOptionalText(input.semenReference) ?? undefined,
+    bullReference: normalizeOptionalText(input.bullReference) ?? undefined,
+  };
+}
+
+export function buildPregnancyDiagnosisMetadata(input: {
+  diagnosisDate: string;
+  result: PregnancyDiagnosisResult;
+  expectedBirthDate?: string | null;
+  serviceEventUuid?: string | null;
+  relatedServiceEventId?: string | null;
+}): AnimalPregnancyDiagnosisMetadata {
+  const serviceEventUuid = normalizeOptionalText(input.serviceEventUuid) ?? normalizeOptionalText(input.relatedServiceEventId) ?? undefined;
+  const metadata: AnimalPregnancyDiagnosisMetadata = {
+    diagnosisDate: normalizeOccurredAt(input.diagnosisDate),
+    result: input.result,
+    expectedBirthDate: input.result === PREGNANCY_DIAGNOSIS_RESULT.PRENADA
+      ? normalizeOptionalText(input.expectedBirthDate ? normalizeOccurredAt(input.expectedBirthDate) : null) ?? undefined
+      : undefined,
+    serviceEventUuid,
+    relatedServiceEventId: undefined,
+  };
+
+  if (input.result === PREGNANCY_DIAGNOSIS_RESULT.NO_PRENADA) {
+    metadata.negativeResult = true;
+    metadata.status = 'fallo';
+  }
+
+  return metadata;
+}
+
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
 }
 
 function normalizeOccurredAt(value: string) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return `${value}T00:00:00.000Z`;
+  }
   return value.includes('T') && !value.endsWith('Z') ? `${value}:00.000Z`.replace('T', 'T') : value;
 }

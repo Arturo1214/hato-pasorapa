@@ -157,6 +157,51 @@ describe('calendar alerts projection', () => {
       'month-only',
     ]);
   });
+
+  it('should project expected birth date only for positive pregnancy diagnosis events', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-05-10T10:00:00.000Z',
+      preferences: { horizonDays: 7, notificationsEnabled: false, snoozedUntil: null },
+      healthEvents: [],
+      reproductionEvents: [
+        snapshot('ANIMAL_REPRODUCTION_EVENT', 'pregnancy-positive', {
+          id: 'pregnancy-positive',
+          animalUuid: 'animal-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10T09:00:00.000Z',
+          notes: 'Ecografía positiva',
+          metadata: {
+            diagnosisDate: '2026-05-10T00:00:00.000Z',
+            result: 'PRENADA',
+            expectedBirthDate: '2027-02-14T00:00:00.000Z',
+          },
+        }),
+        snapshot('ANIMAL_REPRODUCTION_EVENT', 'pregnancy-negative', {
+          id: 'pregnancy-negative',
+          animalUuid: 'animal-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10T09:30:00.000Z',
+          notes: 'No preñada',
+          metadata: {
+            diagnosisDate: '2026-05-10T00:00:00.000Z',
+            result: 'NO_PRENADA',
+            expectedBirthDate: '2027-02-20T00:00:00.000Z',
+            negativeResult: true,
+            status: 'fallo',
+          },
+        }),
+      ],
+      animalEvents: [],
+    });
+
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]).toEqual(expect.objectContaining({
+      sourceId: 'pregnancy-positive',
+      dueAt: '2027-02-14T00:00:00.000Z',
+      title: 'Fecha probable de parto',
+    }));
+  });
 });
 
 function snapshot(entityType: OfflineSnapshotRecord['entityType'], entityId: string, payload: Record<string, unknown>): OfflineSnapshotRecord {

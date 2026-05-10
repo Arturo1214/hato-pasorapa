@@ -80,6 +80,7 @@ class AuthServiceStub {
     this.offlineSessionStatus.set('active');
     this.currentUserState.set({
       id: 'user-id',
+      ganaderoId: role === 'GANADERO' ? 'ganadero-id' : null,
       username: role === 'ADMIN' ? 'admin' : 'ganadero',
       email: role === 'ADMIN' ? 'admin@hato.bo' : 'ganadero@hato.bo',
       displayName: role === 'ADMIN' ? 'Admin Root' : 'Ganadero Base',
@@ -208,13 +209,13 @@ describe('admin auth integration flow', () => {
     await harness.fixture.whenStable();
     harness.detectChanges();
 
-    expect(router.url).toBe('/');
+    expect(router.url).toBe('/admin/dashboard');
     expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
     expect(harness.routeNativeElement?.textContent).toContain('Usuarios');
     expect(harness.routeNativeElement?.textContent).toContain('Ganaderos');
   });
 
-  it('should allow GANADERO sessions to access animales through the protected shell', async () => {
+  it('should allow GANADERO sessions to access their animales route through the protected shell', async () => {
     const { harness, router } = await configure();
 
     await harness.navigateByUrl('/login');
@@ -235,11 +236,11 @@ describe('admin auth integration flow', () => {
     await harness.fixture.whenStable();
     harness.detectChanges();
 
-    await harness.navigateByUrl('/admin/animales');
+    await harness.navigateByUrl('/ganadero/animales');
 
-    expect(router.url).toBe('/admin/animales');
+    expect(router.url).toBe('/ganadero/animales');
     expect(harness.routeNativeElement?.textContent).toContain('Animales');
-    expect(harness.routeNativeElement?.textContent).toContain('Nueva ficha animal');
+    expect(harness.routeNativeElement?.textContent).toContain('Nuevo animal');
   });
 
   it('should redirect expired sessions to login with differentiated context before any protected sync flow resumes', async () => {

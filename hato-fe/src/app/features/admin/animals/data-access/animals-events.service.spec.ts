@@ -13,6 +13,7 @@ import { AnimalsEventsService, type AnimalEventItem } from './animals-events.ser
 describe('AnimalsEventsService', () => {
   const currentUser: SessionUser = {
     id: 'user-1',
+    ganaderoId: null,
     username: 'admin',
     email: 'admin@hato.bo',
     displayName: 'Admin',

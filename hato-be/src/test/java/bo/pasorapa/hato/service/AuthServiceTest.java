@@ -25,6 +25,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class AuthServiceTest {
 
+    private static final UUID GANADERO_ID = UUID.fromString("18f25f31-a7da-4d7f-8c5d-78d17e3c778f");
+
     @Inject
     AuthService authService;
 
@@ -50,6 +52,7 @@ class AuthServiceTest {
             userRepository.persist(buildUser("ganadero@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
 
             Ganadero ganadero = new Ganadero();
+            ganadero.setId(GANADERO_ID);
             ganadero.setBusinessIdentifier("12345678");
             ganadero.setName("Ganadero CI");
             ganadero.setEmail("ganadero@hato.bo");
@@ -96,6 +99,7 @@ class AuthServiceTest {
         AuthLoginResponse response = authService.login(new AuthLoginRequest("ganadero@hato.bo", "Ganadero9"));
 
         assertEquals("ganadero@hato.bo", response.user().username());
+        assertEquals(GANADERO_ID.toString(), response.user().ganaderoId());
     }
 
     @Test
@@ -103,6 +107,7 @@ class AuthServiceTest {
         AuthLoginResponse response = authService.login(new AuthLoginRequest("12345678", "Ganadero9"));
 
         assertEquals("ganadero@hato.bo", response.user().username());
+        assertEquals(GANADERO_ID.toString(), response.user().ganaderoId());
     }
 
     @Test

@@ -83,6 +83,7 @@ public class PublicGanaderoService {
                 authResponse.expiresInSeconds(),
                 new PublicUserDto(
                         authResponse.user().id(),
+                        authResponse.user().ganaderoId(),
                         authResponse.user().username(),
                         authResponse.user().email(),
                         authResponse.user().displayName(),

@@ -5,12 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
+import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -46,6 +50,9 @@ class AnimalReproductionEventServiceTest {
     GanaderoRepository ganaderoRepository;
 
     @Inject
+    UserRepository userRepository;
+
+    @Inject
     IntegrationDatabaseCleaner integrationDatabaseCleaner;
 
     @BeforeEach
@@ -54,6 +61,7 @@ class AnimalReproductionEventServiceTest {
             integrationDatabaseCleaner.clean();
             ganaderoRepository.persist(buildGanadero());
         });
+        seedUser(USER_ID, "repro-admin", "repro-admin@hato.bo", Role.ADMIN);
     }
 
     @Test
@@ -75,6 +83,254 @@ class AnimalReproductionEventServiceTest {
         assertEquals(operationId, created.getOperationId());
         assertEquals(created.getEventId(), replayed.getEventId());
         assertEquals(1, animalReproductionEventRepository.count());
+    }
+
+    @Test
+    void shouldCreateNaturalMountServiceOnlyForFemaleAnimalAndMaleSireFromSameOwner() {
+        UUID femaleUuid = UUID.fromString("01010101-0101-4101-8101-010101010101");
+        UUID sireUuid = UUID.fromString("02020202-0202-4202-8202-020202020202");
+        seedAnimal(femaleUuid, "AR-hembra-servicio", AnimalSex.HEMBRA, OWNER_ID);
+        seedAnimal(sireUuid, "AR-toro-servicio", AnimalSex.MACHO, OWNER_ID);
+
+        var created = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("03030303-0303-4303-8303-030303030303"),
+                "Servicio por monta natural",
+                Map.of("serviceMethod", "MONTA_NATURAL", "fatherAnimalUuid", sireUuid.toString())), USER_ID);
+
+        assertEquals(AnimalReproductionEventType.SERVICE, created.getReproductionEventType());
+        assertEquals(femaleUuid, created.getAnimal().getUuid());
+    }
+
+    @Test
+    void shouldRejectNaturalMountServiceWhenSireIsNotMaleFromSameOwner() {
+        UUID femaleUuid = UUID.fromString("04040404-0404-4404-8404-040404040404");
+        UUID wrongOwnerSireUuid = UUID.fromString("05050505-0505-4505-8505-050505050505");
+        UUID otherOwnerId = UUID.fromString("06060606-0606-4606-8606-060606060606");
+        seedGanadero(otherOwnerId, "NIT-REPRO-OTHER", "Ganadero Repro Otro");
+        seedAnimal(femaleUuid, "AR-hembra-owner", AnimalSex.HEMBRA, OWNER_ID);
+        seedAnimal(wrongOwnerSireUuid, "AR-toro-other", AnimalSex.MACHO, otherOwnerId);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("07070707-0707-4707-8707-070707070707"),
+                "Servicio con toro externo",
+                Map.of("serviceMethod", "MONTA_NATURAL", "fatherAnimalUuid", wrongOwnerSireUuid.toString())), USER_ID));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_SERVICE_SIRE_OWNER_MISMATCH", exception.code());
+    }
+
+    @Test
+    void shouldAllowArtificialInseminationServiceWithBullReferenceAndNoSireAnimal() {
+        UUID femaleUuid = UUID.fromString("08080808-0808-4808-8808-080808080808");
+        seedAnimal(femaleUuid, "AR-hembra-ia", AnimalSex.HEMBRA, OWNER_ID);
+
+        var created = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("09090909-0909-4909-8909-090909090909"),
+                "Servicio por inseminación artificial",
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "semenReference", "Pajuela toro catálogo IA-77")), USER_ID);
+
+        assertEquals(AnimalReproductionEventType.SERVICE, created.getReproductionEventType());
+        assertEquals(femaleUuid, created.getAnimal().getUuid());
+    }
+
+    @Test
+    void shouldRejectServiceForMaleAnimal() {
+        UUID maleUuid = UUID.fromString("10101010-1010-4010-8010-101010101010");
+        seedAnimal(maleUuid, "AR-macho-servicio", AnimalSex.MACHO, OWNER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(request(
+                maleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("11111111-2222-4333-8444-555555555555"),
+                "Servicio inválido",
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "bullReference", "Toro externo")), USER_ID));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_FEMALE_REQUIRED", exception.code());
+    }
+
+    @Test
+    void shouldRejectServiceWhenGanaderoUserDoesNotOwnFemaleAnimal() {
+        UUID otherOwnerId = UUID.fromString("12121212-1212-4212-8212-121212121212");
+        UUID otherUserId = UUID.fromString("13131313-1313-4313-8313-131313131313");
+        UUID femaleUuid = UUID.fromString("14141414-1414-4414-8414-141414141414");
+        seedGanadero(otherOwnerId, "NIT-REPRO-GANADERO", "Ganadero Usuario", "ganadero-repro@hato.bo");
+        seedUser(otherUserId, "ganadero-repro", "ganadero-repro@hato.bo", Role.GANADERO);
+        seedAnimal(femaleUuid, "AR-hembra-admin", AnimalSex.HEMBRA, OWNER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(new AnimalReproductionEventRequest(
+                femaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                OffsetDateTime.parse("2026-04-27T10:00:00Z"),
+                "Servicio sin propiedad",
+                otherUserId,
+                "ONLINE",
+                UUID.fromString("15151515-1515-4515-8515-151515151515"),
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "semenReference", "IA-99"),
+                OffsetDateTime.parse("2026-04-27T10:01:00Z")), otherUserId));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN", exception.code());
+    }
+
+    @Test
+    void shouldCreatePositivePregnancyDiagnosisForFemaleAnimal() {
+        UUID femaleUuid = UUID.fromString("16161616-1616-4616-8616-161616161616");
+        seedAnimal(femaleUuid, "AR-hembra-prenada", AnimalSex.HEMBRA, OWNER_ID);
+
+        var created = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("17171717-1717-4717-8717-171717171717"),
+                "Diagnóstico positivo",
+                Map.of(
+                        "diagnosisDate", "2026-05-10T10:00:00Z",
+                        "result", "PRENADA",
+                        "expectedBirthDate", "2027-02-14T00:00:00Z")), USER_ID);
+
+        assertEquals(AnimalReproductionEventType.PREGNANCY_DIAGNOSIS, created.getReproductionEventType());
+        assertEquals(femaleUuid, created.getAnimal().getUuid());
+    }
+
+    @Test
+    void shouldCreatePregnancyDiagnosisLinkedToPriorServiceForSameAnimal() {
+        UUID femaleUuid = UUID.fromString("16161616-1616-4616-8616-161616161617");
+        seedAnimal(femaleUuid, "AR-hembra-prenada-servicio", AnimalSex.HEMBRA, OWNER_ID);
+        var service = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("17171717-1717-4717-8717-171717171710"),
+                "Servicio IA",
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "semenReference", "IA-77")), USER_ID);
+
+        var diagnosis = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("17171717-1717-4717-8717-171717171711"),
+                "Diagnóstico asociado",
+                Map.of(
+                        "diagnosisDate", "2026-05-10T10:00:00Z",
+                        "result", "PRENADA",
+                        "serviceEventUuid", service.getEventId().toString())), USER_ID);
+
+        assertEquals(AnimalReproductionEventType.PREGNANCY_DIAGNOSIS, diagnosis.getReproductionEventType());
+        assertEquals(service.getEventId().toString(),
+                animalReproductionEventService.toPullItem(diagnosis).get("metadata") instanceof Map<?, ?> metadata
+                        ? metadata.get("serviceEventUuid")
+                        : null);
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisLinkedToServiceFromAnotherAnimal() {
+        UUID femaleUuid = UUID.fromString("16161616-1616-4616-8616-161616161618");
+        UUID otherFemaleUuid = UUID.fromString("16161616-1616-4616-8616-161616161619");
+        seedAnimal(femaleUuid, "AR-hembra-prenada-propia", AnimalSex.HEMBRA, OWNER_ID);
+        seedAnimal(otherFemaleUuid, "AR-hembra-prenada-ajena", AnimalSex.HEMBRA, OWNER_ID);
+        var otherService = animalReproductionEventService.create(request(
+                otherFemaleUuid,
+                AnimalReproductionEventType.SERVICE,
+                UUID.fromString("17171717-1717-4717-8717-171717171712"),
+                "Servicio de otra hembra",
+                Map.of("serviceMethod", "INSEMINACION_ARTIFICIAL", "semenReference", "IA-78")), USER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("17171717-1717-4717-8717-171717171713"),
+                "Diagnóstico con servicio ajeno",
+                Map.of(
+                        "diagnosisDate", "2026-05-10T10:00:00Z",
+                        "result", "PRENADA",
+                        "serviceEventUuid", otherService.getEventId().toString())), USER_ID));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_ANIMAL_MISMATCH", exception.code());
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisLinkedToNonServiceEvent() {
+        UUID femaleUuid = UUID.fromString("16161616-1616-4616-8616-161616161620");
+        seedAnimal(femaleUuid, "AR-hembra-prenada-tipo", AnimalSex.HEMBRA, OWNER_ID);
+        var previousDiagnosis = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("17171717-1717-4717-8717-171717171714"),
+                "Diagnóstico previo",
+                Map.of(
+                        "diagnosisDate", "2026-05-10T10:00:00Z",
+                        "result", "PRENADA")), USER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("17171717-1717-4717-8717-171717171715"),
+                "Diagnóstico con tipo inválido",
+                Map.of(
+                        "diagnosisDate", "2026-05-11T10:00:00Z",
+                        "result", "PRENADA",
+                        "serviceEventUuid", previousDiagnosis.getEventId().toString())), USER_ID));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_TYPE_INVALID", exception.code());
+    }
+
+    @Test
+    void shouldCreateNegativePregnancyDiagnosisWithFailureMetadata() {
+        UUID femaleUuid = UUID.fromString("18181818-1818-4818-8818-181818181818");
+        seedAnimal(femaleUuid, "AR-hembra-vacia", AnimalSex.HEMBRA, OWNER_ID);
+
+        var created = animalReproductionEventService.create(request(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("19191919-1919-4919-8919-191919191919"),
+                "No preñada",
+                Map.of(
+                        "diagnosisDate", "2026-05-10T10:00:00Z",
+                        "result", "NO_PRENADA",
+                        "negativeResult", true,
+                        "status", "fallo")), USER_ID);
+
+        assertEquals(AnimalReproductionEventType.PREGNANCY_DIAGNOSIS, created.getReproductionEventType());
+        assertEquals(femaleUuid, created.getAnimal().getUuid());
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisForMaleAnimal() {
+        UUID maleUuid = UUID.fromString("20202020-2020-4020-8020-202020202020");
+        seedAnimal(maleUuid, "AR-macho-diagnostico", AnimalSex.MACHO, OWNER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(request(
+                maleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                UUID.fromString("21212121-2121-4121-8121-212121212121"),
+                "Diagnóstico inválido",
+                Map.of("diagnosisDate", "2026-05-10T10:00:00Z", "result", "NO_PRENADA", "negativeResult", true, "status", "fallo")), USER_ID));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_FEMALE_REQUIRED", exception.code());
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisWhenGanaderoUserDoesNotOwnAnimal() {
+        UUID otherOwnerId = UUID.fromString("22222222-2222-4222-8222-222222222222");
+        UUID otherUserId = UUID.fromString("23232323-2323-4323-8323-232323232323");
+        UUID femaleUuid = UUID.fromString("24242424-2424-4424-8424-242424242424");
+        seedGanadero(otherOwnerId, "NIT-REPRO-DIAG", "Ganadero Diagnóstico", "ganadero-diagnostico@hato.bo");
+        seedUser(otherUserId, "ganadero-diagnostico", "ganadero-diagnostico@hato.bo", Role.GANADERO);
+        seedAnimal(femaleUuid, "AR-hembra-ajena", AnimalSex.HEMBRA, OWNER_ID);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(new AnimalReproductionEventRequest(
+                femaleUuid,
+                AnimalReproductionEventType.PREGNANCY_DIAGNOSIS,
+                OffsetDateTime.parse("2026-05-10T10:00:00Z"),
+                "Diagnóstico sin propiedad",
+                otherUserId,
+                "ONLINE",
+                UUID.fromString("25252525-2525-4525-8525-252525252525"),
+                Map.of("diagnosisDate", "2026-05-10T10:00:00Z", "result", "PRENADA"),
+                OffsetDateTime.parse("2026-05-10T10:01:00Z")), otherUserId));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN", exception.code());
     }
 
     @Test
@@ -165,6 +421,7 @@ class AnimalReproductionEventServiceTest {
     void shouldDerivePerformedByUserIdFromAuthenticatedUser() {
         UUID animalUuid = UUID.fromString("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee");
         UUID authenticatedUserId = UUID.fromString("99999999-aaaa-4bbb-8ccc-dddddddddddd");
+        seedUser(authenticatedUserId, "repro-admin-derived", "repro-admin-derived@hato.bo", Role.ADMIN);
         seedAnimal(animalUuid, "AR-derived");
 
         var created = animalReproductionEventService.create(new AnimalReproductionEventRequest(
@@ -219,6 +476,10 @@ class AnimalReproductionEventServiceTest {
     }
 
     private void seedAnimal(UUID animalUuid, String tag) {
+        seedAnimal(animalUuid, tag, AnimalSex.HEMBRA, OWNER_ID);
+    }
+
+    private void seedAnimal(UUID animalUuid, String tag, AnimalSex sex, UUID ownerId) {
         QuarkusTransaction.requiringNew().run(() -> {
             Animal animal = new Animal();
             animal.setUuid(animalUuid);
@@ -228,9 +489,9 @@ class AnimalReproductionEventServiceTest {
             animal.setAreteNormalized(tag.toLowerCase());
             animal.setMarca("Marca " + tag);
             animal.setMarcaNormalized(("Marca " + tag).toLowerCase());
-            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
-            animal.setCategory(AnimalCategory.VACA);
-            animal.setSex(AnimalSex.HEMBRA);
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
+            animal.setCategory(sex == AnimalSex.HEMBRA ? AnimalCategory.VACA : AnimalCategory.TORO);
+            animal.setSex(sex);
             animal.setActive(true);
             animal.setAdmissionDate(LocalDate.of(2024, 1, 1));
             animal.setWeightKg(new BigDecimal("400.00"));
@@ -242,11 +503,42 @@ class AnimalReproductionEventServiceTest {
     }
 
     private Ganadero buildGanadero() {
+        return buildGanadero(OWNER_ID, "NIT-REPRO-001", "Ganadero Repro");
+    }
+
+    private void seedGanadero(UUID id, String businessIdentifier, String name) {
+        seedGanadero(id, businessIdentifier, name, null);
+    }
+
+    private void seedGanadero(UUID id, String businessIdentifier, String name, String email) {
+        QuarkusTransaction.requiringNew().run(() -> ganaderoRepository.persist(buildGanadero(id, businessIdentifier, name, email)));
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name) {
+        return buildGanadero(id, businessIdentifier, name, null);
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
-        ganadero.setId(OWNER_ID);
-        ganadero.setBusinessIdentifier("NIT-REPRO-001");
-        ganadero.setName("Ganadero Repro");
+        ganadero.setId(id);
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
+    }
+
+    private void seedUser(UUID id, String username, String email, Role role) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            User user = new User();
+            user.setId(id);
+            user.setUsername(username);
+            user.setEmail(email);
+            user.setDisplayName(username);
+            user.setPasswordHash("hash");
+            user.setRole(role);
+            user.setStatus(UserStatus.ACTIVE);
+            userRepository.persist(user);
+        });
     }
 }

@@ -66,6 +66,7 @@ class PublicGanaderoServiceTest {
         });
 
         assertEquals("ganadera@hato.bo", response.user().username());
+        assertTrue(response.user().ganaderoId() != null && !response.user().ganaderoId().isBlank());
     }
 
     @Test
@@ -79,7 +80,7 @@ class PublicGanaderoServiceTest {
                         "ganadera@hato.bo",
                         "Ganadera9",
                         "",
-                        Instant.now().minusSeconds(5)), "127.0.0.1"));
+                        Instant.now().minusSeconds(5)), "127.0.0.2"));
 
         assertEquals("EMAIL_ALREADY_EXISTS", exception.code());
     }
@@ -101,7 +102,7 @@ class PublicGanaderoServiceTest {
                         "nueva@hato.bo",
                         "Ganadera9",
                         "",
-                        Instant.now().minusSeconds(5)), "127.0.0.1"));
+                        Instant.now().minusSeconds(5)), "127.0.0.3"));
 
         assertEquals("GANADERO_ALREADY_EXISTS", exception.code());
         QuarkusTransaction.requiringNew().run(() -> assertEquals(0, userRepository.count()));
@@ -109,7 +110,7 @@ class PublicGanaderoServiceTest {
 
     @Test
     void shouldRejectValuesThatOverflowUserConstraintsBeforePersisting() {
-        String emailTooLongForUsername = "campo-muy-largo-para-usuario-publico-001@registro-ganadero-pasorapa.bo";
+        String emailTooLongForUsername = "campo-muy-largo-para-usuario-publico-001-extra-extra-extra@registro-ganadero-pasorapa.bo";
         String nameTooLongForDisplayName = "Ganadera ".repeat(14);
 
         BusinessException emailException = assertThrows(BusinessException.class,

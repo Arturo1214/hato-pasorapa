@@ -11,5 +11,9 @@ export const roleGuard = (allowedRoles: Role[]): CanActivateFn => () => {
     return true;
   }
 
+  if (user && user.status === 'ACTIVE') {
+    return router.createUrlTree(['/403']);
+  }
+
   return router.createUrlTree(['/login']);
 };

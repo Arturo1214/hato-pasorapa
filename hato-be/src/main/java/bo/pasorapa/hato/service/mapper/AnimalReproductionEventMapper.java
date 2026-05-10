@@ -134,6 +134,7 @@ public class AnimalReproductionEventMapper {
 
         switch (type) {
             case SERVICE -> requireText(metadata.get("serviceMethod"), "ANIMAL_REPRODUCTION_EVENT_SERVICE_METHOD_REQUIRED");
+            case PREGNANCY_DIAGNOSIS -> validatePregnancyDiagnosisMetadata(metadata);
             case PREGNANCY_CONFIRMED ->
                     requireOffsetDateTime(metadata.get("confirmationDate"), "ANIMAL_REPRODUCTION_EVENT_CONFIRMATION_DATE_REQUIRED");
             case PREGNANCY_LOSS -> requireText(metadata.get("lossReason"), "ANIMAL_REPRODUCTION_EVENT_LOSS_REASON_REQUIRED");
@@ -180,6 +181,23 @@ public class AnimalReproductionEventMapper {
 
     private void validateBirthMetadata(Map<String, Object> metadata) {
         readBirthMetadata(metadata);
+    }
+
+    private void validatePregnancyDiagnosisMetadata(Map<String, Object> metadata) {
+        requireOffsetDateTime(metadata.get("diagnosisDate"), "ANIMAL_REPRODUCTION_EVENT_DIAGNOSIS_DATE_REQUIRED");
+        String result = requireText(metadata.get("result"), "ANIMAL_REPRODUCTION_EVENT_DIAGNOSIS_RESULT_REQUIRED");
+        if (!"PRENADA".equals(result) && !"NO_PRENADA".equals(result)) {
+            throw new IllegalArgumentException("ANIMAL_REPRODUCTION_EVENT_DIAGNOSIS_RESULT_INVALID");
+        }
+        if (metadata.get("expectedBirthDate") != null) {
+            requireOffsetDateTime(metadata.get("expectedBirthDate"), "ANIMAL_REPRODUCTION_EVENT_EXPECTED_BIRTH_DATE_INVALID");
+        }
+        if (metadata.get("serviceEventUuid") != null) {
+            requireUuid(metadata.get("serviceEventUuid"), "ANIMAL_REPRODUCTION_EVENT_SERVICE_EVENT_UUID_INVALID");
+        }
+        if (metadata.get("relatedServiceEventId") != null) {
+            requireUuid(metadata.get("relatedServiceEventId"), "ANIMAL_REPRODUCTION_EVENT_RELATED_SERVICE_EVENT_ID_INVALID");
+        }
     }
 
     private void rejectOutOfScopeFields(Map<String, Object> metadata) {

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { InMemoryOfflinePersistenceAdapter } from '../../../../core/offline/offline-store.migrations';
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { CALENDAR_ALERTS_REFRESH_EVENT } from '../../../../core/offline/sync-orchestrator.service';
@@ -11,7 +12,13 @@ describe('CalendarAlertsStore', () => {
   let gateway: BrowserNotificationGateway;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [CalendarAlertsStore, BrowserNotificationGateway] });
+    TestBed.configureTestingModule({
+      providers: [
+        CalendarAlertsStore,
+        BrowserNotificationGateway,
+        { provide: AuthService, useValue: { currentUser: () => ({ id: 'admin-1', ganaderoId: null, role: 'ADMIN', status: 'ACTIVE' }) } },
+      ],
+    });
     offlineStore = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
     store = TestBed.inject(CalendarAlertsStore);
     gateway = TestBed.inject(BrowserNotificationGateway);
@@ -143,6 +150,63 @@ describe('CalendarAlertsStore', () => {
       notificationsEnabled: false,
       snoozedUntil: null,
     });
+  });
+
+  it('should filter local calendar snapshots to the authenticated ganadero owner', async () => {
+    await seedSnapshots(offlineStore, '2026-04-28T09:00:00.000Z');
+    await offlineStore.saveSnapshot({
+      key: 'ANIMAL:animal-2',
+      entityType: 'ANIMAL',
+      entityId: 'animal-2',
+      updatedAt: '2026-04-27T08:00:00.000Z',
+      payload: {
+        uuid: 'animal-2',
+        ownerGanaderoId: 'gan-2',
+        arete: 'BO-002',
+        category: 'COW',
+        active: true,
+        admissionDate: '2026-04-01T00:00:00.000Z',
+        weightKg: 420,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: '2026-04-27T08:00:00.000Z',
+        version: 1,
+        lastSyncedAt: null,
+      },
+    });
+    await offlineStore.saveSnapshot({
+      key: 'ANIMAL_HEALTH_EVENT:health-2',
+      entityType: 'ANIMAL_HEALTH_EVENT',
+      entityId: 'health-2',
+      updatedAt: '2026-04-27T08:00:00.000Z',
+      payload: {
+        id: 'health-2',
+        animalUuid: 'animal-2',
+        healthEventType: 'VACCINATION',
+        notes: 'No debe verse',
+        metadata: { nextDueAt: '2026-04-28T09:00:00.000Z' },
+      },
+    });
+
+    store.configureForTesting({
+      authService: { currentUser: (() => ({ id: 'user-1', ganaderoId: 'gan-1', role: 'GANADERO', status: 'ACTIVE', username: 'gan-1', email: 'gan-1@hato.bo', displayName: 'Gan 1', version: 1, updatedAt: '2026-04-27T00:00:00.000Z', lastSyncedAt: null })) as never },
+    });
+
+    await store.initialize();
+
+    expect(store.totalPending()).toBe(1);
+    expect(store.windows().upcoming.map((item) => item.animalUuid)).toEqual(['animal-1']);
+  });
+
+  it('should fail closed for ganadero calendar snapshots when session has no ganaderoId', async () => {
+    await seedSnapshots(offlineStore, '2026-04-28T09:00:00.000Z');
+    store.configureForTesting({
+      authService: { currentUser: (() => ({ id: 'user-1', ganaderoId: null, role: 'GANADERO', status: 'ACTIVE', username: 'gan-1', email: 'gan-1@hato.bo', displayName: 'Gan 1', version: 1, updatedAt: '2026-04-27T00:00:00.000Z', lastSyncedAt: null })) as never },
+    });
+
+    await store.initialize();
+
+    expect(store.totalPending()).toBe(0);
+    expect(store.windows().upcoming).toEqual([]);
   });
 });
 

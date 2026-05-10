@@ -29,13 +29,38 @@ describe('roleGuard', () => {
     expect(result).toBe(true);
   });
 
-  it('should redirect users without a matching role', () => {
+  it('should redirect active users without a matching role to forbidden page', () => {
     TestBed.configureTestingModule({
       providers: [
         {
           provide: AuthService,
           useValue: {
             currentUser: () => ({ role: 'GANADERO', status: 'ACTIVE' }),
+          },
+        },
+        {
+          provide: Router,
+          useValue: {
+            createUrlTree: (commands: string[]) => commands.join('/'),
+          },
+        },
+      ],
+    });
+
+    const result = TestBed.runInInjectionContext(() =>
+      roleGuard(['ADMIN'])({ data: { roles: ['ADMIN'] } } as never, {} as never)
+    );
+
+    expect(result).toBe('/403');
+  });
+
+  it('should redirect unauthenticated or inactive users to login', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: () => null,
           },
         },
         {

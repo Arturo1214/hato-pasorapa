@@ -177,6 +177,8 @@ public class SyncPayloadMapper {
 
         return new AnimalRequest(
                 ownerGanaderoId,
+                readOptionalUuid(payload.get("motherAnimalUuid"), "ANIMAL_MOTHER_UUID_INVALID"),
+                readOptionalUuid(payload.get("fatherAnimalUuid"), "ANIMAL_FATHER_UUID_INVALID"),
                 readOptionalText(payload.get("arete")),
                 readOptionalText(payload.get("marca")),
                 readOptionalText(payload.get("tatuaje")),

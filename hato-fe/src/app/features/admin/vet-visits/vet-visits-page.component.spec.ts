@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { VetVisitsPageComponent } from './vet-visits-page.component';
 import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
 import { ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../../core/auth/data-access/auth.service';
 
 describe('VetVisitsPageComponent', () => {
   const createHealthEventsServiceMock = () => ({
@@ -13,7 +14,10 @@ describe('VetVisitsPageComponent', () => {
     createEvent: vi.fn(() => of({ outcome: 'queued', message: 'Evento sanitario encolado. Se disparó la sincronización automática.' })),
   });
 
-  const configure = async (healthEventsServiceMock = createHealthEventsServiceMock()) => {
+  const configure = async (
+    healthEventsServiceMock = createHealthEventsServiceMock(),
+    currentUser: { id: string; role: 'ADMIN' | 'GANADERO'; status: 'ACTIVE' } = { id: 'admin-1', role: 'ADMIN', status: 'ACTIVE' }
+  ) => {
     await TestBed.configureTestingModule({
       imports: [VetVisitsPageComponent],
       providers: [
@@ -31,6 +35,10 @@ describe('VetVisitsPageComponent', () => {
         {
           provide: AnimalsHealthEventsService,
           useValue: healthEventsServiceMock,
+        },
+        {
+          provide: AuthService,
+          useValue: { currentUser: () => currentUser },
         },
       ],
     }).compileComponents();
@@ -98,5 +106,11 @@ describe('VetVisitsPageComponent', () => {
         }),
       })
     );
+  });
+
+  it('should route the back link to ganadero animals for ganadero sessions', async () => {
+    const { component } = await configure(createHealthEventsServiceMock(), { id: 'ganadero-1', role: 'GANADERO', status: 'ACTIVE' });
+
+    expect(component.backToAnimalsLink()).toBe('/ganadero/animales');
   });
 });

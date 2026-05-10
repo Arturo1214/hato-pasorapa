@@ -74,8 +74,24 @@ export interface AnimalListFilters {
   active?: boolean | null;
 }
 
+export interface AnimalGenealogy {
+  animal: AnimalItem;
+  mother: AnimalItem | null;
+  father: AnimalItem | null;
+  offspring: AnimalItem[];
+}
+
+interface RawAnimalGenealogy {
+  animal: RawAnimalItem;
+  mother?: RawAnimalItem | null;
+  father?: RawAnimalItem | null;
+  offspring?: RawAnimalItem[] | null;
+}
+
 export interface AnimalMutationPayload {
   ownerGanaderoId?: string | null;
+  motherAnimalUuid?: string | null;
+  fatherAnimalUuid?: string | null;
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
@@ -85,6 +101,33 @@ export interface AnimalMutationPayload {
   admissionDate: string;
   birthDate?: string | null;
   weightKg?: number | null;
+}
+
+export interface BirthRegistrationOffspringPayload {
+  arete?: string | null;
+  marca?: string | null;
+  tatuaje?: string | null;
+  category: AnimalCategory;
+  sex: AnimalSex;
+  active: boolean;
+  admissionDate?: string | null;
+  weightKg?: number | null;
+}
+
+export interface BirthRegistrationPayload {
+  birthDate: string;
+  fatherAnimalUuid?: string | null;
+  offspring: BirthRegistrationOffspringPayload[];
+  notes?: string | null;
+}
+
+export interface BirthRegistrationResponse {
+  eventId: string;
+  motherAnimalUuid: string;
+  fatherAnimalUuid: string | null;
+  birthDate: string;
+  offspringCount: number;
+  offspring: AnimalItem[];
 }
 
 interface AnimalsPageResponse {
@@ -98,6 +141,7 @@ interface RawAnimalItem extends Omit<AnimalItem, 'category' | 'sex'> {
 
 export interface AnimalMutationFeedback {
   outcome: 'queued' | 'blocked';
+  animalUuid?: string;
   message: string;
 }
 
@@ -154,6 +198,14 @@ export class AnimalsService {
     return from(this.listAnimalsInternal(filters));
   }
 
+  getAnimal(uuid: string): Observable<AnimalItem> {
+    return from(this.getAnimalInternal(uuid));
+  }
+
+  getGenealogy(uuid: string): Observable<AnimalGenealogy> {
+    return from(this.getGenealogyInternal(uuid));
+  }
+
   createAnimal(payload: AnimalMutationPayload): Observable<AnimalMutationFeedback> {
     return from(this.createAnimalInternal(payload));
   }
@@ -162,16 +214,21 @@ export class AnimalsService {
     return from(this.updateAnimalInternal(uuid, payload));
   }
 
+  registerBirth(motherUuid: string, payload: BirthRegistrationPayload): Observable<BirthRegistrationResponse> {
+    return from(this.registerBirthInternal(motherUuid, payload));
+  }
+
   private async listAnimalsInternal(filters: AnimalListFilters) {
+    const effectiveFilters = this.withGanaderoOwnerScope(filters);
     const hasLocalAnimalOperations = await this.hasLocalAnimalOperations();
     await this.refreshPendingState();
 
     if (!this.offlineStatus.isOnline() || hasLocalAnimalOperations) {
-      return this.listAnimalSnapshots(filters);
+      return this.listAnimalSnapshots(effectiveFilters);
     }
 
     const response = await firstValueFrom(
-      this.http.get<AnimalsPageResponse>(`${this.appConfig.config().apiBaseUrl}/animals${buildListQuery(filters)}`, {
+      this.http.get<AnimalsPageResponse>(`${this.appConfig.config().apiBaseUrl}/animals${buildListQuery(effectiveFilters)}`, {
         headers: this.buildHeaders(),
       })
     );
@@ -187,6 +244,55 @@ export class AnimalsService {
           syncMessage: null,
         }) satisfies AnimalItem
     );
+  }
+
+  private async getAnimalInternal(uuid: string) {
+    const localAnimal = await this.findAnimalSnapshot(uuid);
+    await this.refreshPendingState();
+
+    if (!this.offlineStatus.isOnline() || (await this.hasLocalAnimalOperations())) {
+      if (!localAnimal) {
+        throw new Error('ANIMAL_NOT_AVAILABLE_OFFLINE');
+      }
+      const outbox = await this.store.listOutbox();
+      return decorateAnimalSnapshot(normalizeAnimalItem(localAnimal), outbox);
+    }
+
+    const response = await firstValueFrom(
+      this.http.get<RawAnimalItem>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}`, {
+        headers: this.buildHeaders(),
+      })
+    );
+    const animal = normalizeAnimalItem(response);
+    await this.saveAnimalSnapshot(animal);
+    return { ...animal, syncStatus: 'synced', syncMessage: null } satisfies AnimalItem;
+  }
+
+  private async getGenealogyInternal(uuid: string) {
+    const response = await firstValueFrom(
+      this.http.get<RawAnimalGenealogy>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}/genealogy`, {
+        headers: this.buildHeaders(),
+      })
+    );
+
+    return {
+      animal: markSynced(normalizeAnimalItem(response.animal)),
+      mother: response.mother ? markSynced(normalizeAnimalItem(response.mother)) : null,
+      father: response.father ? markSynced(normalizeAnimalItem(response.father)) : null,
+      offspring: (response.offspring ?? []).map((animal) => markSynced(normalizeAnimalItem(animal))),
+    } satisfies AnimalGenealogy;
+  }
+
+  private withGanaderoOwnerScope(filters: AnimalListFilters): AnimalListFilters {
+    const currentUser = this.authService.currentUser();
+    if (currentUser?.role !== 'GANADERO') {
+      return filters;
+    }
+
+    return {
+      ...filters,
+      ownerGanaderoId: currentUser.ganaderoId ?? '__NO_AUTHENTICATED_GANADERO__',
+    };
   }
 
   private async createAnimalInternal(payload: AnimalMutationPayload) {
@@ -214,12 +320,14 @@ export class AnimalsService {
       triggerManualSync(this.windowRef);
       return {
         outcome: 'queued',
+        animalUuid,
         message: 'Alta de animal encolada. Se disparó la sincronización automática.',
       } satisfies AnimalMutationFeedback;
     }
 
     return {
       outcome: 'queued',
+      animalUuid,
       message: 'Alta de animal encolada. Se enviará al reconectar.',
     } satisfies AnimalMutationFeedback;
   }
@@ -259,6 +367,21 @@ export class AnimalsService {
       outcome: 'queued',
       message: 'Actualización de animal encolada. Se enviará al reconectar.',
     } satisfies AnimalMutationFeedback;
+  }
+
+  private async registerBirthInternal(motherUuid: string, payload: BirthRegistrationPayload) {
+    const response = await firstValueFrom(
+      this.http.post<BirthRegistrationResponse>(`${this.appConfig.config().apiBaseUrl}/animals/${motherUuid}/birth-registration`, payload, {
+        headers: this.buildHeaders(),
+      })
+    );
+
+    const createdOffspring = response.offspring.map(normalizeAnimalItem);
+    await Promise.all(createdOffspring.map((animal) => this.saveAnimalSnapshot(animal)));
+    return {
+      ...response,
+      offspring: createdOffspring,
+    } satisfies BirthRegistrationResponse;
   }
 
   private async listAnimalSnapshots(filters: AnimalListFilters) {
@@ -314,8 +437,8 @@ function createOptimisticAnimalSnapshot(
   return {
     uuid,
     ownerGanaderoId: payload.ownerGanaderoId ?? 'SESSION_GANADERO',
-    motherAnimalUuid: null,
-    fatherAnimalUuid: null,
+    motherAnimalUuid: payload.motherAnimalUuid ?? null,
+    fatherAnimalUuid: payload.fatherAnimalUuid ?? null,
     arete: payload.arete ?? null,
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
@@ -343,8 +466,8 @@ function applyOptimisticAnimalUpdate(
   return {
     uuid,
     ownerGanaderoId: payload.ownerGanaderoId ?? currentSnapshot?.ownerGanaderoId ?? 'SESSION_GANADERO',
-    motherAnimalUuid: currentSnapshot?.motherAnimalUuid ?? null,
-    fatherAnimalUuid: currentSnapshot?.fatherAnimalUuid ?? null,
+    motherAnimalUuid: payload.motherAnimalUuid ?? currentSnapshot?.motherAnimalUuid ?? null,
+    fatherAnimalUuid: payload.fatherAnimalUuid ?? currentSnapshot?.fatherAnimalUuid ?? null,
     arete: payload.arete ?? null,
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
@@ -475,10 +598,18 @@ function decorateAnimalSnapshot(animal: AnimalItem, outbox: Awaited<ReturnType<O
   };
 }
 
+function markSynced(animal: AnimalItem): AnimalItem {
+  return { ...animal, syncStatus: 'synced', syncMessage: null } satisfies AnimalItem;
+}
+
 function sanitizeMutationPayload(payload: AnimalMutationPayload): AnimalOfflineMutationPayload {
   const ownerGanaderoId = normalizeOptionalText(payload.ownerGanaderoId);
+  const motherAnimalUuid = normalizeOptionalText(payload.motherAnimalUuid);
+  const fatherAnimalUuid = normalizeOptionalText(payload.fatherAnimalUuid);
   return {
     ...(ownerGanaderoId ? { ownerGanaderoId } : {}),
+    motherAnimalUuid,
+    fatherAnimalUuid,
     arete: normalizeOptionalText(payload.arete),
     marca: normalizeOptionalText(payload.marca),
     tatuaje: normalizeOptionalText(payload.tatuaje),

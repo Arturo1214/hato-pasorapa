@@ -6,7 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { PASSWORD_POLICY_MESSAGE, passwordPolicyValidators } from '../../../shared/forms/password-policy';
@@ -104,6 +104,13 @@ function passwordsMatch(value: {
             </div>
           }
 
+          @if (successMessage()) {
+            <div class="feedback-box feedback-box--success" role="status">
+              <mat-icon>check_circle</mat-icon>
+              <span>{{ successMessage() }}</span>
+            </div>
+          }
+
           <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || submitting() || passwordMismatch()">
             {{ submitting() ? 'Registrando…' : 'Crear cuenta y entrar' }}
           </button>
@@ -170,15 +177,22 @@ function passwordsMatch(value: {
         border-radius: 0.75rem;
         background: color-mix(in srgb, var(--mat-sys-error-container) 70%, transparent 30%);
       }
+
+      .feedback-box--success {
+        background: color-mix(in srgb, var(--mat-sys-primary-container) 75%, transparent 25%);
+        color: var(--mat-sys-on-primary-container);
+      }
     `,
   ],
 })
 export class GanaderoRegistrationPageComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
 
   readonly submitting = signal(false);
   readonly feedbackMessage = signal<string | null>(null);
+  readonly successMessage = signal<string | null>(null);
   readonly form = this.formBuilder.nonNullable.group(
     {
       businessIdentifier: ['', [Validators.required, Validators.maxLength(80)]],
@@ -224,6 +238,7 @@ export class GanaderoRegistrationPageComponent {
 
     const { businessIdentifier, name, email, password, website, formIssuedAt } = this.form.getRawValue();
     this.feedbackMessage.set(null);
+    this.successMessage.set(null);
     this.submitting.set(true);
 
     this.authService
@@ -239,7 +254,11 @@ export class GanaderoRegistrationPageComponent {
       .subscribe((result) => {
         if (!result.success) {
           this.feedbackMessage.set(result.error?.message ?? 'Error en el registro, intenta más tarde.');
+          return;
         }
+
+        this.successMessage.set('Usuario creado exitosamente. Entrando al dashboard…');
+        setTimeout(() => void this.router.navigateByUrl('/ganadero/dashboard'), 600);
       });
   }
 }

@@ -8,11 +8,12 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
-import { AnimalsReproductionEventsService, buildBirthMetadata, type AnimalReproductionEventItem } from './animals-reproduction-events.service';
+import { AnimalsReproductionEventsService, PREGNANCY_DIAGNOSIS_RESULT, buildBirthMetadata, buildPregnancyDiagnosisMetadata, buildServiceMetadata, type AnimalReproductionEventItem } from './animals-reproduction-events.service';
 
 describe('AnimalsReproductionEventsService', () => {
   const currentUser: SessionUser = {
     id: 'user-1',
+    ganaderoId: null,
     username: 'admin',
     email: 'admin@hato.bo',
     displayName: 'Admin',
@@ -32,7 +33,7 @@ describe('AnimalsReproductionEventsService', () => {
     performedByUserId: 'user-1',
     sourceChannel: 'ONLINE',
     operationId: 'repro-event-1',
-    metadata: { serviceMethod: 'NATURAL' },
+    metadata: { serviceMethod: 'MONTA_NATURAL' },
     clientCreatedAt: '2026-04-26T10:00:00.000Z',
     createdAt: '2026-04-26T10:00:01.000Z',
     updatedAt: '2026-04-26T10:00:01.000Z',
@@ -163,7 +164,7 @@ describe('AnimalsReproductionEventsService', () => {
           reproductionEventType: 'SERVICE',
           occurredAt: '2026-04-26T10:15:00.000Z',
           notes: 'Monta controlada',
-          metadata: { serviceMethod: 'NATURAL' },
+          metadata: buildServiceMetadata({ serviceMethod: 'MONTA_NATURAL', fatherAnimalUuid: 'toro-uuid-1' }),
         })
       )
     ).resolves.toEqual({
@@ -177,9 +178,109 @@ describe('AnimalsReproductionEventsService', () => {
       expect.objectContaining({
         entityType: 'ANIMAL_REPRODUCTION_EVENT',
         entityId: outbox[0].operationId,
-        payload: expect.objectContaining({ animalUuid: 'animal-uuid-1', performedByUserId: 'user-1', sourceChannel: 'ONLINE' }),
+        payload: expect.objectContaining({
+          animalUuid: 'animal-uuid-1',
+          performedByUserId: 'user-1',
+          sourceChannel: 'ONLINE',
+          metadata: expect.objectContaining({ serviceMethod: 'MONTA_NATURAL', fatherAnimalUuid: 'toro-uuid-1' }),
+        }),
       })
     );
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+  });
+
+  it('should build natural mount service metadata with father animal uuid', () => {
+    expect(buildServiceMetadata({
+      serviceMethod: 'MONTA_NATURAL',
+      fatherAnimalUuid: ' toro-uuid-1 ',
+      semenReference: ' debe ignorarse ',
+      bullReference: ' debe ignorarse ',
+    })).toEqual({
+      serviceMethod: 'MONTA_NATURAL',
+      fatherAnimalUuid: 'toro-uuid-1',
+    });
+  });
+
+  it('should build artificial insemination service metadata with optional reference and no father uuid', () => {
+    expect(buildServiceMetadata({
+      serviceMethod: 'INSEMINACION_ARTIFICIAL',
+      fatherAnimalUuid: 'toro-uuid-1',
+      semenReference: ' Pajuela IA-88 ',
+      bullReference: ' Toro catálogo ',
+    })).toEqual({
+      serviceMethod: 'INSEMINACION_ARTIFICIAL',
+      semenReference: 'Pajuela IA-88',
+      bullReference: 'Toro catálogo',
+    });
+  });
+
+  it('should queue pregnancy diagnosis with negative failure metadata', async () => {
+    const { service, store } = setup({ online: false });
+
+    await expect(
+      firstValueFrom(
+        service.createEvent({
+          animalUuid: 'animal-uuid-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10',
+          notes: 'No preñada al tacto',
+          metadata: buildPregnancyDiagnosisMetadata({
+            diagnosisDate: '2026-05-10',
+            result: PREGNANCY_DIAGNOSIS_RESULT.NO_PRENADA,
+          }),
+        })
+      )
+    ).resolves.toEqual({
+      outcome: 'queued',
+      message: 'Evento reproductivo encolado. Se enviará al reconectar.',
+    });
+
+    const outbox = await store.listOutbox();
+    expect(outbox[0]).toEqual(expect.objectContaining({
+      payload: expect.objectContaining({
+        reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+        metadata: expect.objectContaining({ result: 'NO_PRENADA', negativeResult: true, status: 'fallo' }),
+      }),
+    }));
+  });
+
+  it('should queue pregnancy diagnosis with linked service event uuid metadata', async () => {
+    const { service, store } = setup({ online: false });
+
+    await firstValueFrom(
+      service.createEvent({
+        animalUuid: 'animal-uuid-1',
+        reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+        occurredAt: '2026-05-10',
+        notes: 'Preñada luego de servicio IA',
+        metadata: buildPregnancyDiagnosisMetadata({
+          diagnosisDate: '2026-05-10',
+          result: PREGNANCY_DIAGNOSIS_RESULT.PRENADA,
+          serviceEventUuid: 'service-event-uuid-1',
+        }),
+      })
+    );
+
+    const outbox = await store.listOutbox();
+    expect(outbox[0]).toEqual(expect.objectContaining({
+      payload: expect.objectContaining({
+        reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+        metadata: expect.objectContaining({ serviceEventUuid: 'service-event-uuid-1' }),
+      }),
+    }));
+  });
+
+  it('should build positive pregnancy diagnosis metadata with expected birth date', () => {
+    expect(buildPregnancyDiagnosisMetadata({
+      diagnosisDate: '2026-05-10',
+      result: PREGNANCY_DIAGNOSIS_RESULT.PRENADA,
+      expectedBirthDate: '2027-02-14',
+    })).toEqual({
+      diagnosisDate: '2026-05-10T00:00:00.000Z',
+      result: 'PRENADA',
+      expectedBirthDate: '2027-02-14T00:00:00.000Z',
+      serviceEventUuid: undefined,
+      relatedServiceEventId: undefined,
+    });
   });
 });

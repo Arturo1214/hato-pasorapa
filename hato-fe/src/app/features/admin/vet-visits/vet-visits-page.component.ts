@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import {
   AbstractControl,
   FormArray,
@@ -30,6 +30,7 @@ import {
   type DataTableColumn,
 } from '../../../shared/ui/data-table/data-table.component';
 import { AnimalsHealthEventsService, type AnimalHealthEventItem } from '../animals/data-access/animals-health-events.service';
+import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mapper';
 
 @Component({
@@ -56,7 +57,7 @@ import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mappe
             <h2>Filtros</h2>
             <p>Listá por animal y, si querés, cerrá la vista a un visitId puntual.</p>
           </div>
-          <a mat-stroked-button routerLink="/admin/animales">Volver a animales</a>
+          <a mat-stroked-button [routerLink]="backToAnimalsLink()">Volver a animales</a>
         </div>
 
         <form [formGroup]="filtersForm" class="form-grid">
@@ -242,6 +243,7 @@ export class VetVisitsPageComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly animalsHealthEventsService = inject(AnimalsHealthEventsService);
+  private readonly authService = inject(AuthService);
 
   readonly checklistCodes = FIELD_VET_CHECKLIST_CODES;
   readonly protocolStatuses = FIELD_VET_PROTOCOL_STATUSES;
@@ -249,6 +251,7 @@ export class VetVisitsPageComponent {
   readonly submitting = signal(false);
   readonly feedbackMessage = signal<string | null>(null);
   readonly visitFilters = signal<Record<string, string>>({});
+  readonly backToAnimalsLink = computed(() => this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/animales' : '/admin/animales');
   readonly visitColumns: DataTableColumn[] = [
     {
       key: 'visitId',

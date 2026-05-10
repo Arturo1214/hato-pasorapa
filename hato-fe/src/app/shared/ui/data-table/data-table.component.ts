@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, input, output, viewChild } from '@angular/core';
+import { Component, computed, effect, input, output, type TemplateRef, viewChild } from '@angular/core';
 import type { ThemePalette } from '@angular/material/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -21,6 +21,12 @@ export const DATA_TABLE_FILTER_TYPE = {
 export type DataTableFilterType = (typeof DATA_TABLE_FILTER_TYPE)[keyof typeof DATA_TABLE_FILTER_TYPE];
 export type DataTableRow = object;
 
+export interface DataTableCellContext {
+  $implicit: DataTableRow;
+  row: DataTableRow;
+  value: unknown;
+}
+
 export interface DataTableFilterOption {
   label: string;
   value: string;
@@ -33,6 +39,7 @@ export interface DataTableColumn {
   filterType?: DataTableFilterType;
   filterOptions?: readonly DataTableFilterOption[];
   formatter?: (value: unknown, row: DataTableRow) => string;
+  cellTemplate?: TemplateRef<DataTableCellContext>;
 }
 
 export interface DataTableAction {
@@ -140,7 +147,16 @@ export interface DataTableRowActionEvent {
                   }
                 </div>
               </th>
-              <td mat-cell *matCellDef="let row">{{ displayValue(row, column) }}</td>
+              <td mat-cell *matCellDef="let row">
+                @if (column.cellTemplate) {
+                  <ng-container
+                    [ngTemplateOutlet]="column.cellTemplate"
+                    [ngTemplateOutletContext]="cellContext(row, column)"
+                  />
+                } @else {
+                  {{ displayValue(row, column) }}
+                }
+              </td>
             </ng-container>
           }
 
@@ -364,6 +380,14 @@ export class DataTableComponent {
     }
 
     return String(rawValue);
+  }
+
+  cellContext(row: DataTableRow, column: DataTableColumn): DataTableCellContext {
+    return {
+      $implicit: row,
+      row,
+      value: (row as Record<string, unknown>)[column.key],
+    };
   }
 
   updateFilter(key: string, value: string) {

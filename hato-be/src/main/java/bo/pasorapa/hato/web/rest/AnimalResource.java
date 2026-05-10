@@ -6,6 +6,8 @@ import bo.pasorapa.hato.service.AnimalService;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.dto.AnimalCriteria;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
+import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationRequest;
+import bo.pasorapa.hato.service.filter.filters.UuidFilter;
 import bo.pasorapa.hato.service.mapper.AnimalMapper;
 import bo.pasorapa.hato.web.util.AnimalCriteriaDoc;
 import bo.pasorapa.hato.web.util.CriteriaBinder;
@@ -57,6 +59,19 @@ public class AnimalResource {
                 .build();
     }
 
+    @POST
+    @Path("/{motherUuid}/birth-registration")
+    @RolesAllowed({"ADMIN", "GANADERO"})
+    public Response registerBirth(
+            @PathParam("motherUuid") UUID motherUuid,
+            @Valid BirthRegistrationRequest request,
+            @Context UriInfo uriInfo) {
+        var result = animalService.registerBirth(motherUuid, request, currentUserId());
+        return Response.created(uriInfo.getAbsolutePathBuilder().path(String.valueOf(result.eventId())).build())
+                .entity(result)
+                .build();
+    }
+
     @PUT
     @Path("/{uuid}")
     @RolesAllowed({"ADMIN", "GANADERO"})
@@ -92,6 +107,7 @@ public class AnimalResource {
             @Context UriInfo uriInfo
     ) {
         AnimalCriteria criteria = bindCriteria(uriInfo);
+        enforceGanaderoOwnerScope(criteria);
         var pageable = PaginationBinder.bind(uriInfo);
 
         var page = animalQueryService.findByCriteriaPaged(criteria, pageable);
@@ -103,13 +119,20 @@ public class AnimalResource {
     @Path("/count")
     public Response count(@Context UriInfo uriInfo) {
         AnimalCriteria criteria = bindCriteria(uriInfo);
+        enforceGanaderoOwnerScope(criteria);
         return Response.ok(animalQueryService.countByCriteria(criteria)).build();
     }
 
     @GET
     @Path("/{uuid}")
     public Response getOne(@PathParam("uuid") UUID uuid) {
-        return Response.ok(animalMapper.toResponse(animalService.findByUuid(uuid))).build();
+        return Response.ok(animalMapper.toResponse(animalService.findByUuid(uuid, currentUserId()))).build();
+    }
+
+    @GET
+    @Path("/{uuid}/genealogy")
+    public Response getGenealogy(@PathParam("uuid") UUID uuid) {
+        return Response.ok(animalService.findGenealogy(uuid, currentUserId())).build();
     }
 
     private AnimalCriteria bindCriteria(UriInfo uriInfo) {
@@ -124,5 +147,15 @@ public class AnimalResource {
 
     private UUID currentUserId() {
         return UUID.fromString(jsonWebToken.getSubject());
+    }
+
+    private void enforceGanaderoOwnerScope(AnimalCriteria criteria) {
+        if (!jsonWebToken.getGroups().contains("GANADERO")) {
+            return;
+        }
+
+        UuidFilter ownerFilter = new UuidFilter();
+        ownerFilter.setEquals(animalService.resolveAuthenticatedGanaderoId(currentUserId()));
+        criteria.setOwnerGanaderoId(ownerFilter);
     }
 }

@@ -10,7 +10,7 @@ describe('offline-types animal reproduction contract', () => {
   });
 
   it('should keep the v1 reproduction event catalog explicit and bounded', () => {
-    expect(ANIMAL_REPRODUCTION_EVENT_TYPES).toEqual(['SERVICE', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH']);
+    expect(ANIMAL_REPRODUCTION_EVENT_TYPES).toEqual(['SERVICE', 'PREGNANCY_DIAGNOSIS', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH']);
   });
 
   it('should support typed birth metadata including mandatory offspring linkage when present', () => {

@@ -49,6 +49,44 @@ class AnimalReproductionEventMapperTest {
     }
 
     @Test
+    void shouldAllowPregnancyDiagnosisWithPositiveResultAndExpectedBirthDate() {
+        var request = mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "reproductionEventType", "PREGNANCY_DIAGNOSIS",
+                        "occurredAt", "2026-05-10T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "diagnosisDate", "2026-05-10T10:00:00Z",
+                                "result", "PRENADA",
+                                "expectedBirthDate", "2027-02-14T00:00:00Z",
+                                "serviceEventUuid", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")),
+                OffsetDateTime.parse("2026-05-10T10:05:00Z"));
+
+        assertEquals("PREGNANCY_DIAGNOSIS", request.reproductionEventType().name());
+        assertEquals("PRENADA", request.metadata().get("result"));
+        assertEquals("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", request.metadata().get("serviceEventUuid"));
+    }
+
+    @Test
+    void shouldRejectPregnancyDiagnosisWithoutValidResult() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "reproductionEventType", "PREGNANCY_DIAGNOSIS",
+                        "occurredAt", "2026-05-10T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of("diagnosisDate", "2026-05-10T10:00:00Z", "result", "DUDOSA")),
+                OffsetDateTime.parse("2026-05-10T10:05:00Z")));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_DIAGNOSIS_RESULT_INVALID", exception.getMessage());
+    }
+
+    @Test
     void shouldRejectBirthsWithoutOffspringCount() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
                 Map.of(

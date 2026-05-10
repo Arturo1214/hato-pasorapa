@@ -31,6 +31,7 @@ export interface GanaderoRegistrationPayload {
 
 interface AuthApiUser {
   id: string;
+  ganaderoId?: string | null;
   username: string;
   email: string;
   displayName: string;
@@ -67,6 +68,7 @@ export interface AuthActionResult {
 
 export interface SessionUser {
   id: string;
+  ganaderoId: string | null;
   username: string;
   email: string;
   displayName: string;
@@ -318,6 +320,7 @@ export class AuthService {
   private mapSessionUser(user: AuthApiUser): SessionUser {
     return {
       id: user.id,
+      ganaderoId: user.ganaderoId ?? null,
       username: user.username,
       email: user.email,
       displayName: user.displayName,
@@ -365,17 +368,18 @@ export class AuthService {
     try {
       const session = JSON.parse(rawSession) as StoredSession;
       this.accessToken.set(session.token);
-      this.currentUserState.set(session.user);
+      const restoredUser = normalizeStoredSessionUser(session.user);
+      this.currentUserState.set(restoredUser);
 
       const now = new Date().toISOString();
       const rawEnvelope = storage?.getItem(this.sessionEnvelopeStorageKey);
       const parsedEnvelope = rawEnvelope ? (JSON.parse(rawEnvelope) as OfflineSessionEnvelope) : null;
       const baseEnvelope =
-        parsedEnvelope && parsedEnvelope.userId === session.user.id
+        parsedEnvelope && parsedEnvelope.userId === restoredUser.id
           ? parsedEnvelope
           : lockOfflineSessionEnvelope(
               buildOfflineSessionEnvelope({
-                userId: session.user.id,
+                userId: restoredUser.id,
                 issuedAt: now,
                 expiresInSeconds: DEFAULT_SESSION_TTL_SECONDS,
               }),
@@ -463,5 +467,12 @@ function extractAuthApiError(rawError: unknown): AuthApiError {
     message: typeof candidate.message === 'string' ? candidate.message : undefined,
     details: typeof candidate.details === 'string' ? candidate.details : undefined,
     stack: typeof candidate.stack === 'string' ? candidate.stack : undefined,
+  };
+}
+
+function normalizeStoredSessionUser(user: SessionUser): SessionUser {
+  return {
+    ...user,
+    ganaderoId: user.ganaderoId ?? null,
   };
 }

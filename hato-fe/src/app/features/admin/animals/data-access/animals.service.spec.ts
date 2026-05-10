@@ -30,7 +30,11 @@ describe('AnimalsService', () => {
     ...overrides,
   });
 
-  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get' | 'post' | 'put'>> }) => {
+  const setup = (options: {
+    online: boolean;
+    http?: Partial<Pick<HttpClient, 'get' | 'post' | 'put'>>;
+    currentUser?: { id: string; ganaderoId?: string | null; role: 'ADMIN' | 'GANADERO'; status: 'ACTIVE' };
+  }) => {
     TestBed.configureTestingModule({
       providers: [
         AnimalsService,
@@ -52,7 +56,7 @@ describe('AnimalsService', () => {
           provide: AuthService,
           useValue: {
             getAccessToken: () => 'token',
-            currentUser: () => ({ id: 'user-1', role: 'ADMIN', status: 'ACTIVE' }),
+            currentUser: () => options.currentUser ?? { id: 'user-1', ganaderoId: null, role: 'ADMIN', status: 'ACTIVE' },
           },
         },
         {
@@ -181,6 +185,159 @@ describe('AnimalsService', () => {
     ]);
   });
 
+  it('should force ganadero owner scope for online requests and local snapshot reads', async () => {
+    const get = vi.fn(() => of({ content: [createAnimal({ ownerGanaderoId: 'ganadero-user-1' })] }));
+    const { service, store } = setup({
+      online: true,
+      http: { get: get as never },
+      currentUser: { id: 'user-1', ganaderoId: 'ganadero-user-1', role: 'GANADERO', status: 'ACTIVE' },
+    });
+
+    await expect(
+      firstValueFrom(service.listAnimals({ ownerGanaderoId: 'spoofed-owner' }))
+    ).resolves.toEqual([createAnimal({ ownerGanaderoId: 'ganadero-user-1', syncStatus: 'synced', syncMessage: null })]);
+
+    const [ganaderoRequestedUrl] = get.mock.calls[0] as unknown as [string];
+    expect(ganaderoRequestedUrl).toBe('/api/animals?ownerGanaderoId.equals=ganadero-user-1&page=0&size=20&sort=updatedAt,desc');
+
+    await store.saveSnapshot({
+      key: 'ANIMAL:other-animal',
+      entityType: 'ANIMAL',
+      entityId: 'other-animal',
+      payload: { ...createAnimal({ uuid: 'other-animal', ownerGanaderoId: 'other-owner', updatedAt: '2026-04-26T11:00:00.000Z' }) },
+      updatedAt: '2026-04-26T11:00:00.000Z',
+      version: 1,
+    });
+
+    service.configureForTesting({ offlineStatus: { isOnline: (() => false) as never } });
+    await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([
+      createAnimal({ ownerGanaderoId: 'ganadero-user-1', syncStatus: 'synced', syncMessage: null }),
+    ]);
+  });
+
+  it('should read a single animal by uuid online and preserve canonical identifiers', async () => {
+    const get = vi.fn(() => of(createAnimal({ uuid: 'animal-detail-1', motherAnimalUuid: 'mother-1' })));
+    const { service, store } = setup({ online: true, http: { get: get as never } });
+
+    await expect(firstValueFrom(service.getAnimal('animal-detail-1'))).resolves.toEqual(
+      createAnimal({ uuid: 'animal-detail-1', motherAnimalUuid: 'mother-1', syncStatus: 'synced', syncMessage: null }),
+    );
+
+    expect(get).toHaveBeenCalledWith('/api/animals/animal-detail-1', {
+      headers: expect.any(HttpHeaders),
+    });
+    await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL:animal-detail-1', entityId: 'animal-detail-1' }),
+    ]);
+  });
+
+  it('should read a safe immediate genealogy response from the backend', async () => {
+    const get = vi.fn(() =>
+      of({
+        animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001' }),
+        mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }),
+        father: null,
+        offspring: [createAnimal({ uuid: 'offspring-1', arete: 'CRIA-002' })],
+      }),
+    );
+    const { service } = setup({ online: true, http: { get: get as never } });
+
+    await expect(firstValueFrom(service.getGenealogy('animal-detail-1'))).resolves.toEqual({
+      animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001', syncStatus: 'synced', syncMessage: null }),
+      mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001', syncStatus: 'synced', syncMessage: null }),
+      father: null,
+      offspring: [createAnimal({ uuid: 'offspring-1', arete: 'CRIA-002', syncStatus: 'synced', syncMessage: null })],
+    });
+    expect(get).toHaveBeenCalledWith('/api/animals/animal-detail-1/genealogy', {
+      headers: expect.any(HttpHeaders),
+    });
+  });
+
+  it('should post birth registration to the mother endpoint and return created offspring', async () => {
+    const createdCalf = createAnimal({
+      uuid: 'calf-uuid-1',
+      arete: 'CRIA-001',
+      category: ANIMAL_CATEGORY.TERNERA,
+      sex: ANIMAL_SEX.HEMBRA,
+      motherAnimalUuid: 'mother-uuid-1',
+      fatherAnimalUuid: 'father-uuid-1',
+      birthDate: '2026-05-10',
+      admissionDate: '2026-05-10',
+    });
+    const post = vi.fn(() => of({
+      eventId: 'event-uuid-1',
+      motherAnimalUuid: 'mother-uuid-1',
+      fatherAnimalUuid: 'father-uuid-1',
+      birthDate: '2026-05-10',
+      offspringCount: 1,
+      offspring: [createdCalf],
+    }));
+    const { service, store } = setup({ online: true, http: { post: post as never } });
+
+    await expect(firstValueFrom(service.registerBirth('mother-uuid-1', {
+      birthDate: '2026-05-10',
+      fatherAnimalUuid: 'father-uuid-1',
+      notes: 'Parto en corral',
+      offspring: [{
+        arete: 'CRIA-001',
+        category: ANIMAL_CATEGORY.TERNERA,
+        sex: ANIMAL_SEX.HEMBRA,
+        active: true,
+        weightKg: 31.25,
+      }],
+    }))).resolves.toEqual({
+      eventId: 'event-uuid-1',
+      motherAnimalUuid: 'mother-uuid-1',
+      fatherAnimalUuid: 'father-uuid-1',
+      birthDate: '2026-05-10',
+      offspringCount: 1,
+      offspring: [createdCalf],
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/animals/mother-uuid-1/birth-registration', {
+      birthDate: '2026-05-10',
+      fatherAnimalUuid: 'father-uuid-1',
+      notes: 'Parto en corral',
+      offspring: [{
+        arete: 'CRIA-001',
+        category: ANIMAL_CATEGORY.TERNERA,
+        sex: ANIMAL_SEX.HEMBRA,
+        active: true,
+        weightKg: 31.25,
+      }],
+    }, {
+      headers: expect.any(HttpHeaders),
+    });
+    await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL:calf-uuid-1', entityId: 'calf-uuid-1' }),
+    ]);
+  });
+
+  it('should fail closed for ganadero local and online reads when session has no ganaderoId', async () => {
+    const get = vi.fn(() => of({ content: [] }));
+    const { service, store } = setup({
+      online: true,
+      http: { get: get as never },
+      currentUser: { id: 'user-1', ganaderoId: null, role: 'GANADERO', status: 'ACTIVE' },
+    });
+
+    await firstValueFrom(service.listAnimals());
+    const [requestedUrl] = get.mock.calls[0] as unknown as [string];
+    expect(requestedUrl).toBe('/api/animals?ownerGanaderoId.equals=__NO_AUTHENTICATED_GANADERO__&page=0&size=20&sort=updatedAt,desc');
+
+    await store.saveSnapshot({
+      key: 'ANIMAL:animal-uuid-1',
+      entityType: 'ANIMAL',
+      entityId: 'animal-uuid-1',
+      payload: { ...createAnimal({ ownerGanaderoId: 'ganadero-user-1' }) },
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 1,
+    });
+
+    service.configureForTesting({ offlineStatus: { isOnline: (() => false) as never } });
+    await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([]);
+  });
+
   it('should queue online animal updates by canonical uuid and preserve the uuid-based snapshot key', async () => {
     const updatedAnimal = createAnimal({ uuid: 'animal-uuid-9', arete: 'AR-999', version: 7 });
     const put = vi.fn(() => of(updatedAnimal));
@@ -190,6 +347,8 @@ describe('AnimalsService', () => {
       firstValueFrom(
         service.updateAnimal('animal-uuid-9', {
           ownerGanaderoId: 'ganadero-uuid-1',
+          motherAnimalUuid: 'mother-uuid-1',
+          fatherAnimalUuid: 'father-uuid-1',
           arete: ' AR-999 ',
           category: ANIMAL_CATEGORY.VACA,
           active: true,
@@ -205,7 +364,11 @@ describe('AnimalsService', () => {
     expect(put).not.toHaveBeenCalled();
 
     await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL:animal-uuid-9', entityId: 'animal-uuid-9' }),
+      expect.objectContaining({
+        key: 'ANIMAL:animal-uuid-9',
+        entityId: 'animal-uuid-9',
+        payload: expect.objectContaining({ motherAnimalUuid: 'mother-uuid-1', fatherAnimalUuid: 'father-uuid-1' }),
+      }),
     ]);
   });
 
@@ -229,6 +392,7 @@ describe('AnimalsService', () => {
       )
     ).resolves.toEqual({
       outcome: 'queued',
+      animalUuid: '11111111-2222-4333-8444-555555555555',
       message: 'Alta de animal encolada. Se disparó la sincronización automática.',
     });
 
@@ -273,7 +437,7 @@ describe('AnimalsService', () => {
           provide: AuthService,
           useValue: {
             getAccessToken: () => 'token',
-            currentUser: () => ({ id: 'ganadero-user-1', role: 'GANADERO', status: 'ACTIVE' }),
+            currentUser: () => ({ id: 'user-1', ganaderoId: 'ganadero-user-1', role: 'GANADERO', status: 'ACTIVE' }),
           },
         },
         { provide: OfflineStatusService, useValue: { isOnline: () => false } },
@@ -285,15 +449,21 @@ describe('AnimalsService', () => {
     service.configureForTesting({ store });
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('99999999-2222-4333-8444-555555555555');
 
-    await firstValueFrom(
-      service.createAnimal({
-        arete: 'AR-551',
-        category: ANIMAL_CATEGORY.VACA,
-        sex: ANIMAL_SEX.HEMBRA,
-        active: true,
-        admissionDate: '2026-04-26',
-      })
-    );
+    await expect(
+      firstValueFrom(
+        service.createAnimal({
+          arete: 'AR-551',
+          category: ANIMAL_CATEGORY.VACA,
+          sex: ANIMAL_SEX.HEMBRA,
+          active: true,
+          admissionDate: '2026-04-26',
+        })
+      )
+    ).resolves.toEqual({
+      outcome: 'queued',
+      animalUuid: '99999999-2222-4333-8444-555555555555',
+      message: 'Alta de animal encolada. Se enviará al reconectar.',
+    });
 
     const outbox = await store.listOutbox();
     expect(outbox[0]?.payload).not.toHaveProperty('ownerGanaderoId');

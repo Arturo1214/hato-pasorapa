@@ -104,6 +104,7 @@ describe('AuthService', () => {
     expect(service.isAuthenticated()).toBe(true);
     expect(service.currentUser()).toEqual<SessionUser>({
       id: 'user-1',
+      ganaderoId: null,
       username: 'admin',
       email: 'admin@hato.bo',
       displayName: 'Admin Root',
@@ -136,6 +137,7 @@ describe('AuthService', () => {
       expiresInSeconds: 28800,
       user: {
         id: 'user-2',
+        ganaderoId: 'ganadero-uuid-2',
         username: 'ganadera@hato.bo',
         email: 'ganadera@hato.bo',
         displayName: 'Ganadera Norte',
@@ -149,6 +151,7 @@ describe('AuthService', () => {
 
     await expect(resultPromise).resolves.toEqual({ success: true, error: null });
     expect(service.currentUser()?.username).toBe('ganadera@hato.bo');
+    expect(service.currentUser()?.ganaderoId).toBe('ganadero-uuid-2');
   });
 
   it('should classify the persisted envelope as expired once the 8h ttl elapses', () => {
@@ -289,7 +292,7 @@ describe('AuthService', () => {
           version: 1,
           updatedAt: '2026-04-25T12:10:00',
           lastSyncedAt: null,
-        } satisfies SessionUser,
+        },
       })
     );
     globalThis.localStorage.setItem(
@@ -316,6 +319,7 @@ describe('AuthService', () => {
       })
     );
     expect(restoredService.isAuthenticated()).toBe(false);
+    expect(restoredService.currentUser()?.ganaderoId).toBeNull();
   });
 
   it('should force reauth_required after a successful local restore so sync stays blocked until login', async () => {

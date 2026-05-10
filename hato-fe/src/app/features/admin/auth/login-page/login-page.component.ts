@@ -44,7 +44,7 @@ export class LoginPageComponent {
   private readonly sessionContext = computed<OfflineSessionStatus | null>(() =>
     parseSessionContext(this.queryParamMap().get('session'))
   );
-  private readonly returnUrl = computed(() => this.queryParamMap().get('returnUrl') || '/admin/dashboard');
+  private readonly returnUrl = computed(() => this.queryParamMap().get('returnUrl') || this.defaultDashboardUrl());
   readonly sessionMessage = computed(() => {
     const sessionContext = this.sessionContext();
 
@@ -85,6 +85,10 @@ export class LoginPageComponent {
 
       void this.router.navigateByUrl(this.returnUrl());
     });
+  }
+
+  private defaultDashboardUrl() {
+    return this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/dashboard' : '/admin/dashboard';
   }
 }
 

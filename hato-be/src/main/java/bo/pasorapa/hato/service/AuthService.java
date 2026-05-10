@@ -3,6 +3,7 @@ package bo.pasorapa.hato.service;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.admin.auth.AuthLoginRequest;
@@ -12,10 +13,12 @@ import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import bo.pasorapa.hato.web.rest.observability.RequestCorrelation;
 import io.smallrye.jwt.build.Jwt;
+import io.smallrye.jwt.build.JwtClaimsBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.Response;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.jboss.logging.Logger;
@@ -145,7 +148,8 @@ public class AuthService {
     }
 
     public AuthLoginResponse issueToken(User user) {
-        String token = Jwt.issuer("bo.pasorapa.hato")
+        UUID ganaderoId = resolveGanaderoId(user);
+        JwtClaimsBuilder jwtBuilder = Jwt.issuer("bo.pasorapa.hato")
                 .subject(user.getId().toString())
                 .upn(user.getUsername())
                 .preferredUserName(user.getUsername())
@@ -154,8 +158,11 @@ public class AuthService {
                 .claim("userVersion", user.getVersion() == null ? 0L : user.getVersion())
                 .claim("status", user.getStatus().name())
                 .claim("tenant", "hato")
-                .expiresIn(Duration.ofSeconds(EXPIRES_IN_SECONDS))
-                .sign();
+                .expiresIn(Duration.ofSeconds(EXPIRES_IN_SECONDS));
+        if (ganaderoId != null) {
+            jwtBuilder.claim("ganaderoId", ganaderoId.toString());
+        }
+        String token = jwtBuilder.sign();
 
         return new AuthLoginResponse(
                 token,
@@ -163,6 +170,7 @@ public class AuthService {
                 EXPIRES_IN_SECONDS,
                 new AuthUserResponse(
                         user.getId().toString(),
+                        ganaderoId == null ? null : ganaderoId.toString(),
                         user.getUsername(),
                         user.getEmail(),
                         user.getDisplayName(),
@@ -171,5 +179,19 @@ public class AuthService {
                         user.getVersion() == null ? 0L : user.getVersion(),
                         user.getUpdatedAt() == null ? null : user.getUpdatedAt().toString(),
                         user.getLastSyncedAt() == null ? null : user.getLastSyncedAt().toString()));
+    }
+
+    private UUID resolveGanaderoId(User user) {
+        if (user.getRole() != Role.GANADERO) {
+            return null;
+        }
+
+        return ganaderoRepository.findByEmail(user.getEmail())
+                .or(() -> ganaderoRepository.findByEmail(user.getUsername()))
+                .map(Ganadero::getId)
+                .orElseThrow(() -> new BusinessException(
+                        "GANADERO_PROFILE_NOT_FOUND",
+                        "No existe un perfil ganadero asociado a la cuenta.",
+                        Response.Status.UNAUTHORIZED));
     }
 }

@@ -418,6 +418,8 @@ export interface OfflineFailureDescriptor {
 
 export interface AnimalOfflineMutationPayload extends Record<string, unknown> {
   ownerGanaderoId?: string;
+  motherAnimalUuid?: string | null;
+  fatherAnimalUuid?: string | null;
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
@@ -568,13 +570,20 @@ export interface AnimalHealthEventSnapshotPayload extends AnimalHealthEventOffli
   nextDueAt?: string | null;
 }
 
-export const ANIMAL_REPRODUCTION_EVENT_TYPES = ['SERVICE', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH'] as const;
+export const ANIMAL_REPRODUCTION_EVENT_TYPES = ['SERVICE', 'PREGNANCY_DIAGNOSIS', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH'] as const;
 export type AnimalReproductionEventType = (typeof ANIMAL_REPRODUCTION_EVENT_TYPES)[number];
 export type AnimalReproductionEventSourceChannel = 'ONLINE' | 'OFFLINE';
 export type AnimalReproductionEventSyncState = 'PENDING_SYNC' | 'SYNCED' | 'CONFLICT';
 
 export interface AnimalReproductionEventOfflineMetadata extends Record<string, unknown> {
   serviceMethod?: string;
+  diagnosisDate?: string;
+  result?: string;
+  expectedBirthDate?: string;
+  serviceEventUuid?: string;
+  relatedServiceEventId?: string;
+  negativeResult?: boolean;
+  status?: string;
   confirmationDate?: string;
   lossReason?: string;
   birthDate?: string;

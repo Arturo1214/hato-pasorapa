@@ -17,8 +17,10 @@ public class AnimalMapper {
 
     public void updateEntity(Animal animal, AnimalRequest request, Ganadero ownerGanadero) {
         if (ownerGanadero != null) {
-            animal.setOwnerGanadero(ownerGanadero);
+        animal.setOwnerGanadero(ownerGanadero);
         }
+        animal.setMotherAnimalUuid(request.motherAnimalUuid());
+        animal.setFatherAnimalUuid(request.fatherAnimalUuid());
         animal.setArete(request.arete());
         animal.setMarca(request.marca());
         animal.setTatuaje(request.tatuaje());

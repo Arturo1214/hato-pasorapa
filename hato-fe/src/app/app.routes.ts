@@ -30,7 +30,7 @@ export const routes: Routes = [
       },
       {
         path: 'admin/dashboard',
-        canActivate: [roleGuard([...ALLOWED_ROLES])],
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
         loadComponent: () =>
           import('./features/admin/dashboard/admin-dashboard-page.component').then(
             (m) => m.AdminDashboardPageComponent
@@ -113,6 +113,46 @@ export const routes: Routes = [
         },
       },
       {
+        path: 'admin/animales',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animals-page.component').then((m) => m.AnimalsPageComponent),
+        data: {
+          title: 'Animales',
+          subtitle: 'Consultá y actualizá el rodeo con foco en la operación diaria del campo.',
+        },
+      },
+      {
+        path: 'admin/animales/nuevo',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-form-page.component').then((m) => m.AnimalFormPageComponent),
+        data: {
+          title: 'Nuevo animal',
+          subtitle: 'Registrá una ficha animal con propietario, datos operativos y genealogía básica.',
+        },
+      },
+      {
+        path: 'admin/animales/:uuid/editar',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-form-page.component').then((m) => m.AnimalFormPageComponent),
+        data: {
+          title: 'Editar animal',
+          subtitle: 'Actualizá la ficha animal, imágenes y vínculos de padre/madre.',
+        },
+      },
+      {
+        path: 'admin/animales/:uuid',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-detail-page.component').then((m) => m.AnimalDetailPageComponent),
+        data: {
+          title: 'Ficha animal',
+          subtitle: 'Detalle operativo, imágenes, historial y genealogía del animal.',
+        },
+      },
+      {
         path: 'ganadero/dashboard',
         canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
         loadComponent: () =>
@@ -132,6 +172,36 @@ export const routes: Routes = [
         data: {
           title: 'Animales',
           subtitle: 'Consultá y actualizá tu rodeo con foco en la operación diaria del campo.',
+        },
+      },
+      {
+        path: 'ganadero/animales/nuevo',
+        canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-form-page.component').then((m) => m.AnimalFormPageComponent),
+        data: {
+          title: 'Nuevo animal',
+          subtitle: 'Registrá un animal propio con datos operativos y genealogía básica.',
+        },
+      },
+      {
+        path: 'ganadero/animales/:uuid/editar',
+        canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-form-page.component').then((m) => m.AnimalFormPageComponent),
+        data: {
+          title: 'Editar animal',
+          subtitle: 'Actualizá la ficha de tu animal, imágenes y vínculos de padre/madre.',
+        },
+      },
+      {
+        path: 'ganadero/animales/:uuid',
+        canActivate: [roleGuard([...GANADERO_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/animals/animal-detail-page.component').then((m) => m.AnimalDetailPageComponent),
+        data: {
+          title: 'Ficha animal',
+          subtitle: 'Detalle operativo, imágenes, historial y genealogía de tu animal.',
         },
       },
       {
@@ -196,6 +266,15 @@ export const routes: Routes = [
         data: {
           title: 'Conflictos',
           subtitle: 'Resolvé conflictos de sincronización propios antes de cerrar tu jornada.',
+        },
+      },
+      {
+        path: '403',
+        loadComponent: () =>
+          import('./core/auth/guards/forbidden-page.component').then((m) => m.ForbiddenPageComponent),
+        data: {
+          title: 'Acceso denegado',
+          subtitle: 'Tu usuario no tiene permisos para esta sección.',
         },
       },
     ],

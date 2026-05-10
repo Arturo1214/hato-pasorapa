@@ -1,4 +1,5 @@
 import { computed, Injectable, signal } from '@angular/core';
+import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import {
   type CalendarAlertPreferences,
   type CalendarDerivedAgendaItem,
@@ -21,6 +22,7 @@ export type CalendarRefreshReason = 'startup' | 'post-sync' | 'prefs-change' | '
 export class CalendarAlertsStore {
   // V1 exclusions: no push remota, no motor experto y sin estado compartido entre dispositivos.
   private offlineStore: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
+  private authService: Pick<AuthService, 'currentUser'> = { currentUser: () => null } as Pick<AuthService, 'currentUser'>;
   private gateway = new BrowserNotificationGateway();
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'addEventListener'> | undefined = globalThis.window;
@@ -62,15 +64,21 @@ export class CalendarAlertsStore {
   readonly stale = computed(() => isCalendarStateStale(this.state().lastComputedAt, this.now(), CALENDAR_STALE_TIME_MS));
   readonly inAppAlerts = this.inAppAlertsState.asReadonly();
 
+  constructor(authService?: AuthService) {
+    this.authService = authService ?? this.authService;
+  }
+
   configureForTesting(
     dependencies: Partial<{
       offlineStore: OfflineStoreService;
+      authService: Pick<AuthService, 'currentUser'>;
       gateway: BrowserNotificationGateway;
       now: () => string;
       windowRef: Pick<Window, 'addEventListener'>;
     }>
   ) {
     this.offlineStore = dependencies.offlineStore ?? this.offlineStore;
+    this.authService = dependencies.authService ?? this.authService;
     this.gateway = dependencies.gateway ?? this.gateway;
     this.now = dependencies.now ?? this.now;
     this.windowRef = dependencies.windowRef ?? this.windowRef;
@@ -129,13 +137,15 @@ export class CalendarAlertsStore {
     this.errorState.set(null);
 
     try {
+      const animals = this.filterAnimalsForCurrentGanadero(await this.offlineStore.listSnapshots('ANIMAL'));
+      const allowedAnimalUuids = new Set(animals.map((snapshot) => snapshot.entityId));
       const state = projectCalendarAlerts({
         now: this.now(),
         preferences: this.state().preferences,
-        animals: await this.offlineStore.listSnapshots('ANIMAL'),
-        animalEvents: await this.offlineStore.listSnapshots('ANIMAL_EVENT'),
-        healthEvents: await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'),
-        reproductionEvents: await this.offlineStore.listSnapshots('ANIMAL_REPRODUCTION_EVENT'),
+        animals,
+        animalEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_EVENT'), allowedAnimalUuids),
+        healthEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'), allowedAnimalUuids),
+        reproductionEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_REPRODUCTION_EVENT'), allowedAnimalUuids),
       });
 
       this.state.set(state);
@@ -163,5 +173,36 @@ export class CalendarAlertsStore {
       },
     }));
     await this.rebuild('prefs-change');
+  }
+
+  private filterAnimalsForCurrentGanadero(animals: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>) {
+    const currentUser = this.authService.currentUser();
+    if (currentUser?.role !== 'GANADERO') {
+      return animals;
+    }
+
+    if (!currentUser.ganaderoId) {
+      return [];
+    }
+
+    return animals.filter((snapshot) => {
+      const ownerGanaderoId = snapshot.payload['ownerGanaderoId'];
+      return ownerGanaderoId === currentUser.ganaderoId || ownerGanaderoId === 'SESSION_GANADERO';
+    });
+  }
+
+  private filterAnimalScopedSnapshots(
+    snapshots: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>,
+    allowedAnimalUuids: Set<string>
+  ) {
+    const currentUser = this.authService.currentUser();
+    if (currentUser?.role !== 'GANADERO') {
+      return snapshots;
+    }
+
+    return snapshots.filter((snapshot) => {
+      const animalUuid = snapshot.payload['animalUuid'];
+      return typeof animalUuid === 'string' && allowedAnimalUuids.has(animalUuid);
+    });
   }
 }

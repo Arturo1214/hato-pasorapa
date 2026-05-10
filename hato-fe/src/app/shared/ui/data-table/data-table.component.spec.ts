@@ -1,5 +1,12 @@
+import { Component, TemplateRef, viewChild } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { DataTableComponent, DATA_TABLE_FILTER_TYPE, type DataTableAction, type DataTableColumn } from './data-table.component';
+import {
+  DataTableComponent,
+  DATA_TABLE_FILTER_TYPE,
+  type DataTableAction,
+  type DataTableCellContext,
+  type DataTableColumn,
+} from './data-table.component';
 
 describe('DataTableComponent', () => {
   let fixture: ComponentFixture<DataTableComponent>;
@@ -109,5 +116,38 @@ describe('DataTableComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Elementos por página');
     expect(fixture.nativeElement.textContent).toContain('1 – 2 de 2');
+  });
+});
+
+@Component({
+  selector: 'app-data-table-host',
+  standalone: true,
+  imports: [DataTableComponent],
+  template: `
+    <ng-template #nameCell let-value="value" let-row="row">
+      <strong class="custom-name-cell">{{ value }} · {{ row.role }}</strong>
+    </ng-template>
+
+    <app-data-table [columns]="hostColumns()" [data]="hostData" />
+  `,
+})
+class DataTableHostComponent {
+  private readonly nameCell = viewChild.required<TemplateRef<DataTableCellContext>>('nameCell');
+  readonly hostData = [{ name: 'Campo Sur', role: 'GANADERO' }];
+  readonly hostColumns = () => [
+    { key: 'name', label: 'Nombre', cellTemplate: this.nameCell() },
+  ] satisfies DataTableColumn[];
+}
+
+describe('DataTableComponent custom cells', () => {
+  it('should render a custom cell template with row and value context', async () => {
+    await TestBed.configureTestingModule({
+      imports: [DataTableHostComponent],
+    }).compileComponents();
+
+    const hostFixture = TestBed.createComponent(DataTableHostComponent);
+    hostFixture.detectChanges();
+
+    expect(hostFixture.nativeElement.querySelector('.custom-name-cell')?.textContent).toContain('Campo Sur · GANADERO');
   });
 });

@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal, type TemplateRef, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
+import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { finalize, firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
@@ -14,7 +16,9 @@ import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
   type DataTableAction,
+  type DataTableCellContext,
   type DataTableColumn,
+  type DataTableRow,
   type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
 import { AnimalsEventsService, type AnimalEventItem } from './data-access/animals-events.service';
@@ -25,12 +29,10 @@ import {
   type AnimalReproductionEventItem,
 } from './data-access/animals-reproduction-events.service';
 import {
-  ANIMAL_CATEGORY,
   ANIMAL_CATEGORY_OPTIONS,
   ANIMAL_SEX,
   ANIMAL_SEX_OPTIONS,
   AnimalsService,
-  type AnimalCategory,
   type AnimalItem,
   type AnimalMutationPayload,
 } from './data-access/animals.service';
@@ -47,13 +49,14 @@ const ANIMAL_TABLE_ACTION = {
   REPRODUCTIVE_EVENT: 'reproductive-event',
   CASTRATION: 'castration-event',
   IMAGES: 'images',
+  VIEW_DETAIL: 'view-detail',
   VIEW_EDIT: 'view-edit',
 } as const;
 
 @Component({
   selector: 'app-animals-page',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatCardModule, DataTableComponent],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule, DataTableComponent],
   template: `
     <section class="admin-page">
       <mat-card appearance="outlined">
@@ -73,7 +76,10 @@ const ANIMAL_TABLE_ACTION = {
       </mat-card>
 
       <div class="toolbar-actions">
-        <button mat-flat-button color="primary" type="button" (click)="openCreateDialog()">Nuevo animal</button>
+        <button mat-flat-button color="primary" class="primary-action-button" type="button" (click)="goCreate()">
+          <mat-icon>add</mat-icon>
+          <span>Nuevo animal</span>
+        </button>
       </div>
 
       @if (feedbackMessage()) {
@@ -86,8 +92,37 @@ const ANIMAL_TABLE_ACTION = {
         <mat-card appearance="outlined"><p>Todavía no hay animales registrados.</p></mat-card>
       } @else {
         <mat-card appearance="outlined">
+          <ng-template #animalPreviewCell let-row>
+            @let animal = animalFromRow(row);
+            @let image = firstImageFor(animal.uuid);
+            <div
+              class="animal-thumbnail"
+              [class.animal-thumbnail--placeholder]="!image?.previewUrl"
+              [attr.aria-label]="image?.previewUrl ? null : 'Sin foto del animal'"
+            >
+              @if (image?.previewUrl) {
+                <img [src]="image?.previewUrl" [alt]="thumbnailAlt(animal)" />
+              } @else {
+                <mat-icon aria-label="Sin foto del animal">pets</mat-icon>
+              }
+              @if (image?.syncState) {
+                <span class="animal-thumbnail__sync" [class.animal-thumbnail__sync--pending]="image?.syncState === 'PENDING'">
+                  {{ image?.syncState === 'PENDING' ? 'Pendiente' : image?.syncState === 'FAILED' ? 'Error' : 'Sync' }}
+                </span>
+              }
+            </div>
+          </ng-template>
+
+          <ng-template #animalIdentityCell let-row>
+            @let animal = animalFromRow(row);
+            <div class="animal-identity">
+              <strong class="animal-identity__primary">{{ animal.arete || 'Sin arete' }}</strong>
+              <span class="animal-identity__meta">Marca: {{ animal.marca || '—' }} · Tatuaje: {{ animal.tatuaje || '—' }}</span>
+            </div>
+          </ng-template>
+
           <app-data-table
-            [columns]="columns"
+            [columns]="columns()"
             [data]="animals()"
             [filters]="filters()"
             [actions]="actions"
@@ -107,8 +142,71 @@ const ANIMAL_TABLE_ACTION = {
       }
 
       .toolbar-actions {
-        display: grid;
+        display: flex;
+        justify-content: flex-end;
         gap: 1rem;
+      }
+
+      .primary-action-button {
+        border-radius: 999px;
+      }
+
+      .primary-action-button mat-icon {
+        margin-inline-end: 0.25rem;
+      }
+
+      .animal-thumbnail {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 4rem;
+        height: 3rem;
+        overflow: hidden;
+        border: 1px solid var(--mat-sys-outline-variant);
+        border-radius: 0.75rem;
+        background: color-mix(in srgb, var(--mat-sys-primary-container) 35%, var(--mat-sys-surface));
+      }
+
+      .animal-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .animal-thumbnail--placeholder {
+        color: var(--mat-sys-on-surface-variant);
+      }
+
+      .animal-thumbnail__sync {
+        position: absolute;
+        right: 0.25rem;
+        bottom: 0.25rem;
+        padding: 0.1rem 0.35rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--mat-sys-primary) 88%, transparent);
+        color: var(--mat-sys-on-primary);
+        font-size: 0.65rem;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .animal-thumbnail__sync--pending {
+        background: color-mix(in srgb, var(--mat-sys-tertiary) 88%, transparent);
+      }
+
+      .animal-identity {
+        display: grid;
+        gap: 0.2rem;
+        min-width: 10rem;
+      }
+
+      .animal-identity__primary {
+        font-size: 0.95rem;
+      }
+
+      .animal-identity__meta {
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.8rem;
       }
     `,
   ],
@@ -120,8 +218,11 @@ export class AnimalsPageComponent {
   private readonly animalsImagesService = inject(AnimalsImagesService);
   private readonly ganaderosService = inject(GanaderosService);
   private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
+  private readonly animalPreviewCell = viewChild.required<TemplateRef<DataTableCellContext>>('animalPreviewCell');
+  private readonly animalIdentityCell = viewChild.required<TemplateRef<DataTableCellContext>>('animalIdentityCell');
 
   readonly animals = signal<AnimalItem[]>([]);
   readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
@@ -137,17 +238,15 @@ export class AnimalsPageComponent {
     const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
     return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
   });
-  readonly columns: DataTableColumn[] = [
-    { key: 'arete', label: 'Arete', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
-    { key: 'marca', label: 'Marca', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
-    { key: 'tatuaje', label: 'Tatuaje', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+  readonly columns = computed<readonly DataTableColumn[]>(() => [
+    { key: 'thumbnail', label: 'Foto', cellTemplate: this.animalPreviewCell() },
     {
-      key: 'sex',
-      label: 'Sexo',
+      key: 'identity',
+      label: 'Animal',
       sortable: true,
-      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
-      filterOptions: [...ANIMAL_SEX_OPTIONS],
-      formatter: (value) => String(value ?? '—'),
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (_value, row) => formatAnimalIdentity(this.animalFromRow(row)),
+      cellTemplate: this.animalIdentityCell(),
     },
     {
       key: 'category',
@@ -155,10 +254,16 @@ export class AnimalsPageComponent {
       sortable: true,
       filterType: DATA_TABLE_FILTER_TYPE.SELECT,
       filterOptions: [...ANIMAL_CATEGORY_OPTIONS],
-      formatter: (value) => String(value ?? '—'),
+      formatter: (value) => animalCategoryLabel(value),
     },
-    { key: 'birthDate', label: 'Fecha de nacimiento', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
-    { key: 'admissionDate', label: 'Fecha de ingreso', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+    {
+      key: 'sex',
+      label: 'Sexo',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: [...ANIMAL_SEX_OPTIONS],
+      formatter: (value) => animalSexLabel(value),
+    },
     {
       key: 'active',
       label: 'Estado',
@@ -170,18 +275,34 @@ export class AnimalsPageComponent {
       ],
       formatter: (value) => (value === true ? 'Activo' : 'Inactivo'),
     },
-  ];
+    {
+      key: 'weightKg',
+      label: 'Peso / edad',
+      sortable: true,
+      formatter: (_value, row) => formatWeightAndAge(this.animalFromRow(row)),
+    },
+    { key: 'admissionDate', label: 'Ingreso', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+  ]);
   readonly actions: DataTableAction[] = [
     { id: ANIMAL_TABLE_ACTION.OPERATIVE_EVENT, label: 'Evento operativo', icon: 'event' },
     { id: ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT, label: 'Evento reproductivo', icon: 'child_friendly' },
     { id: ANIMAL_TABLE_ACTION.CASTRATION, label: 'Castración', icon: 'content_cut' },
     { id: ANIMAL_TABLE_ACTION.IMAGES, label: 'Imágenes', icon: 'photo_library' },
-    { id: ANIMAL_TABLE_ACTION.VIEW_EDIT, label: 'Ver/Editar ficha', icon: 'visibility' },
+    { id: ANIMAL_TABLE_ACTION.VIEW_DETAIL, label: 'Ver ficha', icon: 'visibility' },
+    { id: ANIMAL_TABLE_ACTION.VIEW_EDIT, label: 'Editar ficha', icon: 'edit' },
   ];
 
   constructor() {
     this.loadAnimals();
     this.loadOwnerOptionsIfNeeded();
+  }
+
+  goCreate() {
+    if (!this.canOpenAnimalDialog()) {
+      return;
+    }
+
+    void this.router.navigateByUrl(`${this.animalsRouteBase()}/nuevo`);
   }
 
   openCreateDialog() {
@@ -222,12 +343,27 @@ export class AnimalsPageComponent {
       case ANIMAL_TABLE_ACTION.IMAGES:
         this.openImagesDialog(animal);
         return;
+      case ANIMAL_TABLE_ACTION.VIEW_DETAIL:
+        void this.router.navigateByUrl(`${this.animalsRouteBase()}/${animal.uuid}`);
+        return;
       case ANIMAL_TABLE_ACTION.VIEW_EDIT:
-        this.openEditDialog(animal);
+        void this.router.navigateByUrl(`${this.animalsRouteBase()}/${animal.uuid}/editar`);
         return;
       default:
         return;
     }
+  }
+
+  animalFromRow(row: DataTableRow): AnimalItem {
+    return row as AnimalItem;
+  }
+
+  firstImageFor(animalUuid: string): AnimalImageItem | undefined {
+    return this.imageTimelines()[animalUuid]?.[0];
+  }
+
+  thumbnailAlt(animal: AnimalItem): string {
+    return `Foto de ${animal.arete || animal.marca || animal.tatuaje || 'animal sin identificador'}`;
   }
 
   private openEditDialog(animal: AnimalItem) {
@@ -433,6 +569,10 @@ export class AnimalsPageComponent {
 
     this.errorMessage.set(this.ownerOptionsError() ?? 'Necesitás al menos un ganadero registrado para asignar el animal.');
     return false;
+  }
+
+  private animalsRouteBase() {
+    return this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/animales' : '/admin/animales';
   }
 }
 
@@ -762,6 +902,44 @@ const transferMetadataValidator: ValidatorFn = (control: AbstractControl): Valid
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function formatAnimalIdentity(animal: AnimalItem) {
+  return [animal.arete, animal.marca, animal.tatuaje].filter((value): value is string => Boolean(value)).join(' ');
+}
+
+function animalCategoryLabel(value: unknown) {
+  return ANIMAL_CATEGORY_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—');
+}
+
+function animalSexLabel(value: unknown) {
+  return ANIMAL_SEX_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—');
+}
+
+function formatWeightAndAge(animal: AnimalItem) {
+  const weight = animal.weightKg === null ? 'Sin peso' : `${animal.weightKg} kg`;
+  const age = animal.birthDate ? formatAge(animal.birthDate) : 'Sin fecha nac.';
+  return `${weight} · ${age}`;
+}
+
+function formatAge(birthDate: string) {
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) {
+    return 'Edad no disponible';
+  }
+
+  const today = new Date();
+  const totalMonths = Math.max(
+    0,
+    (today.getFullYear() - birth.getFullYear()) * 12 + today.getMonth() - birth.getMonth() - (today.getDate() < birth.getDate() ? 1 : 0),
+  );
+
+  if (totalMonths < 12) {
+    return `${totalMonths} mes${totalMonths === 1 ? '' : 'es'}`;
+  }
+
+  const years = Math.floor(totalMonths / 12);
+  return `${years} año${years === 1 ? '' : 's'}`;
 }
 
 function currentLocalDateTimeInput() {

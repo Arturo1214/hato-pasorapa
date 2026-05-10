@@ -146,26 +146,80 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
 
           <mat-tab label="Genealogía">
             <mat-card appearance="outlined" class="detail-card genealogy">
-              <div>
-                <strong>Madre</strong>
-                <p>{{ genealogy()?.mother ? animalName(genealogy()?.mother) : 'Animal fundador: sin madre/padre registrados' }}</p>
-              </div>
-              <div>
-                <strong>Padre</strong>
-                <p>{{ genealogy()?.father ? animalName(genealogy()?.father) : 'Sin padre registrado' }}</p>
-              </div>
-              <div>
-                <strong>Crías</strong>
-                @if (genealogy()?.offspring?.length) {
-                  <ul>
-                    @for (offspring of genealogy()?.offspring; track offspring.uuid) {
-                      <li>{{ animalName(offspring) }}</li>
-                    }
-                  </ul>
-                } @else {
-                  <p>Sin crías registradas.</p>
-                }
-              </div>
+              @let currentAnimal = genealogy()?.animal ?? animal();
+              <section class="genealogy-tree" aria-label="Árbol genealógico del animal">
+                <div class="genealogy-generation">
+                  <h3>Ascendencia</h3>
+                  @if (hasGrandparents(genealogy())) {
+                    <h4>Abuelos</h4>
+                    <div class="genealogy-grandparents" aria-label="Abuelos registrados">
+                      @if (genealogy()?.ancestors?.mother?.mother?.animal; as maternalGrandmother) {
+                        <article class="genealogy-node genealogy-node--grandparent">
+                          <span class="genealogy-node__label">Abuela materna</span>
+                          <strong>{{ animalName(maternalGrandmother) }}</strong>
+                        </article>
+                      }
+                      @if (genealogy()?.ancestors?.mother?.father?.animal; as maternalGrandfather) {
+                        <article class="genealogy-node genealogy-node--grandparent">
+                          <span class="genealogy-node__label">Abuelo materno</span>
+                          <strong>{{ animalName(maternalGrandfather) }}</strong>
+                        </article>
+                      }
+                      @if (genealogy()?.ancestors?.father?.mother?.animal; as paternalGrandmother) {
+                        <article class="genealogy-node genealogy-node--grandparent">
+                          <span class="genealogy-node__label">Abuela paterna</span>
+                          <strong>{{ animalName(paternalGrandmother) }}</strong>
+                        </article>
+                      }
+                      @if (genealogy()?.ancestors?.father?.father?.animal; as paternalGrandfather) {
+                        <article class="genealogy-node genealogy-node--grandparent">
+                          <span class="genealogy-node__label">Abuelo paterno</span>
+                          <strong>{{ animalName(paternalGrandfather) }}</strong>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <p class="genealogy-empty">Sin abuelos registrados.</p>
+                  }
+                  <div class="genealogy-parents" aria-label="Madre y padre registrados">
+                    <article class="genealogy-node genealogy-node--parent">
+                      <span class="genealogy-node__label">Madre</span>
+                      <strong>{{ genealogy()?.mother ? animalName(genealogy()?.mother) : 'Animal fundador: sin madre/padre registrados' }}</strong>
+                    </article>
+                    <article class="genealogy-node genealogy-node--parent">
+                      <span class="genealogy-node__label">Padre</span>
+                      <strong>{{ genealogy()?.father ? animalName(genealogy()?.father) : 'Sin padre registrado' }}</strong>
+                    </article>
+                  </div>
+                </div>
+
+                <div class="genealogy-connector" aria-hidden="true"></div>
+
+                <article class="genealogy-node genealogy-node--current" aria-current="true">
+                  <span class="genealogy-node__label">Animal actual</span>
+                  <strong>{{ animalName(currentAnimal) }}</strong>
+                  <span>{{ categoryLabel(currentAnimal?.category) }} · {{ sexLabel(currentAnimal?.sex) }}</span>
+                </article>
+
+                <div class="genealogy-connector" aria-hidden="true"></div>
+
+                <div class="genealogy-generation">
+                  <h3>Descendencia</h3>
+                  @if (genealogy()?.offspring?.length) {
+                    <div class="genealogy-offspring" aria-label="Crías registradas">
+                      @for (offspring of genealogy()?.offspring; track offspring.uuid) {
+                        <article class="genealogy-node genealogy-node--offspring">
+                          <span class="genealogy-node__label">Cría</span>
+                          <strong>{{ animalName(offspring) }}</strong>
+                          <span>{{ categoryLabel(offspring.category) }} · {{ sexLabel(offspring.sex) }}</span>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <p class="genealogy-empty">Sin crías registradas.</p>
+                  }
+                </div>
+              </section>
             </mat-card>
           </mat-tab>
         </mat-tab-group>
@@ -183,9 +237,19 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .main-image { width: min(36rem, 100%); max-height: 24rem; object-fit: cover; border-radius: 1rem; }
     .thumbnail-strip { display: flex; gap: .75rem; margin-top: .75rem; overflow-x: auto; }
     .thumbnail-strip img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
-    .event-list, .genealogy ul { margin: 0; padding-left: 1.25rem; }
+    .event-list { margin: 0; padding-left: 1.25rem; }
     .event-metadata { display: block; margin-top: .25rem; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
-    .genealogy { display: grid; gap: 1rem; }
+    .genealogy-tree { display: grid; justify-items: center; gap: .75rem; text-align: center; }
+    .genealogy-generation { width: 100%; display: grid; gap: .75rem; }
+    .genealogy-generation h3 { margin: 0; font-size: .95rem; color: var(--mat-sys-on-surface-variant); font-weight: 600; }
+    .genealogy-generation h4 { margin: 0; font-size: .85rem; color: var(--mat-sys-on-surface-variant); font-weight: 600; }
+    .genealogy-grandparents, .genealogy-parents, .genealogy-offspring { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; width: 100%; }
+    .genealogy-node { display: grid; gap: .25rem; padding: .85rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: 1rem; background: var(--mat-sys-surface-container-low); min-height: 5rem; align-content: center; }
+    .genealogy-node--current { min-width: min(18rem, 100%); border-color: var(--mat-sys-primary); background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); box-shadow: 0 .5rem 1.5rem color-mix(in srgb, var(--mat-sys-primary) 18%, transparent); }
+    .genealogy-node__label { font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--mat-sys-on-surface-variant); }
+    .genealogy-node--current .genealogy-node__label { color: var(--mat-sys-on-primary-container); }
+    .genealogy-connector { width: 2px; height: 1.5rem; background: var(--mat-sys-outline-variant); }
+    .genealogy-empty { margin: 0; color: var(--mat-sys-on-surface-variant); }
   `],
 })
 export class AnimalDetailPageComponent {
@@ -278,6 +342,15 @@ export class AnimalDetailPageComponent {
 
   animalName(animal: AnimalItem | null | undefined) { return animalName(animal); }
 
+  hasGrandparents(genealogy: AnimalGenealogy | null) {
+    return Boolean(
+      genealogy?.ancestors?.mother?.mother?.animal
+      || genealogy?.ancestors?.mother?.father?.animal
+      || genealogy?.ancestors?.father?.mother?.animal
+      || genealogy?.ancestors?.father?.father?.animal
+    );
+  }
+
   categoryLabel(category: AnimalItem['category'] | undefined) {
     return ({ TERNERO: 'Ternero', TERNERA: 'Ternera', VAQUILLONA: 'Vaquillona', VACA: 'Vaca', TORO: 'Toro', BUEY: 'Buey' } as const)[category ?? 'VACA'] ?? '—';
   }
@@ -320,7 +393,7 @@ export class AnimalDetailPageComponent {
       events: this.eventsService.listEvents(this.uuid).pipe(catchError(() => of([] as AnimalEventItem[]))),
       healthEvents: this.healthEventsService.listEvents(this.uuid).pipe(catchError(() => of([] as AnimalHealthEventItem[]))),
       reproductionEvents: this.reproductionEventsService.listEvents(this.uuid).pipe(catchError(() => of([] as AnimalReproductionEventItem[]))),
-      genealogy: this.animalsService.getGenealogy(this.uuid).pipe(catchError(() => of(null))),
+      genealogy: this.animalsService.getGenealogy(this.uuid, 2).pipe(catchError(() => of(null))),
     }).subscribe({
       next: (detail) => {
         this.animal.set(detail.animal);

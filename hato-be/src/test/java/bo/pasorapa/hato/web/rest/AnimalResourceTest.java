@@ -540,6 +540,81 @@ class AnimalResourceTest {
     }
 
     @Test
+    void shouldReturnGrandparentsWhenGenealogyGenerationsIsTwo() {
+        UUID maternalGrandmotherUuid = UUID.fromString("6ab018e4-e540-47ad-a163-428ac22d0a01");
+        UUID maternalGrandfatherUuid = UUID.fromString("822c4950-9d89-465a-9fec-57368aa85e01");
+        UUID paternalGrandmotherUuid = UUID.fromString("e288e7d9-9c67-4498-8fd9-bba8c56ac801");
+        UUID motherUuid = UUID.fromString("4a5718d4-5a13-4987-89c8-b7f2695dd201");
+        UUID fatherUuid = UUID.fromString("78a9869e-a6ef-410f-aa3e-c984f7386501");
+        UUID calfUuid = UUID.fromString("43bd6ff7-7f59-4f31-80d5-6111979d7001");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal maternalGrandmother = buildAnimal(maternalGrandmotherUuid, "mgm-code", "mgm-tag", OWNER_A_ID, "ABUELA-M-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2018, 1, 1), new BigDecimal("440.00"), LocalDateTime.of(2026, 4, 27, 7, 0), 1L);
+            Animal maternalGrandfather = buildAnimal(maternalGrandfatherUuid, "mgf-code", "mgf-tag", OWNER_A_ID, "ABUELO-M-001", null, null, AnimalCategory.TORO, true, LocalDate.of(2018, 1, 1), new BigDecimal("700.00"), LocalDateTime.of(2026, 4, 27, 7, 1), 1L);
+            Animal paternalGrandmother = buildAnimal(paternalGrandmotherUuid, "pgm-code", "pgm-tag", OWNER_A_ID, "ABUELA-P-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2018, 1, 1), new BigDecimal("430.00"), LocalDateTime.of(2026, 4, 27, 7, 2), 1L);
+            Animal mother = buildAnimal(motherUuid, "mother-g2-code", "mother-g2-tag", OWNER_A_ID, "MADRE-G2-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2021, 1, 1), new BigDecimal("430.00"), LocalDateTime.of(2026, 4, 27, 8, 0), 1L);
+            Animal father = buildAnimal(fatherUuid, "father-g2-code", "father-g2-tag", OWNER_A_ID, "PADRE-G2-001", null, null, AnimalCategory.TORO, true, LocalDate.of(2021, 1, 1), new BigDecimal("610.00"), LocalDateTime.of(2026, 4, 27, 8, 5), 1L);
+            Animal calf = buildAnimal(calfUuid, "calf-g2-code", "calf-g2-tag", OWNER_A_ID, "CRIA-G2-001", null, null, AnimalCategory.TERNERA, true, LocalDate.of(2026, 1, 1), new BigDecimal("90.00"), LocalDateTime.of(2026, 4, 27, 8, 10), 1L);
+            mother.setMotherAnimalUuid(maternalGrandmotherUuid);
+            mother.setFatherAnimalUuid(maternalGrandfatherUuid);
+            father.setMotherAnimalUuid(paternalGrandmotherUuid);
+            calf.setMotherAnimalUuid(motherUuid);
+            calf.setFatherAnimalUuid(fatherUuid);
+            animalRepository.persist(maternalGrandmother, maternalGrandfather, paternalGrandmother, mother, father, calf);
+        });
+
+        given()
+                .auth().oauth2(loginAs("animal-admin", "AdminAnimal9"))
+                .queryParam("generations", 2)
+                .when()
+                .get("/api/animals/{uuid}/genealogy", calfUuid)
+                .then()
+                .statusCode(200)
+                .body("animal.uuid", equalTo(calfUuid.toString()))
+                .body("mother.uuid", equalTo(motherUuid.toString()))
+                .body("father.uuid", equalTo(fatherUuid.toString()))
+                .body("ancestors.animal.uuid", equalTo(calfUuid.toString()))
+                .body("ancestors.mother.animal.uuid", equalTo(motherUuid.toString()))
+                .body("ancestors.mother.mother.animal.uuid", equalTo(maternalGrandmotherUuid.toString()))
+                .body("ancestors.mother.father.animal.uuid", equalTo(maternalGrandfatherUuid.toString()))
+                .body("ancestors.father.animal.uuid", equalTo(fatherUuid.toString()))
+                .body("ancestors.father.mother.animal.uuid", equalTo(paternalGrandmotherUuid.toString()))
+                .body("ancestors.father.father", nullValue());
+    }
+
+    @Test
+    void shouldClampGenealogyGenerationsToMaximumDepth() {
+        UUID greatGreatGrandmotherUuid = UUID.fromString("ffb19672-1f9f-47f6-9a10-67e162592501");
+        UUID greatGrandmotherUuid = UUID.fromString("a0cae7a8-52ea-4423-bad0-9350806b9501");
+        UUID grandmotherUuid = UUID.fromString("d5f80575-f2e6-495f-80cf-d1d2a4196501");
+        UUID motherUuid = UUID.fromString("608699ad-67a7-4618-977e-48c9f1700501");
+        UUID calfUuid = UUID.fromString("670ef2ff-91aa-4944-83b5-e5b86a5af501");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal greatGreatGrandmother = buildAnimal(greatGreatGrandmotherUuid, "gggm-code", "gggm-tag", OWNER_A_ID, "TATARABUELA-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2012, 1, 1), new BigDecimal("440.00"), LocalDateTime.of(2026, 4, 27, 6, 0), 1L);
+            Animal greatGrandmother = buildAnimal(greatGrandmotherUuid, "ggm-code", "ggm-tag", OWNER_A_ID, "BISABUELA-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2015, 1, 1), new BigDecimal("440.00"), LocalDateTime.of(2026, 4, 27, 7, 0), 1L);
+            Animal grandmother = buildAnimal(grandmotherUuid, "gm-code", "gm-tag", OWNER_A_ID, "ABUELA-CLAMP-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2018, 1, 1), new BigDecimal("430.00"), LocalDateTime.of(2026, 4, 27, 8, 0), 1L);
+            Animal mother = buildAnimal(motherUuid, "mother-clamp-code", "mother-clamp-tag", OWNER_A_ID, "MADRE-CLAMP-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2021, 1, 1), new BigDecimal("420.00"), LocalDateTime.of(2026, 4, 27, 9, 0), 1L);
+            Animal calf = buildAnimal(calfUuid, "calf-clamp-code", "calf-clamp-tag", OWNER_A_ID, "CRIA-CLAMP-001", null, null, AnimalCategory.TERNERA, true, LocalDate.of(2026, 1, 1), new BigDecimal("90.00"), LocalDateTime.of(2026, 4, 27, 10, 0), 1L);
+            greatGrandmother.setMotherAnimalUuid(greatGreatGrandmotherUuid);
+            grandmother.setMotherAnimalUuid(greatGrandmotherUuid);
+            mother.setMotherAnimalUuid(grandmotherUuid);
+            calf.setMotherAnimalUuid(motherUuid);
+            animalRepository.persist(greatGreatGrandmother, greatGrandmother, grandmother, mother, calf);
+        });
+
+        given()
+                .auth().oauth2(loginAs("animal-admin", "AdminAnimal9"))
+                .queryParam("generations", 99)
+                .when()
+                .get("/api/animals/{uuid}/genealogy", calfUuid)
+                .then()
+                .statusCode(200)
+                .body("ancestors.mother.mother.mother.animal.uuid", equalTo(greatGrandmotherUuid.toString()))
+                .body("ancestors.mother.mother.mother.mother", nullValue());
+    }
+
+    @Test
     void shouldScopeGanaderoGenealogyAndDetailToAuthenticatedOwner() {
         UUID ownAnimalUuid = UUID.fromString("4f9d1eaf-2271-42a2-9e4c-6c9d6744c103");
         UUID ownOffspringUuid = UUID.fromString("f5480b65-cc58-45e1-ae78-10f08deababe");
@@ -579,6 +654,33 @@ class AnimalResourceTest {
                 .body("animal.uuid", equalTo(ownAnimalUuid.toString()))
                 .body("offspring", hasSize(1))
                 .body("offspring[0].uuid", equalTo(ownOffspringUuid.toString()));
+    }
+
+    @Test
+    void shouldFilterOutOfOwnerAncestorsForGanaderoGenealogy() {
+        UUID otherOwnerGrandmotherUuid = UUID.fromString("8c2ba3d8-b46d-42f3-bcad-0fe02a8a8a01");
+        UUID ownMotherUuid = UUID.fromString("5475a31c-fcb7-4868-814b-6774226c9a01");
+        UUID ownAnimalUuid = UUID.fromString("af4a3d7b-ee02-48a2-bc50-492456f00a01");
+
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal otherOwnerGrandmother = buildAnimal(otherOwnerGrandmotherUuid, "other-grandmother", "other-grandmother", OWNER_B_ID, "ABUELA-OTRA-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2018, 1, 1), new BigDecimal("430.00"), LocalDateTime.of(2026, 4, 27, 7, 0), 1L);
+            Animal ownMother = buildAnimal(ownMotherUuid, "own-mother-g2", "own-mother-g2", OWNER_A_ID, "MADRE-PROPIA-001", null, null, AnimalCategory.VACA, true, LocalDate.of(2021, 1, 1), new BigDecimal("410.00"), LocalDateTime.of(2026, 4, 27, 8, 0), 1L);
+            Animal ownAnimal = buildAnimal(ownAnimalUuid, "own-animal-g2", "own-animal-g2", OWNER_A_ID, "CRIA-PROPIA-001", null, null, AnimalCategory.TERNERA, true, LocalDate.of(2026, 1, 1), new BigDecimal("90.00"), LocalDateTime.of(2026, 4, 27, 9, 0), 1L);
+            ownMother.setMotherAnimalUuid(otherOwnerGrandmotherUuid);
+            ownAnimal.setMotherAnimalUuid(ownMotherUuid);
+            animalRepository.persist(otherOwnerGrandmother, ownMother, ownAnimal);
+        });
+
+        given()
+                .auth().oauth2(loginAs("animal-ganadero", "GanaderoAnimal9"))
+                .queryParam("generations", 2)
+                .when()
+                .get("/api/animals/{uuid}/genealogy", ownAnimalUuid)
+                .then()
+                .statusCode(200)
+                .body("mother.uuid", equalTo(ownMotherUuid.toString()))
+                .body("ancestors.mother.animal.uuid", equalTo(ownMotherUuid.toString()))
+                .body("ancestors.mother.mother", nullValue());
     }
 
     @Test

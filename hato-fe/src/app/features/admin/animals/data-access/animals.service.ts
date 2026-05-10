@@ -79,6 +79,13 @@ export interface AnimalGenealogy {
   mother: AnimalItem | null;
   father: AnimalItem | null;
   offspring: AnimalItem[];
+  ancestors?: AnimalGenealogyNode | null;
+}
+
+export interface AnimalGenealogyNode {
+  animal: AnimalItem;
+  mother?: AnimalGenealogyNode | null;
+  father?: AnimalGenealogyNode | null;
 }
 
 interface RawAnimalGenealogy {
@@ -86,6 +93,13 @@ interface RawAnimalGenealogy {
   mother?: RawAnimalItem | null;
   father?: RawAnimalItem | null;
   offspring?: RawAnimalItem[] | null;
+  ancestors?: RawAnimalGenealogyNode | null;
+}
+
+interface RawAnimalGenealogyNode {
+  animal: RawAnimalItem;
+  mother?: RawAnimalGenealogyNode | null;
+  father?: RawAnimalGenealogyNode | null;
 }
 
 export interface AnimalMutationPayload {
@@ -202,8 +216,8 @@ export class AnimalsService {
     return from(this.getAnimalInternal(uuid));
   }
 
-  getGenealogy(uuid: string): Observable<AnimalGenealogy> {
-    return from(this.getGenealogyInternal(uuid));
+  getGenealogy(uuid: string, generations?: number): Observable<AnimalGenealogy> {
+    return from(this.getGenealogyInternal(uuid, generations));
   }
 
   createAnimal(payload: AnimalMutationPayload): Observable<AnimalMutationFeedback> {
@@ -268,9 +282,9 @@ export class AnimalsService {
     return { ...animal, syncStatus: 'synced', syncMessage: null } satisfies AnimalItem;
   }
 
-  private async getGenealogyInternal(uuid: string) {
+  private async getGenealogyInternal(uuid: string, generations?: number) {
     const response = await firstValueFrom(
-      this.http.get<RawAnimalGenealogy>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}/genealogy`, {
+      this.http.get<RawAnimalGenealogy>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}/genealogy${buildGenealogyQuery(generations)}`, {
         headers: this.buildHeaders(),
       })
     );
@@ -280,6 +294,7 @@ export class AnimalsService {
       mother: response.mother ? markSynced(normalizeAnimalItem(response.mother)) : null,
       father: response.father ? markSynced(normalizeAnimalItem(response.father)) : null,
       offspring: (response.offspring ?? []).map((animal) => markSynced(normalizeAnimalItem(animal))),
+      ancestors: response.ancestors ? normalizeGenealogyNode(response.ancestors) : null,
     } satisfies AnimalGenealogy;
   }
 
@@ -496,6 +511,14 @@ function normalizeAnimalItem(animal: RawAnimalItem | AnimalItem): AnimalItem {
   } satisfies AnimalItem;
 }
 
+function normalizeGenealogyNode(node: RawAnimalGenealogyNode): AnimalGenealogyNode {
+  return {
+    animal: markSynced(normalizeAnimalItem(node.animal)),
+    mother: node.mother ? normalizeGenealogyNode(node.mother) : null,
+    father: node.father ? normalizeGenealogyNode(node.father) : null,
+  } satisfies AnimalGenealogyNode;
+}
+
 function normalizeAnimalCategory(category: RawAnimalItem['category'], sex: AnimalSex | null | undefined): AnimalCategory {
   switch (category) {
     case 'COW':
@@ -540,6 +563,14 @@ function buildListQuery(filters: AnimalListFilters) {
 
   params.push('page=0', 'size=20', 'sort=updatedAt,desc');
   return `?${params.join('&')}`;
+}
+
+function buildGenealogyQuery(generations: number | undefined) {
+  if (generations === undefined) {
+    return '';
+  }
+
+  return `?generations=${encodeURIComponent(String(generations))}`;
 }
 
 function matchesAnimalFilters(animal: AnimalItem, filters: AnimalListFilters) {

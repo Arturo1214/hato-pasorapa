@@ -247,8 +247,51 @@ describe('AnimalsService', () => {
       mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001', syncStatus: 'synced', syncMessage: null }),
       father: null,
       offspring: [createAnimal({ uuid: 'offspring-1', arete: 'CRIA-002', syncStatus: 'synced', syncMessage: null })],
+      ancestors: null,
     });
     expect(get).toHaveBeenCalledWith('/api/animals/animal-detail-1/genealogy', {
+      headers: expect.any(HttpHeaders),
+    });
+  });
+
+  it('should request limited genealogy generations and map ancestor nodes', async () => {
+    const get = vi.fn(() =>
+      of({
+        animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001' }),
+        mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }),
+        father: createAnimal({ uuid: 'father-1', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }),
+        offspring: [],
+        ancestors: {
+          animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001' }),
+          mother: {
+            animal: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }),
+            mother: { animal: createAnimal({ uuid: 'maternal-grandmother-1', arete: 'ABUELA-M-001' }) },
+          },
+        },
+      }),
+    );
+    const { service } = setup({ online: true, http: { get: get as never } });
+
+    await expect(firstValueFrom(service.getGenealogy('animal-detail-1', 2))).resolves.toEqual({
+      animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001', syncStatus: 'synced', syncMessage: null }),
+      mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001', syncStatus: 'synced', syncMessage: null }),
+      father: createAnimal({ uuid: 'father-1', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO, syncStatus: 'synced', syncMessage: null }),
+      offspring: [],
+      ancestors: {
+        animal: createAnimal({ uuid: 'animal-detail-1', arete: 'CRIA-001', syncStatus: 'synced', syncMessage: null }),
+        father: null,
+        mother: {
+          animal: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001', syncStatus: 'synced', syncMessage: null }),
+          father: null,
+          mother: {
+            animal: createAnimal({ uuid: 'maternal-grandmother-1', arete: 'ABUELA-M-001', syncStatus: 'synced', syncMessage: null }),
+            mother: null,
+            father: null,
+          },
+        },
+      },
+    });
+    expect(get).toHaveBeenCalledWith('/api/animals/animal-detail-1/genealogy?generations=2', {
       headers: expect.any(HttpHeaders),
     });
   });

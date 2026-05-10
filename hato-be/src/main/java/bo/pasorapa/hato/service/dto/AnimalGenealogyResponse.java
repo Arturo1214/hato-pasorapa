@@ -6,6 +6,12 @@ public record AnimalGenealogyResponse(
         AnimalResponse animal,
         AnimalResponse mother,
         AnimalResponse father,
-        List<AnimalResponse> offspring
+        List<AnimalResponse> offspring,
+        AnimalGenealogyNode ancestors
 ) {
+    public record AnimalGenealogyNode(
+            AnimalResponse animal,
+            AnimalGenealogyNode mother,
+            AnimalGenealogyNode father
+    ) {}
 }

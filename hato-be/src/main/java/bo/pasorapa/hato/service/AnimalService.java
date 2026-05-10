@@ -13,6 +13,7 @@ import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
 import bo.pasorapa.hato.service.dto.AnimalGenealogyResponse;
+import bo.pasorapa.hato.service.dto.AnimalGenealogyResponse.AnimalGenealogyNode;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
 import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationRequest;
@@ -35,6 +36,9 @@ import java.util.UUID;
 
 @ApplicationScoped
 public class AnimalService {
+
+    private static final int DEFAULT_GENEALOGY_GENERATIONS = 1;
+    private static final int MAX_GENEALOGY_GENERATIONS = 3;
 
     private final AnimalRepository animalRepository;
     private final AnimalEventRepository animalEventRepository;
@@ -119,9 +123,15 @@ public class AnimalService {
 
     @Transactional
     public AnimalGenealogyResponse findGenealogy(UUID uuid, UUID currentUserId) {
+        return findGenealogy(uuid, currentUserId, DEFAULT_GENEALOGY_GENERATIONS);
+    }
+
+    @Transactional
+    public AnimalGenealogyResponse findGenealogy(UUID uuid, UUID currentUserId, Integer generations) {
         Animal animal = findByUuid(uuid);
         UUID allowedGanaderoId = resolveAllowedGanaderoId(currentUserId);
         enforceAnimalOwnership(animal, allowedGanaderoId);
+        int safeGenerations = clampGenealogyGenerations(generations);
 
         Animal mother = animal.getMotherAnimalUuid() == null
                 ? null
@@ -137,7 +147,37 @@ public class AnimalService {
                 animalMapper.toResponse(animal),
                 mother == null ? null : animalMapper.toResponse(mother),
                 father == null ? null : animalMapper.toResponse(father),
-                offspring.stream().map(animalMapper::toResponse).toList());
+                offspring.stream().map(animalMapper::toResponse).toList(),
+                buildAncestorNode(animal, allowedGanaderoId, safeGenerations));
+    }
+
+    private int clampGenealogyGenerations(Integer generations) {
+        if (generations == null) {
+            return DEFAULT_GENEALOGY_GENERATIONS;
+        }
+        return Math.max(1, Math.min(generations, MAX_GENEALOGY_GENERATIONS));
+    }
+
+    private AnimalGenealogyNode buildAncestorNode(Animal animal, UUID allowedGanaderoId, int generationsRemaining) {
+        if (generationsRemaining <= 0) {
+            return new AnimalGenealogyNode(animalMapper.toResponse(animal), null, null);
+        }
+
+        return new AnimalGenealogyNode(
+                animalMapper.toResponse(animal),
+                resolveAncestorParent(animal.getMotherAnimalUuid(), allowedGanaderoId, generationsRemaining - 1),
+                resolveAncestorParent(animal.getFatherAnimalUuid(), allowedGanaderoId, generationsRemaining - 1));
+    }
+
+    private AnimalGenealogyNode resolveAncestorParent(UUID parentUuid, UUID allowedGanaderoId, int generationsRemaining) {
+        if (parentUuid == null) {
+            return null;
+        }
+
+        return animalRepository.findByUuid(parentUuid)
+                .filter(relative -> canExposeRelative(relative, allowedGanaderoId))
+                .map(relative -> buildAncestorNode(relative, allowedGanaderoId, generationsRemaining))
+                .orElse(null);
     }
 
     @Transactional

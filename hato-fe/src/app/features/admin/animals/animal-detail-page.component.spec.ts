@@ -57,8 +57,13 @@ describe('AnimalDetailPageComponent', () => {
   const genealogy: AnimalGenealogy = {
     animal: createAnimal(),
     mother: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }),
-    father: null,
+    father: createAnimal({ uuid: 'father-1', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }),
     offspring: [createAnimal({ uuid: 'offspring-1', arete: 'CRIA-001' })],
+    ancestors: {
+      animal: createAnimal(),
+      mother: { animal: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }) },
+      father: { animal: createAnimal({ uuid: 'father-1', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }) },
+    },
   };
 
   const createReproductionEvent = (overrides: Partial<AnimalReproductionEventItem> = {}): AnimalReproductionEventItem => ({
@@ -77,10 +82,10 @@ describe('AnimalDetailPageComponent', () => {
     ...overrides,
   });
 
-  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; reproductionEvents?: AnimalReproductionEventItem[] } = {}) => {
+  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; genealogy?: AnimalGenealogy; reproductionEvents?: AnimalReproductionEventItem[] } = {}) => {
     const animalsService = {
       getAnimal: vi.fn(() => of(options.animal ?? createAnimal())),
-      getGenealogy: vi.fn(() => of(genealogy)),
+      getGenealogy: vi.fn(() => of(options.genealogy ?? genealogy)),
       registerBirth: vi.fn(),
       ...options.animalsService,
     };
@@ -135,20 +140,79 @@ describe('AnimalDetailPageComponent', () => {
     await selectTab(fixture, 'Genealogía');
     text = fixture.nativeElement.textContent as string;
     expect(text).toContain('MADRE-001');
+    expect(text).toContain('PADRE-001');
     expect(text).toContain('CRIA-001');
+  });
+
+  it('should render genealogy as a visual parent-current-offspring tree', async () => {
+    const { fixture } = await configure();
+
+    await selectTab(fixture, 'Genealogía');
+    const text = fixture.nativeElement.textContent as string;
+    const tree = fixture.nativeElement.querySelector('[aria-label="Árbol genealógico del animal"]') as HTMLElement | null;
+
+    expect(tree?.textContent).toContain('Ascendencia');
+    expect(tree?.textContent).toContain('Madre');
+    expect(tree?.textContent).toContain('MADRE-001');
+    expect(tree?.textContent).toContain('Padre');
+    expect(tree?.textContent).toContain('PADRE-001');
+    expect(tree?.textContent).toContain('Animal actual');
+    expect(tree?.textContent).toContain('AR-100');
+    expect(tree?.textContent).toContain('Descendencia');
+    expect(tree?.textContent).toContain('CRIA-001');
+    expect(text.indexOf('Ascendencia')).toBeLessThan(text.indexOf('Animal actual'));
+    expect(text.indexOf('Animal actual')).toBeLessThan(text.indexOf('Descendencia'));
+  });
+
+  it('should request two genealogy generations and render grandparents above parents', async () => {
+    const { fixture, animalsService } = await configure({
+      genealogy: {
+        ...genealogy,
+        ancestors: {
+          animal: createAnimal(),
+          mother: {
+            animal: createAnimal({ uuid: 'mother-1', arete: 'MADRE-001' }),
+            mother: { animal: createAnimal({ uuid: 'maternal-grandmother-1', arete: 'ABUELA-M-001' }) },
+            father: { animal: createAnimal({ uuid: 'maternal-grandfather-1', arete: 'ABUELO-M-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }) },
+          },
+          father: {
+            animal: createAnimal({ uuid: 'father-1', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }),
+            mother: { animal: createAnimal({ uuid: 'paternal-grandmother-1', arete: 'ABUELA-P-001' }) },
+          },
+        },
+      },
+    });
+
+    await selectTab(fixture, 'Genealogía');
+    const text = fixture.nativeElement.textContent as string;
+    const tree = fixture.nativeElement.querySelector('[aria-label="Árbol genealógico del animal"]') as HTMLElement | null;
+
+    expect(animalsService.getGenealogy).toHaveBeenCalledWith('animal-uuid-1', 2);
+    expect(tree?.textContent).toContain('Abuelos');
+    expect(tree?.textContent).toContain('ABUELA-M-001');
+    expect(tree?.textContent).toContain('ABUELO-M-001');
+    expect(tree?.textContent).toContain('ABUELA-P-001');
+    expect(text.indexOf('Abuelos')).toBeLessThan(text.indexOf('Madre'));
+    expect(text.indexOf('Madre')).toBeLessThan(text.indexOf('Animal actual'));
   });
 
   it('should show safe empty genealogy and image states for foundation animals', async () => {
     const { fixture } = await configure({
       animalsService: {
         getAnimal: vi.fn(() => of(createAnimal({ motherAnimalUuid: null, fatherAnimalUuid: null }))),
-        getGenealogy: vi.fn(() => of({ animal: createAnimal(), mother: null, father: null, offspring: [] })),
+        getGenealogy: vi.fn(() => of({ animal: createAnimal(), mother: null, father: null, offspring: [], ancestors: { animal: createAnimal() } })),
       },
     });
 
     await selectTab(fixture, 'Genealogía');
-    expect(fixture.nativeElement.textContent).toContain('Animal fundador: sin madre/padre registrados');
-    expect(fixture.nativeElement.textContent).toContain('Sin crías registradas');
+    const tree = fixture.nativeElement.querySelector('[aria-label="Árbol genealógico del animal"]') as HTMLElement | null;
+
+    expect(tree?.textContent).toContain('Animal fundador: sin madre/padre registrados');
+    expect(tree?.textContent).toContain('Sin padre registrado');
+    expect(tree?.textContent).toContain('Sin abuelos registrados');
+    expect(tree?.textContent).toContain('Animal actual');
+    expect(tree?.textContent).toContain('AR-100');
+    expect(tree?.textContent).toContain('Sin crías registradas');
   });
 
   it('should expose birth registration only for female animals and refresh after dialog success', async () => {

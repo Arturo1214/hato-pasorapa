@@ -107,7 +107,25 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
               @if (healthEvents().length) {
                 <ul class="event-list">
                   @for (event of healthEvents(); track event.id) {
-                    <li>{{ event.occurredAt }} · {{ healthEventLabel(event.healthEventType) }} @if (event.notes) { — {{ event.notes }} }</li>
+                    <li class="event-list__item">
+                      <div class="event-list__summary">
+                        <strong>{{ formatTimelineDate(event.occurredAt) }} · {{ healthEventLabel(event.healthEventType) }}</strong>
+                        @if (!isFieldVetVisit(event) && event.notes) { — {{ event.notes }} }
+                      </div>
+                      @if (healthEventContextRows(event).length) {
+                        <dl class="event-context">
+                          @for (row of healthEventContextRows(event); track row.label) {
+                            <div><dt>{{ row.label }}: </dt><dd>{{ row.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                      @if (isFieldVetVisit(event)) {
+                        <button mat-stroked-button type="button" (click)="openVetVisitDetails(event)">
+                          <mat-icon>medical_information</mat-icon>
+                          Detalles
+                        </button>
+                      }
+                    </li>
                   }
                 </ul>
               } @else {
@@ -256,6 +274,12 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .thumbnail-strip { display: flex; gap: .75rem; margin-top: .75rem; overflow-x: auto; }
     .thumbnail-strip img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
     .event-list { margin: 0; padding-left: 1.25rem; }
+    .event-list__item { margin-bottom: 1rem; }
+    .event-list__summary { margin-bottom: .5rem; }
+    .event-context { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .5rem .75rem; margin: .5rem 0; }
+    .event-context div { min-width: 0; }
+    .event-context dt { font-size: .75rem; }
+    .event-context dd { font-weight: 500; overflow-wrap: anywhere; }
     .event-metadata { display: block; margin-top: .25rem; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
     .active-gestation { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--mat-sys-primary); border-radius: 1rem; background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); }
     .active-gestation h3 { margin: 0 0 .75rem; }
@@ -393,7 +417,20 @@ export class AnimalDetailPageComponent {
 
   animalEventLabel(type: AnimalEventItem['type']) { return type === 'OBSERVATION' ? 'Observación' : type; }
 
-  healthEventLabel(type: AnimalHealthEventItem['healthEventType']) { return type.replaceAll('_', ' '); }
+  healthEventLabel(type: AnimalHealthEventItem['healthEventType']) { return healthEventLabel(type); }
+
+  formatTimelineDate(value: string) { return formatDateOnly(value); }
+
+  isFieldVetVisit(event: AnimalHealthEventItem) { return isFieldVetVisit(event); }
+
+  healthEventContextRows(event: AnimalHealthEventItem) { return healthEventContextRows(event); }
+
+  openVetVisitDetails(event: AnimalHealthEventItem) {
+    this.dialog.open(AnimalVetVisitDetailDialogComponent, {
+      width: 'min(42rem, 96vw)',
+      data: event,
+    });
+  }
 
   reproductionEventLabel(type: AnimalReproductionEventItem['reproductionEventType']) {
     return ({
@@ -439,6 +476,53 @@ export class AnimalDetailPageComponent {
       },
     });
   }
+}
+
+@Component({
+  selector: 'app-animal-vet-visit-detail-dialog',
+  standalone: true,
+  imports: [CommonModule, MatButtonModule, MatDialogModule],
+  template: `
+    <h2 mat-dialog-title>Detalles de visita veterinaria</h2>
+    <div mat-dialog-content>
+      <dl class="vet-visit-detail">
+        <div><dt>Fecha</dt><dd>{{ formatDate(data.occurredAt) }}</dd></div>
+        <div><dt>Modalidad / alcance</dt><dd>{{ modeLabel(data) }}</dd></div>
+        <div><dt>Estado</dt><dd>{{ statusLabel(data) }}</dd></div>
+        <div><dt>Motivo</dt><dd>{{ motive(data) }}</dd></div>
+        <div><dt>Veterinario</dt><dd>{{ veterinarianName(data) }}</dd></div>
+        <div><dt>Matrícula</dt><dd>{{ veterinarianLicense(data) }}</dd></div>
+        <div><dt>Notas de atención</dt><dd>{{ attentionNotes(data) }}</dd></div>
+        <div><dt>Descripción / hallazgos</dt><dd>{{ findings(data) }}</dd></div>
+        <div><dt>Plan</dt><dd>{{ plan(data) }}</dd></div>
+        <div><dt>Próximo control</dt><dd>{{ nextControlDate(data) }}</dd></div>
+        <div><dt>Costo</dt><dd>{{ cost(data) }}</dd></div>
+      </dl>
+    </div>
+    <div mat-dialog-actions align="end">
+      <button mat-button type="button" mat-dialog-close>Cerrar</button>
+    </div>
+  `,
+  styles: [`
+    .vet-visit-detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem 1rem; margin: 0; }
+    .vet-visit-detail div { min-width: 0; }
+    .vet-visit-detail dd { overflow-wrap: anywhere; }
+  `],
+})
+export class AnimalVetVisitDetailDialogComponent {
+  readonly data = inject<AnimalHealthEventItem>(MAT_DIALOG_DATA);
+
+  formatDate(value: string) { return formatDateOnly(value); }
+  modeLabel(event: AnimalHealthEventItem) { return visitModeLabel(readVisitModeValue(event)); }
+  statusLabel(event: AnimalHealthEventItem) { return visitStatusLabel(readVisitStatusValue(event)); }
+  motive(event: AnimalHealthEventItem) { return readClinicalNoteText(event, 'reason') ?? 'No informado'; }
+  veterinarianName(event: AnimalHealthEventItem) { return readVeterinarianName(event) ?? 'No informado'; }
+  veterinarianLicense(event: AnimalHealthEventItem) { return readVeterinarianLicense(event) ?? 'No informada'; }
+  attentionNotes(event: AnimalHealthEventItem) { return readAttentionNotes(event) ?? 'No informadas'; }
+  findings(event: AnimalHealthEventItem) { return readClinicalNoteText(event, 'findings') ?? 'No informado'; }
+  plan(event: AnimalHealthEventItem) { return readClinicalNoteText(event, 'plan') ?? 'No informado'; }
+  nextControlDate(event: AnimalHealthEventItem) { return event.nextDueAt ? formatDateOnly(event.nextDueAt) : 'No programado'; }
+  cost(event: AnimalHealthEventItem) { return readCostLabel(event) ?? 'No informado'; }
 }
 
 interface AnimalBirthRegistrationDialogData {
@@ -998,6 +1082,136 @@ function startOfDay(date: Date) {
 
 function hasVisibleIdentifier(calf: { arete: string; marca: string; tatuaje: string }) {
   return [calf.arete, calf.marca, calf.tatuaje].some((visible) => visible.trim().length > 0);
+}
+
+function healthEventLabel(type: AnimalHealthEventItem['healthEventType']) {
+  return ({
+    VACCINATION: 'Vacunación',
+    DEWORMING: 'Desparasitación',
+    DISEASE_REPORTED: 'Enfermedad reportada',
+    TREATMENT_STARTED: 'Tratamiento iniciado',
+    TREATMENT_FOLLOW_UP: 'Seguimiento de tratamiento',
+    TREATMENT_CLOSED: 'Tratamiento cerrado',
+    FIELD_VET_VISIT: 'Visita veterinaria',
+  } as const)[type] ?? type.replaceAll('_', ' ');
+}
+
+function isFieldVetVisit(event: AnimalHealthEventItem) {
+  return event.healthEventType === 'FIELD_VET_VISIT';
+}
+
+function healthEventContextRows(event: AnimalHealthEventItem) {
+  if (!isFieldVetVisit(event)) {
+    return [];
+  }
+
+  return [
+    { label: 'Motivo', value: readClinicalNoteText(event, 'reason') },
+    { label: 'Veterinario', value: readVeterinarianName(event) },
+    { label: 'Estado', value: visitStatusLabel(readVisitStatusValue(event)) },
+    { label: 'Notas', value: isAttendedVisit(event) ? readAttentionNotes(event) : null },
+  ].filter((row): row is { label: string; value: string } => Boolean(row.value));
+}
+
+function formatDateOnly(value: string | null | undefined) {
+  const raw = firstText(value);
+  if (!raw) {
+    return '—';
+  }
+  const datePart = raw.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(datePart);
+  if (!match) {
+    return raw;
+  }
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function readVisitModeValue(event: AnimalHealthEventItem) {
+  return event.visitMode ?? readVisitBlock(event)?.['mode'];
+}
+
+function readVisitStatusValue(event: AnimalHealthEventItem) {
+  return event.visitStatus ?? readVisitBlock(event)?.['status'];
+}
+
+function visitModeLabel(value: unknown) {
+  return ({ GLOBAL: 'Campaña', SPECIFIC: 'Animal específico' } as const)[value as 'GLOBAL' | 'SPECIFIC'] ?? 'No informado';
+}
+
+function visitStatusLabel(value: unknown) {
+  return ({
+    PENDING: 'Programada',
+    ATTENDED: 'Atendida',
+    RESCHEDULED: 'Reprogramada',
+    FINALIZED: 'Finalizada',
+    CANCELED: 'Cancelada',
+  } as const)[value as 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED'] ?? 'No informado';
+}
+
+function isAttendedVisit(event: AnimalHealthEventItem) {
+  const status = readVisitStatusValue(event);
+  return status === 'ATTENDED' || status === 'FINALIZED';
+}
+
+function readVisitBlock(event: AnimalHealthEventItem) {
+  const metadata = event.metadata as Record<string, unknown>;
+  const visit = metadata['visit'];
+  return typeof visit === 'object' && visit !== null ? visit as Record<string, unknown> : null;
+}
+
+function readClinicalNoteBlock(event: AnimalHealthEventItem) {
+  const metadata = event.metadata as Record<string, unknown>;
+  const clinicalNote = metadata['clinicalNote'];
+  return typeof clinicalNote === 'object' && clinicalNote !== null ? clinicalNote as Record<string, unknown> : null;
+}
+
+function readClinicalNoteText(event: AnimalHealthEventItem, field: 'reason' | 'findings' | 'plan') {
+  return firstText(readClinicalNoteBlock(event)?.[field]);
+}
+
+function readVeterinarianName(event: AnimalHealthEventItem) {
+  return firstText(event.veterinarianName, readVeterinarianBlock(event)?.['name']);
+}
+
+function readVeterinarianLicense(event: AnimalHealthEventItem) {
+  return firstText(readVeterinarianBlock(event)?.['license']);
+}
+
+function readVeterinarianBlock(event: AnimalHealthEventItem) {
+  const veterinarian = readVisitBlock(event)?.['veterinarian'];
+  return typeof veterinarian === 'object' && veterinarian !== null ? veterinarian as Record<string, unknown> : null;
+}
+
+function readAttentionNotes(event: AnimalHealthEventItem) {
+  const metadata = event.metadata as Record<string, unknown>;
+  return firstText(metadata['atencionNotas'], metadata['attentionNotes'], event.notes, readClinicalNoteText(event, 'findings'));
+}
+
+function readCostLabel(event: AnimalHealthEventItem) {
+  const metadata = event.metadata as Record<string, unknown>;
+  const nestedCost = readNestedObject(metadata['cost']) ?? readNestedObject(metadata['costo']);
+  const amount = firstNumber(metadata['amount'], metadata['costAmount'], metadata['costo'], nestedCost?.['amount'], nestedCost?.['value']);
+  if (amount == null) {
+    return null;
+  }
+  const currency = firstText(metadata['currency'], nestedCost?.['currency'], 'BOB') ?? 'BOB';
+  return `${new Intl.NumberFormat('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)} ${currency}`;
+}
+
+function readNestedObject(value: unknown) {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : null;
+}
+
+function firstNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return null;
 }
 
 function firstText(...values: unknown[]) {

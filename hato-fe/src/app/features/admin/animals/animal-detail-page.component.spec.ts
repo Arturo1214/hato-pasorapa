@@ -8,9 +8,9 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dial
 import { of, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent, AnimalServiceRegistrationDialogComponent } from './animal-detail-page.component';
+import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent, AnimalServiceRegistrationDialogComponent, AnimalVetVisitDetailDialogComponent } from './animal-detail-page.component';
 import { AnimalsEventsService } from './data-access/animals-events.service';
-import { AnimalsHealthEventsService } from './data-access/animals-health-events.service';
+import { AnimalsHealthEventsService, type AnimalHealthEventItem } from './data-access/animals-health-events.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import { AnimalsReproductionEventsService, type AnimalReproductionEventItem } from './data-access/animals-reproduction-events.service';
 import { ANIMAL_CATEGORY, ANIMAL_SEX, AnimalsService, type AnimalItem, type AnimalGenealogy } from './data-access/animals.service';
@@ -87,7 +87,40 @@ describe('AnimalDetailPageComponent', () => {
     ...overrides,
   });
 
-  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; genealogy?: AnimalGenealogy; reproductionEvents?: AnimalReproductionEventItem[] } = {}) => {
+  const createHealthEvent = (overrides: Partial<AnimalHealthEventItem> = {}): AnimalHealthEventItem => ({
+    id: 'health-event-1',
+    animalUuid: 'animal-uuid-1',
+    healthEventType: 'FIELD_VET_VISIT',
+    occurredAt: '2026-05-13T00:00:00.000Z',
+    notes: 'Animal atendido y estable',
+    performedByUserId: 'user-1',
+    sourceChannel: 'ONLINE',
+    operationId: 'health-operation-1',
+    metadata: {
+      visit: {
+        visitId: 'VISIT-1',
+        mode: 'SPECIFIC',
+        status: 'ATTENDED',
+        veterinarian: { name: 'Dra. Luna', license: 'MV-001' },
+      },
+      checklist: [],
+      clinicalNote: { reason: 'Control post parto', findings: 'Sin fiebre', plan: 'Revisar en 7 días' },
+      protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-20T00:00:00.000Z' },
+      amount: 150,
+      currency: 'BOB',
+    },
+    clientCreatedAt: '2026-05-13T00:00:00.000Z',
+    createdAt: '2026-05-13T00:00:00.000Z',
+    updatedAt: '2026-05-13T00:00:00.000Z',
+    visitId: 'VISIT-1',
+    visitMode: 'SPECIFIC',
+    visitStatus: 'ATTENDED',
+    veterinarianName: 'Dra. Luna',
+    nextDueAt: '2026-05-20T00:00:00.000Z',
+    ...overrides,
+  });
+
+  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; genealogy?: AnimalGenealogy; reproductionEvents?: AnimalReproductionEventItem[]; healthEvents?: AnimalHealthEventItem[] } = {}) => {
     const animalsService = {
       getAnimal: vi.fn(() => of(options.animal ?? createAnimal())),
       getGenealogy: vi.fn(() => of(options.genealogy ?? genealogy)),
@@ -104,7 +137,7 @@ describe('AnimalDetailPageComponent', () => {
         { provide: AnimalsService, useValue: animalsService },
         { provide: AnimalsImagesService, useValue: { listImages: vi.fn(() => of([createImage()])) } },
         { provide: AnimalsEventsService, useValue: { listEvents: vi.fn(() => of([{ type: 'OBSERVATION', occurredAt: '2026-04-26T10:00:00.000Z', notes: 'Control de campo' }])) } },
-        { provide: AnimalsHealthEventsService, useValue: { listEvents: vi.fn(() => of([])) } },
+        { provide: AnimalsHealthEventsService, useValue: { listEvents: vi.fn(() => of(options.healthEvents ?? [])) } },
         { provide: AnimalsReproductionEventsService, useValue: { listEvents: vi.fn(() => of(options.reproductionEvents ?? [])) } },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'animal-uuid-1' } } } },
         { provide: Router, useValue: { navigateByUrl: vi.fn(() => Promise.resolve(true)) } },
@@ -162,6 +195,33 @@ describe('AnimalDetailPageComponent', () => {
 
     expect(text).toContain('Raza');
     expect(text).toContain('Sin raza asignada');
+  });
+
+  it('should render veterinary visits in Spanish with formatted date, context and details action', async () => {
+    const { fixture, dialog } = await configure({ healthEvents: [createHealthEvent()] });
+
+    await selectTab(fixture, 'Salud');
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('13-05-2026');
+    expect(text).toContain('Visita veterinaria');
+    expect(text).toContain('Motivo: Control post parto');
+    expect(text).toContain('Veterinario: Dra. Luna');
+    expect(text).toContain('Estado: Atendida');
+    expect(text).toContain('Notas: Animal atendido y estable');
+    expect(text).toContain('Detalles');
+    expect(text).not.toContain('2026-05-13T00:00:00.000Z');
+    expect(text).not.toContain('FIELD_VET_VISIT');
+
+    const button = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find((candidate) =>
+      candidate.textContent?.includes('Detalles'),
+    ) as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+
+    expect(dialog.open).toHaveBeenCalledWith(AnimalVetVisitDetailDialogComponent, expect.objectContaining({
+      data: createHealthEvent(),
+    }));
   });
 
   it('should render genealogy as a visual parent-current-offspring tree', async () => {
@@ -620,6 +680,80 @@ describe('AnimalBirthRegistrationDialogComponent', () => {
     component.submit();
 
     expect(animalsService.registerBirth).not.toHaveBeenCalled();
+  });
+});
+
+describe('AnimalVetVisitDetailDialogComponent', () => {
+  const createHealthEvent = (metadataOverrides: Record<string, unknown> = {}): AnimalHealthEventItem => ({
+    id: 'health-event-1',
+    animalUuid: 'animal-uuid-1',
+    healthEventType: 'FIELD_VET_VISIT',
+    occurredAt: '2026-05-13T00:00:00.000Z',
+    notes: 'Animal atendido y estable',
+    performedByUserId: 'user-1',
+    sourceChannel: 'ONLINE',
+    operationId: 'health-operation-1',
+    metadata: {
+      visit: { visitId: 'VISIT-1', mode: 'SPECIFIC', status: 'ATTENDED', veterinarian: { name: 'Dra. Luna', license: 'MV-001' } },
+      checklist: [],
+      clinicalNote: { reason: 'Control post parto', findings: 'Sin fiebre', plan: 'Revisar en 7 días' },
+      protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-20T00:00:00.000Z' },
+      amount: 150,
+      currency: 'BOB',
+      ...metadataOverrides,
+    },
+    clientCreatedAt: '2026-05-13T00:00:00.000Z',
+    createdAt: '2026-05-13T00:00:00.000Z',
+    updatedAt: '2026-05-13T00:00:00.000Z',
+    visitId: 'VISIT-1',
+    visitMode: 'SPECIFIC',
+    visitStatus: 'ATTENDED',
+    veterinarianName: 'Dra. Luna',
+    nextDueAt: '2026-05-20T00:00:00.000Z',
+  });
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('should show full veterinary visit details including cost when available', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AnimalVetVisitDetailDialogComponent],
+      providers: [
+        provideNoopAnimations(),
+        { provide: MAT_DIALOG_DATA, useValue: createHealthEvent() },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AnimalVetVisitDetailDialogComponent);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Detalles de visita veterinaria');
+    expect(text).toContain('13-05-2026');
+    expect(text).toContain('Animal específico');
+    expect(text).toContain('Atendida');
+    expect(text).toContain('Control post parto');
+    expect(text).toContain('Dra. Luna');
+    expect(text).toContain('MV-001');
+    expect(text).toContain('Animal atendido y estable');
+    expect(text).toContain('Sin fiebre');
+    expect(text).toContain('20-05-2026');
+    expect(text).toContain('150 BOB');
+  });
+
+  it('should handle missing veterinary visit cost gracefully', async () => {
+    await TestBed.configureTestingModule({
+      imports: [AnimalVetVisitDetailDialogComponent],
+      providers: [
+        provideNoopAnimations(),
+        { provide: MAT_DIALOG_DATA, useValue: createHealthEvent({ amount: undefined, currency: undefined }) },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AnimalVetVisitDetailDialogComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Costo');
+    expect(fixture.nativeElement.textContent).toContain('No informado');
   });
 });
 

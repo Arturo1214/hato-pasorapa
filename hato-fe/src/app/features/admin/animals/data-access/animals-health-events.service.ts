@@ -12,6 +12,7 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
+import { AnimalsService } from './animals.service';
 import {
   compareAnimalHealthEventTimeline,
   decorateAnimalHealthTimeline,
@@ -82,6 +83,7 @@ export class AnimalsHealthEventsService {
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
   private store: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
   private metricsStore = inject(SyncMetricsStore);
+  private animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'> = inject(AnimalsService);
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
 
@@ -92,6 +94,7 @@ export class AnimalsHealthEventsService {
     offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
     store: OfflineStoreService;
     metricsStore: SyncMetricsStore;
+    animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
     now: () => string;
     windowRef: Pick<Window, 'dispatchEvent'>;
   }>) {
@@ -101,6 +104,7 @@ export class AnimalsHealthEventsService {
     this.offlineStatus = dependencies.offlineStatus ?? this.offlineStatus;
     this.store = dependencies.store ?? this.store;
     this.metricsStore = dependencies.metricsStore ?? this.metricsStore;
+    this.animalsService = dependencies.animalsService ?? this.animalsService;
     this.now = dependencies.now ?? this.now;
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
@@ -141,6 +145,10 @@ export class AnimalsHealthEventsService {
     }
 
     const now = this.now();
+    if (isGlobalVetVisitInput(input)) {
+      return this.createGlobalVetVisitFanOut(input, currentUser, now);
+    }
+
     const operationId = globalThis.crypto.randomUUID();
     const sourceChannel = this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE';
     const payload: AnimalHealthEventOfflineCreatePayload = {
@@ -223,6 +231,86 @@ export class AnimalsHealthEventsService {
   private async refreshPendingState() {
     this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
   }
+
+  private async createGlobalVetVisitFanOut(input: AnimalHealthEventCreateInput, currentUser: NonNullable<ReturnType<AuthService['currentUser']>>, now: string) {
+    const activeAnimals = await this.listFanOutAnimals(currentUser);
+    if (!activeAnimals.length) {
+      return { outcome: 'blocked', message: 'No hay animales activos para registrar la campaña veterinaria.' } satisfies AnimalHealthEventMutationFeedback;
+    }
+
+    const sourceChannel = this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE';
+    const metadata = withTargetAnimalCount(input.metadata, activeAnimals.length);
+    for (const animal of activeAnimals) {
+      const operationId = globalThis.crypto.randomUUID();
+      const payload: AnimalHealthEventOfflineCreatePayload = {
+        animalUuid: animal.uuid,
+        healthEventType: input.healthEventType,
+        occurredAt: normalizeOccurredAt(input.occurredAt),
+        notes: normalizeOptionalText(input.notes),
+        performedByUserId: currentUser.id,
+        sourceChannel,
+        operationId,
+        metadata,
+      };
+
+      await this.store.enqueueOperation({
+        entityType: 'ANIMAL_HEALTH_EVENT',
+        entityId: operationId,
+        opType: 'CREATE',
+        payload: payload as unknown as Record<string, unknown>,
+        baseVersion: 0,
+        clientCreatedAt: now,
+        clientUpdatedAt: now,
+        operationId,
+      });
+      await this.saveEventSnapshot(createOptimisticHealthEventSnapshot(payload, now));
+    }
+    await this.refreshPendingState();
+
+    if (this.offlineStatus.isOnline()) {
+      triggerManualSync(this.windowRef);
+      return {
+        outcome: 'queued',
+        message: `Campaña veterinaria encolada para ${activeAnimals.length} animales activos. Se disparó la sincronización automática.`,
+      } satisfies AnimalHealthEventMutationFeedback;
+    }
+
+    return {
+      outcome: 'queued',
+      message: `Campaña veterinaria encolada para ${activeAnimals.length} animales activos. Se enviará al reconectar.`,
+    } satisfies AnimalHealthEventMutationFeedback;
+  }
+
+  private async listFanOutAnimals(currentUser: NonNullable<ReturnType<AuthService['currentUser']>>) {
+    if (currentUser.role === 'GANADERO') {
+      return firstValueFrom(this.animalsService.listActiveAnimals(currentUser.ganaderoId ?? '__NO_AUTHENTICATED_GANADERO__', 0, 1000));
+    }
+    return firstValueFrom(this.animalsService.listAnimals({ active: true, page: 0, size: 1000 }));
+  }
+}
+
+function isGlobalVetVisitInput(input: AnimalHealthEventCreateInput) {
+  return input.healthEventType === 'FIELD_VET_VISIT' && readVisitMode(input.metadata) === 'GLOBAL';
+}
+
+function readVisitMode(metadata: AnimalHealthEventOfflineMetadata) {
+  if (!('visit' in metadata) || typeof metadata.visit !== 'object' || metadata.visit === null) {
+    return undefined;
+  }
+  return (metadata.visit as Record<string, unknown>)['mode'];
+}
+
+function withTargetAnimalCount(metadata: AnimalHealthEventOfflineMetadata, targetAnimalCount: number): AnimalHealthEventOfflineMetadata {
+  if (!('visit' in metadata) || typeof metadata.visit !== 'object' || metadata.visit === null) {
+    return metadata;
+  }
+  return {
+    ...metadata,
+    visit: {
+      ...(metadata.visit as Record<string, unknown>),
+      targetAnimalCount,
+    },
+  } as AnimalHealthEventOfflineMetadata;
 }
 
 function createOptimisticHealthEventSnapshot(payload: AnimalHealthEventOfflineCreatePayload, now: string): AnimalHealthEventItem {

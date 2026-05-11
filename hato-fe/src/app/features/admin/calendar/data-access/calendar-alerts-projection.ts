@@ -72,19 +72,19 @@ function toHealthAgendaItems(
   animalsByUuid: Map<string, AnimalOfflineSnapshotPayload>,
   now: string
 ): CalendarDerivedAgendaItem[] {
-  const protocolNextDueAt =
-    'protocol' in event.metadata && typeof event.metadata.protocol === 'object' && event.metadata.protocol !== null
-      ? ((event.metadata.protocol as Record<string, unknown>)['nextDueAt'] as string | undefined)
-      : undefined;
-  const fallbackNextDueAt = typeof event.metadata.nextDueAt === 'string' ? event.metadata.nextDueAt : undefined;
-  const dueAt = normalizeDueAt(protocolNextDueAt ?? fallbackNextDueAt);
+  const visit = readVisitBlock(event);
+  if (event.healthEventType === 'FIELD_VET_VISIT' && !isActiveVisitStatus(visit?.['status'])) {
+    return [];
+  }
+
+  const dueAt = normalizeDueAt(readHealthDueAt(event, visit));
   if (!dueAt) {
     return [];
   }
 
   const animalLabel = buildAnimalLabel(animalsByUuid.get(event.animalUuid) ?? {}, event.animalUuid);
   const status = classifyCalendarAlertStatus(dueAt, now);
-  const visitMode = readVisitMode(event);
+  const visitMode = readVisitMode(visit);
   return [
     {
       id: `health:${event.id}`,
@@ -94,7 +94,7 @@ function toHealthAgendaItems(
       sourceId: event.id,
       dueAt,
       status,
-      title: healthEventTitle(event.healthEventType, visitMode),
+      title: healthEventTitle(event.healthEventType, status, visitMode),
       detail: `${animalLabel}${event.notes ? ` · ${event.notes}` : ''}`,
       priorityScore: computeCalendarPriority('ANIMAL_HEALTH_EVENT', status),
       sortKey: buildCalendarSortKey('ANIMAL_HEALTH_EVENT', event.id),
@@ -184,8 +184,14 @@ function normalizeDueAt(value: string | null | undefined) {
   return parseCalendarDate(value)?.toISOString() ?? null;
 }
 
-function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventType'], visitMode?: 'GLOBAL' | 'SPECIFIC') {
+function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventType'], status: CalendarDerivedAgendaItem['status'], visitMode?: 'GLOBAL' | 'SPECIFIC') {
   if (type === 'FIELD_VET_VISIT' && visitMode) {
+    if (status === 'overdue') {
+      return 'Control Veterinario Pendiente';
+    }
+    if (status === 'due_today') {
+      return 'Control Veterinario Hoy';
+    }
     return visitMode === 'GLOBAL' ? 'Control Veterinario - Campaña' : 'Control Veterinario - Específica';
   }
 
@@ -202,12 +208,30 @@ function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventTyp
   )[type];
 }
 
-function readVisitMode(event: AnimalHealthEventSnapshotPayload) {
+function readHealthDueAt(event: AnimalHealthEventSnapshotPayload, visit: Record<string, unknown> | undefined) {
+  const protocolNextDueAt =
+    'protocol' in event.metadata && typeof event.metadata.protocol === 'object' && event.metadata.protocol !== null
+      ? ((event.metadata.protocol as Record<string, unknown>)['nextDueAt'] as string | undefined)
+      : undefined;
+  const fallbackNextDueAt = typeof event.metadata.nextDueAt === 'string' ? event.metadata.nextDueAt : undefined;
+  const visitNextControlAt = typeof visit?.['nextControlAt'] === 'string' ? visit['nextControlAt'] as string : undefined;
+  return visitNextControlAt ?? protocolNextDueAt ?? fallbackNextDueAt;
+}
+
+function readVisitBlock(event: AnimalHealthEventSnapshotPayload) {
   if (!('visit' in event.metadata) || typeof event.metadata.visit !== 'object' || event.metadata.visit === null) {
     return undefined;
   }
-  const mode = (event.metadata.visit as Record<string, unknown>)['mode'];
+  return event.metadata.visit as Record<string, unknown>;
+}
+
+function readVisitMode(visit: Record<string, unknown> | undefined) {
+  const mode = visit?.['mode'];
   return mode === 'GLOBAL' || mode === 'SPECIFIC' ? mode : undefined;
+}
+
+function isActiveVisitStatus(status: unknown) {
+  return status === 'PENDING' || status === 'RESCHEDULED' || status === 'PROGRAMADA' || status === 'REPROGRAMADA';
 }
 
 function reproductionEventTitle(type: AnimalReproductionEventSnapshotPayload['reproductionEventType']) {

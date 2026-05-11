@@ -144,7 +144,9 @@ export class CalendarAlertsStore {
         preferences: this.state().preferences,
         animals,
         animalEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_EVENT'), allowedAnimalUuids),
-        healthEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'), allowedAnimalUuids),
+        healthEvents: this.filterClosedGlobalVetVisitChains(
+          this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'), allowedAnimalUuids)
+        ),
         reproductionEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_REPRODUCTION_EVENT'), allowedAnimalUuids),
       });
 
@@ -205,4 +207,49 @@ export class CalendarAlertsStore {
       return typeof animalUuid === 'string' && allowedAnimalUuids.has(animalUuid);
     });
   }
+
+  private filterClosedGlobalVetVisitChains(snapshots: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>) {
+    const globalVisitsById = new Map<string, Awaited<ReturnType<OfflineStoreService['listSnapshots']>>>();
+    for (const snapshot of snapshots) {
+      const visit = readGlobalVisitBlock(snapshot.payload);
+      if (!visit?.visitId) {
+        continue;
+      }
+      globalVisitsById.set(visit.visitId, [...(globalVisitsById.get(visit.visitId) ?? []), snapshot]);
+    }
+
+    const closedVisitIds = new Set(
+      [...globalVisitsById.entries()]
+        .filter(([, chain]) => chain.length > 0 && chain.every((snapshot) => isTerminalVisitStatus(readGlobalVisitBlock(snapshot.payload)?.status)))
+        .map(([visitId]) => visitId)
+    );
+
+    return snapshots.filter((snapshot) => {
+      const visit = readGlobalVisitBlock(snapshot.payload);
+      return !visit?.visitId || !closedVisitIds.has(visit.visitId);
+    });
+  }
+}
+
+function readGlobalVisitBlock(payload: Record<string, unknown>) {
+  if (payload['healthEventType'] !== 'FIELD_VET_VISIT') {
+    return null;
+  }
+  const metadata = payload['metadata'];
+  if (typeof metadata !== 'object' || metadata === null || !('visit' in metadata)) {
+    return null;
+  }
+  const visit = (metadata as Record<string, unknown>)['visit'];
+  if (typeof visit !== 'object' || visit === null) {
+    return null;
+  }
+  const block = visit as Record<string, unknown>;
+  if (block['mode'] !== 'GLOBAL' || typeof block['visitId'] !== 'string') {
+    return null;
+  }
+  return { visitId: block['visitId'], status: block['status'] };
+}
+
+function isTerminalVisitStatus(status: unknown) {
+  return status === 'FINALIZED' || status === 'CANCELED' || status === 'FINALIZADA' || status === 'CANCELADA';
 }

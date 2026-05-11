@@ -130,7 +130,19 @@ export function buildCalendarCounts(items: CalendarDerivedAgendaItem[], preferen
       due_today: windows.due_today.length,
       upcoming: windows.upcoming.length,
     },
+    badges: buildCalendarBadgeLabels(windows),
   };
+}
+
+function buildCalendarBadgeLabels(windows: ReturnType<typeof buildCalendarWindows>) {
+  return {
+    ...(windows.overdue.some(isVetVisitControl) ? { overdue: 'Controles Veterinarios Pendientes' } : {}),
+    ...(windows.due_today.some(isVetVisitControl) ? { due_today: 'Controles Hoy' } : {}),
+  } satisfies Partial<Record<CalendarAlertStatus, string>>;
+}
+
+function isVetVisitControl(item: CalendarDerivedAgendaItem) {
+  return item.sourceType === 'ANIMAL_HEALTH_EVENT' && !!item.visitMode;
 }
 
 export function buildCalendarSortKey(sourceType: CalendarDerivedAgendaItem['sourceType'], sourceId: string) {

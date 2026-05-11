@@ -379,6 +379,7 @@ export interface CalendarDerivedWindows {
 export interface CalendarDerivedCounts {
   total: number;
   byStatus: Record<CalendarAlertStatus, number>;
+  badges?: Partial<Record<CalendarAlertStatus, string>>;
 }
 
 export interface CalendarDerivedState {

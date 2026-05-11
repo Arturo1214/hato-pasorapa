@@ -8,6 +8,7 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
+import { AnimalsService, type AnimalItem } from './animals.service';
 import { AnimalsHealthEventsService, type AnimalHealthEventItem } from './animals-health-events.service';
 
 describe('AnimalsHealthEventsService', () => {
@@ -24,7 +25,40 @@ describe('AnimalsHealthEventsService', () => {
     lastSyncedAt: null,
   };
 
-    const createEvent = (overrides: Partial<AnimalHealthEventItem> = {}): AnimalHealthEventItem => ({
+  const ganaderoUser: SessionUser = {
+    ...currentUser,
+    id: 'gan-user-1',
+    ganaderoId: 'gan-1',
+    username: 'ganadero',
+    role: 'GANADERO',
+  };
+
+  const createAnimal = (overrides: Partial<AnimalItem> = {}): AnimalItem => ({
+    uuid: 'animal-uuid-1',
+    ownerGanaderoId: 'gan-1',
+    motherAnimalUuid: null,
+    fatherAnimalUuid: null,
+    arete: 'BO-001',
+    marca: null,
+    tatuaje: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
+    category: 'VACA',
+    sex: 'HEMBRA',
+    active: true,
+    birthDate: null,
+    admissionDate: '2026-04-01T00:00:00.000Z',
+    weightKg: 420,
+    createdAt: '2026-04-01T00:00:00.000Z',
+    updatedAt: '2026-04-27T08:00:00.000Z',
+    version: 1,
+    lastSyncedAt: null,
+    ...overrides,
+  });
+
+  const createEvent = (overrides: Partial<AnimalHealthEventItem> = {}): AnimalHealthEventItem => ({
     id: 'health-event-1',
     animalUuid: 'animal-uuid-1',
     healthEventType: 'VACCINATION',
@@ -40,7 +74,7 @@ describe('AnimalsHealthEventsService', () => {
     ...overrides,
   });
 
-  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get'>> }) => {
+  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get'>>; user?: SessionUser; animalsService?: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'> }) => {
     TestBed.configureTestingModule({
       providers: [
         AnimalsHealthEventsService,
@@ -58,18 +92,22 @@ describe('AnimalsHealthEventsService', () => {
         },
         {
           provide: AuthService,
-          useValue: { getAccessToken: () => 'token', currentUser: () => currentUser },
+          useValue: { getAccessToken: () => 'token', currentUser: () => options.user ?? currentUser },
         },
         {
           provide: OfflineStatusService,
           useValue: { isOnline: () => options.online },
+        },
+        {
+          provide: AnimalsService,
+          useValue: options.animalsService ?? { listActiveAnimals: vi.fn(() => of([])), listAnimals: vi.fn(() => of([])) },
         },
       ],
     });
 
     const service = TestBed.inject(AnimalsHealthEventsService);
     const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
-    service.configureForTesting({ store, now: () => '2026-04-26T10:05:00.000Z', windowRef: window });
+    service.configureForTesting({ store, now: () => '2026-04-26T10:05:00.000Z', windowRef: window, animalsService: options.animalsService });
     return { service, store };
   };
 
@@ -264,5 +302,78 @@ describe('AnimalsHealthEventsService', () => {
       }),
     ]);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+  });
+
+  it('should fan out global veterinary visits to all active animals of the authenticated ganadero', async () => {
+    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
+    const animalsService = {
+      listActiveAnimals: vi.fn(() => of([
+        createAnimal({ uuid: 'animal-active-1', arete: 'BO-001', updatedAt: '2026-04-27T08:00:00.000Z' }),
+        createAnimal({ uuid: 'animal-active-2', arete: 'BO-002', updatedAt: '2026-04-27T09:00:00.000Z' }),
+      ])),
+      listAnimals: vi.fn(() => of([])),
+    } satisfies Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
+    const { service, store } = setup({ online: true, user: ganaderoUser, animalsService });
+
+    await expect(
+      firstValueFrom(
+        service.createEvent({
+          animalUuid: '',
+          healthEventType: 'FIELD_VET_VISIT',
+          occurredAt: '2026-05-11T09:00',
+          notes: 'Campaña anual',
+          metadata: {
+            visit: { visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', status: 'PENDING', veterinarian: { name: 'Dra. Luna' } },
+            checklist: [],
+            clinicalNote: { reason: 'Control anual', findings: 'Sin hallazgos', plan: 'Seguimiento' },
+            protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-18T09:00:00.000Z' },
+          },
+        })
+      )
+    ).resolves.toEqual({
+      outcome: 'queued',
+      message: 'Campaña veterinaria encolada para 2 animales activos. Se disparó la sincronización automática.',
+    });
+
+    expect(animalsService.listActiveAnimals).toHaveBeenCalledWith('gan-1', 0, 1000);
+    const outbox = await store.listOutbox();
+    expect(outbox).toHaveLength(2);
+    expect(outbox.map((operation) => operation.payload['animalUuid']).sort()).toEqual(['animal-active-1', 'animal-active-2']);
+    expect(outbox.map((operation) => (operation.payload['metadata'] as Record<string, unknown>)['visit'])).toEqual([
+      expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
+      expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
+    ]);
+    await expect(store.listSnapshots('ANIMAL_HEALTH_EVENT')).resolves.toHaveLength(2);
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+  });
+
+  it('should block global veterinary campaigns when the authenticated ganadero has no active animals', async () => {
+    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
+    const animalsService = {
+      listActiveAnimals: vi.fn(() => of([])),
+      listAnimals: vi.fn(() => of([])),
+    } satisfies Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
+    const { service, store } = setup({ online: true, user: ganaderoUser, animalsService });
+
+    await expect(
+      firstValueFrom(
+        service.createEvent({
+          animalUuid: '',
+          healthEventType: 'FIELD_VET_VISIT',
+          occurredAt: '2026-05-11T09:00',
+          notes: 'Campaña anual',
+          metadata: {
+            visit: { visitId: 'VISIT-GLOBAL-EMPTY', mode: 'GLOBAL', status: 'PENDING', veterinarian: { name: 'Dra. Luna' } },
+            checklist: [],
+            clinicalNote: { reason: 'Control anual', findings: 'Sin hallazgos', plan: 'Seguimiento' },
+            protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-18T09:00:00.000Z' },
+          },
+        })
+      )
+    ).resolves.toEqual({ outcome: 'blocked', message: 'No hay animales activos para registrar la campaña veterinaria.' });
+
+    expect(animalsService.listActiveAnimals).toHaveBeenCalledWith('gan-1', 0, 1000);
+    await expect(store.listOutbox()).resolves.toEqual([]);
+    expect(dispatchEvent).not.toHaveBeenCalled();
   });
 });

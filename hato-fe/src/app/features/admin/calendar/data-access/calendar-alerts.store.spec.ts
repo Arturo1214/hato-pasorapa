@@ -208,16 +208,47 @@ describe('CalendarAlertsStore', () => {
     expect(store.totalPending()).toBe(0);
     expect(store.windows().upcoming).toEqual([]);
   });
+
+  it('should exclude closed global veterinary visit chains from local reminders', async () => {
+    await seedAnimal(offlineStore, 'animal-1');
+    await Promise.all([
+      seedVetVisitSnapshot(offlineStore, 'closed-finalized', 'VISIT-CLOSED', 'FINALIZED', '2026-04-28T09:00:00.000Z'),
+      seedVetVisitSnapshot(offlineStore, 'closed-canceled', 'VISIT-CLOSED', 'CANCELED', '2026-04-28T09:00:00.000Z'),
+      seedVetVisitSnapshot(offlineStore, 'active-programmed', 'VISIT-ACTIVE', 'PENDING', '2026-04-28T10:00:00.000Z'),
+    ]);
+
+    await store.initialize();
+
+    expect(store.totalPending()).toBe(1);
+    expect(store.windows().upcoming.map((item) => item.sourceId)).toEqual(['active-programmed']);
+  });
 });
 
 async function seedSnapshots(store: OfflineStoreService, nextDueAt: string) {
+  await seedAnimal(store, 'animal-1');
+  await store.saveSnapshot({
+    key: 'ANIMAL_HEALTH_EVENT:health-1',
+    entityType: 'ANIMAL_HEALTH_EVENT',
+    entityId: 'health-1',
+    updatedAt: '2026-04-27T08:00:00.000Z',
+    payload: {
+      id: 'health-1',
+      animalUuid: 'animal-1',
+      healthEventType: 'VACCINATION',
+      notes: 'Refuerzo',
+      metadata: { nextDueAt },
+    },
+  });
+}
+
+async function seedAnimal(store: OfflineStoreService, animalUuid: string) {
   await store.saveSnapshot({
     key: 'ANIMAL:animal-1',
     entityType: 'ANIMAL',
-    entityId: 'animal-1',
+    entityId: animalUuid,
     updatedAt: '2026-04-27T08:00:00.000Z',
     payload: {
-      uuid: 'animal-1',
+      uuid: animalUuid,
       ownerGanaderoId: 'gan-1',
       arete: 'BO-001',
       marca: null,
@@ -233,17 +264,20 @@ async function seedSnapshots(store: OfflineStoreService, nextDueAt: string) {
     },
     version: 1,
   });
+}
+
+async function seedVetVisitSnapshot(store: OfflineStoreService, id: string, visitId: string, status: string, nextControlAt: string) {
   await store.saveSnapshot({
-    key: 'ANIMAL_HEALTH_EVENT:health-1',
+    key: `ANIMAL_HEALTH_EVENT:${id}`,
     entityType: 'ANIMAL_HEALTH_EVENT',
-    entityId: 'health-1',
+    entityId: id,
     updatedAt: '2026-04-27T08:00:00.000Z',
     payload: {
-      id: 'health-1',
+      id,
       animalUuid: 'animal-1',
-      healthEventType: 'VACCINATION',
-      notes: 'Refuerzo',
-      metadata: { nextDueAt },
+      healthEventType: 'FIELD_VET_VISIT',
+      notes: 'Campaña',
+      metadata: { visit: { visitId, mode: 'GLOBAL', status, nextControlAt } },
     },
   });
 }

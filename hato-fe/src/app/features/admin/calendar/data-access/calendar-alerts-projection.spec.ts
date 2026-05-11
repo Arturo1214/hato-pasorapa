@@ -239,6 +239,51 @@ describe('calendar alerts projection', () => {
       { sourceId: 'vet-specific', title: 'Control Veterinario - Específica', visitMode: 'SPECIFIC' },
     ]);
   });
+
+  it('should classify only active veterinary visit controls from nextControlAt and expose Spanish reminder badges', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-05-11T10:00:00.000Z',
+      preferences: { horizonDays: 7, notificationsEnabled: true, snoozedUntil: null },
+      healthEvents: [
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-overdue', {
+          id: 'vet-overdue',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          metadata: { visit: { visitId: 'VISIT-1', mode: 'GLOBAL', status: 'PENDING', nextControlAt: '2026-05-10T09:00:00.000Z' } },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-today', {
+          id: 'vet-today',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          metadata: { visit: { visitId: 'VISIT-2', mode: 'SPECIFIC', status: 'RESCHEDULED', nextControlAt: '2026-05-11T12:00:00.000Z' } },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-attended', {
+          id: 'vet-attended',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          metadata: { visit: { visitId: 'VISIT-3', mode: 'SPECIFIC', status: 'ATTENDED', nextControlAt: '2026-05-11T13:00:00.000Z' } },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-finalized', {
+          id: 'vet-finalized',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          metadata: { visit: { visitId: 'VISIT-4', mode: 'GLOBAL', status: 'FINALIZED', nextControlAt: '2026-05-12T09:00:00.000Z' } },
+        }),
+      ],
+      reproductionEvents: [],
+      animalEvents: [],
+    });
+
+    expect(state.items.map((item) => ({ sourceId: item.sourceId, status: item.status, title: item.title }))).toEqual([
+      { sourceId: 'vet-overdue', status: 'overdue', title: 'Control Veterinario Pendiente' },
+      { sourceId: 'vet-today', status: 'due_today', title: 'Control Veterinario Hoy' },
+    ]);
+    expect(state.counts.badges).toEqual({
+      overdue: 'Controles Veterinarios Pendientes',
+      due_today: 'Controles Hoy',
+    });
+  });
 });
 
 function snapshot(entityType: OfflineSnapshotRecord['entityType'], entityId: string, payload: Record<string, unknown>): OfflineSnapshotRecord {

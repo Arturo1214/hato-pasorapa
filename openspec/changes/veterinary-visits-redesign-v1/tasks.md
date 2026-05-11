@@ -69,8 +69,8 @@ Chain strategy: feature-branch-chain
 
 ## Phase 5: Integration + Fan-out (Global Campaign)
 
-- [ ] 5.1 RED: Write integration test for global campaign fan-out: when user creates GLOBAL visit, verify `outbox` creates one event per active animal of the ganadero, all sharing `visitId`
-- [ ] 5.2 GREEN: Implement fan-out logic in `AnimalsHealthEventsService.createEvent` (or new `createGlobalVetVisit` method): if `visit.mode=GLOBAL`, query active animals for current user, enqueue one event per animal with same `visitId` and `visit.mode=GLOBAL`
-- [ ] 5.3 Update `calendar-alerts.store.ts`: exclude agenda items from GLOBAL visits whose chain is `CLOSED` (all events `FINALIZADA` or `CANCELADA`) per spec `calendar-local-reminders-v1`
-- [ ] 5.4 Update `calendar-alerts-projection.ts`: classify due/due_today/overdue using `visit.status` (only `PROGRAMADA` and `REPROGRAMADA` count as active) and `nextControlAt`
-- [ ] 5.5 Add Spanish label badges to `calendar-alerts-projection.ts`: "Controles Veterinarios Pendientes" (overdue), "Controles Hoy" (due_today)
+- [x] 5.1 RED: Write integration test for global campaign fan-out: when user creates GLOBAL visit, verify `outbox` creates one event per active animal of the ganadero, all sharing `visitId`
+- [x] 5.2 GREEN: Implement fan-out logic in `AnimalsHealthEventsService.createEvent` (or new `createGlobalVetVisit` method): if `visit.mode=GLOBAL`, query active animals for current user, enqueue one event per animal with same `visitId` and `visit.mode=GLOBAL`
+- [x] 5.3 Update `calendar-alerts.store.ts`: exclude agenda items from GLOBAL visits whose chain is `CLOSED` (all events `FINALIZADA` or `CANCELADA`) per spec `calendar-local-reminders-v1`
+- [x] 5.4 Update `calendar-alerts-projection.ts`: classify due/due_today/overdue using `visit.status` (only `PROGRAMADA` and `REPROGRAMADA` count as active) and `nextControlAt`
+- [x] 5.5 Add Spanish label badges to `calendar-alerts-projection.ts`: "Controles Veterinarios Pendientes" (overdue), "Controles Hoy" (due_today)

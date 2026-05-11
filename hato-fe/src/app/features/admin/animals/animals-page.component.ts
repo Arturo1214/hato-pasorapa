@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal, type TemplateRef, viewChild } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal, type TemplateRef, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -42,6 +42,7 @@ import {
   type AnimalDialogResult,
   type AnimalOwnerOption,
 } from './animal-form-dialog.component';
+import { imageSelectionMessage, selectImageFiles } from './animal-image-selection';
 import { GanaderosService } from '../ganaderos/data-access/ganaderos.service';
 
 const ANIMAL_TABLE_ACTION = {
@@ -822,7 +823,7 @@ interface AnimalImagesDialogData {
 @Component({
   selector: 'app-animal-images-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
   template: `
     <h2 mat-dialog-title>Imágenes del animal</h2>
     <mat-dialog-content class="images-dialog">
@@ -841,10 +842,35 @@ interface AnimalImagesDialogData {
         </div>
       }
 
-      <label class="image-picker">
-        <span>Seleccionar imágenes</span>
-        <input type="file" accept="image/jpeg,image/png" multiple (change)="onFilesSelected($event)" />
-      </label>
+      <div class="image-picker">
+        <input
+          #imageInput
+          class="native-file-input"
+          type="file"
+          accept="image/*"
+          multiple
+          aria-label="Seleccionar imágenes del animal"
+          (change)="onFilesSelected($event)"
+        />
+        <button mat-stroked-button type="button" (click)="openImagePicker(imageInput)">
+          <mat-icon>add_photo_alternate</mat-icon>Seleccionar imágenes
+        </button>
+      </div>
+
+      @if (selectionMessage()) {
+        <p class="image-upload-message" role="status">{{ selectionMessage() }}</p>
+      }
+
+      @if (selectedImagePreviews().length) {
+        <div class="selected-image-preview-list" aria-label="Vista previa de imágenes seleccionadas">
+          @for (preview of selectedImagePreviews(); track preview.url) {
+            <article class="selected-image-preview">
+              <img [src]="preview.url" [alt]="preview.fileName" />
+              <span>{{ preview.fileName }}</span>
+            </article>
+          }
+        </div>
+      }
     </mat-dialog-content>
 
     <mat-dialog-actions align="end">
@@ -876,22 +902,108 @@ interface AnimalImagesDialogData {
         display: grid;
         gap: 0.5rem;
       }
+
+      .image-picker button {
+        justify-self: start;
+      }
+
+      .native-file-input {
+        position: absolute;
+        inline-size: 1px;
+        block-size: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .image-upload-message {
+        margin: 0;
+        color: var(--mat-sys-on-surface-variant);
+        font-weight: 500;
+      }
+
+      .selected-image-preview-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+        gap: 0.75rem;
+      }
+
+      .selected-image-preview {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .selected-image-preview img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: 0.75rem;
+      }
+
+      .selected-image-preview span {
+        overflow: hidden;
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.875rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
     `,
   ],
 })
 class AnimalImagesDialogComponent {
   readonly data = inject<AnimalImagesDialogData>(MAT_DIALOG_DATA);
   readonly dialogRef = inject(MatDialogRef<AnimalImagesDialogComponent, File[] | undefined>);
+  private readonly destroyRef = inject(DestroyRef);
   readonly selectedFiles = signal<File[]>([]);
+  readonly selectedImagePreviews = signal<SelectedImagePreview[]>([]);
+  readonly selectionMessage = signal<string | null>(null);
+
+  constructor() {
+    this.destroyRef.onDestroy(() => this.clearSelectedImageSelection());
+  }
+
+  openImagePicker(input: HTMLInputElement) { input.click(); }
 
   onFilesSelected(event: Event) {
     const input = event.target as HTMLInputElement;
-    this.selectedFiles.set(input.files ? Array.from(input.files) : []);
+    const files = input.files ? Array.from(input.files) : [];
+    this.clearSelectedImageSelection();
+
+    if (!files.length) {
+      input.value = '';
+      return;
+    }
+
+    const selection = selectImageFiles(files);
+    const message = imageSelectionMessage(selection);
+
+    if (!selection.acceptedFiles.length) {
+      input.value = '';
+      this.selectionMessage.set(message);
+      return;
+    }
+
+    this.selectedFiles.set(selection.acceptedFiles);
+    this.selectedImagePreviews.set(selection.acceptedFiles.map((file) => ({ fileName: file.name, url: URL.createObjectURL(file) })));
+    this.selectionMessage.set(message);
   }
 
   submit() {
     this.dialogRef.close(this.selectedFiles());
   }
+
+  private clearSelectedImageSelection() {
+    for (const preview of this.selectedImagePreviews()) {
+      URL.revokeObjectURL(preview.url);
+    }
+    this.selectedFiles.set([]);
+    this.selectedImagePreviews.set([]);
+    this.selectionMessage.set(null);
+  }
+}
+
+interface SelectedImagePreview {
+  fileName: string;
+  url: string;
 }
 
 const transferMetadataValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {

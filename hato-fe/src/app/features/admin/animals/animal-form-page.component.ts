@@ -30,6 +30,7 @@ import {
   type AnimalMutationPayload,
 } from './data-access/animals.service';
 import type { AnimalOwnerOption } from './animal-form-dialog.component';
+import { imageSelectionMessage, selectImageFiles } from './animal-image-selection';
 
 @Component({
   selector: 'app-animal-form-page',
@@ -359,15 +360,18 @@ export class AnimalFormPageComponent {
       return;
     }
 
-    if (files.some((file) => !file.type.startsWith('image/'))) {
+    const selection = selectImageFiles(files);
+    const message = imageSelectionMessage(selection);
+
+    if (!selection.acceptedFiles.length) {
       input.value = '';
-      this.imageUploadMessage.set('Solo podés seleccionar archivos de imagen.');
+      this.imageUploadMessage.set(message);
       return;
     }
 
-    this.selectedImageFiles.set(files);
-    this.selectedImagePreviews.set(files.map((file) => ({ fileName: file.name, url: URL.createObjectURL(file) })));
-    this.imageUploadMessage.set('Revisá las miniaturas antes de guardar las imágenes.');
+    this.selectedImageFiles.set(selection.acceptedFiles);
+    this.selectedImagePreviews.set(selection.acceptedFiles.map((file) => ({ fileName: file.name, url: URL.createObjectURL(file) })));
+    this.imageUploadMessage.set(message);
   }
 
   submitSelectedImages() {

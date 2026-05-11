@@ -327,7 +327,7 @@ describe('AnimalsPageComponent', () => {
     expect(overlayContainer.getContainerElement().textContent).not.toContain('Parto');
   });
 
-  it('should expose animal images from the row action dialog and enqueue new files', async () => {
+  it('should expose animal images from the row action dialog with a Material-styled hidden file picker and enqueue new files', async () => {
     const animalsServiceMock = createAnimalsServiceMock();
     const imagesServiceMock = createImagesServiceMock();
     animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
@@ -368,7 +368,15 @@ describe('AnimalsPageComponent', () => {
 
     expect(overlayContainer.getContainerElement().textContent).toContain('vaca-1.jpg');
 
+    const imageTrigger = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Seleccionar imágenes'),
+    ) as HTMLButtonElement;
     const input = overlayContainer.getContainerElement().querySelector('input[type="file"]') as HTMLInputElement;
+    expect(imageTrigger.textContent).toContain('Seleccionar imágenes');
+    expect(input.getAttribute('accept')).toBe('image/*');
+    expect(input.multiple).toBe(true);
+    expect(input.getAttribute('aria-label')).toBe('Seleccionar imágenes del animal');
+
     const file = new File(['photo'], 'nueva-vaca.png', { type: 'image/png' });
     Object.defineProperty(input, 'files', { value: [file] });
     input.dispatchEvent(new Event('change'));
@@ -384,6 +392,80 @@ describe('AnimalsPageComponent', () => {
 
     expect(imagesServiceMock.addImages).toHaveBeenCalledWith('animal-uuid-1', [file]);
     expect(fixture.nativeElement.textContent).toContain('Imágenes encoladas. Se disparó la sincronización automática.');
+  });
+
+  it('should reject non-image files immediately in the row action image dialog without requiring save', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    const imagesServiceMock = createImagesServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
+    const { fixture } = await configure(
+      animalsServiceMock,
+      createEventsServiceMock(),
+      createReproductionEventsServiceMock(),
+      imagesServiceMock,
+    );
+
+    const imagesButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
+      (button as HTMLButtonElement).textContent?.includes('Imágenes'),
+    ) as HTMLButtonElement;
+    imagesButton.click();
+    await fixture.whenStable();
+
+    const input = overlayContainer.getContainerElement().querySelector('input[type="file"]') as HTMLInputElement;
+    const invalidFile = new File(['texto'], 'notas.txt', { type: 'text/plain' });
+    Object.defineProperty(input, 'files', { value: [invalidFile] });
+    input.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const submitButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Guardar imágenes'),
+    ) as HTMLButtonElement;
+    expect(overlayContainer.getContainerElement().textContent).toContain('Solo podés seleccionar archivos de imagen.');
+    expect(submitButton.disabled).toBe(true);
+    submitButton.click();
+    await fixture.whenStable();
+    expect(imagesServiceMock.addImages).not.toHaveBeenCalled();
+  });
+
+  it('should keep valid image previews and reject invalid files immediately when selection is mixed', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const animalsServiceMock = createAnimalsServiceMock();
+    const imagesServiceMock = createImagesServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
+    const { fixture } = await configure(
+      animalsServiceMock,
+      createEventsServiceMock(),
+      createReproductionEventsServiceMock(),
+      imagesServiceMock,
+    );
+
+    const imagesButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
+      (button as HTMLButtonElement).textContent?.includes('Imágenes'),
+    ) as HTMLButtonElement;
+    imagesButton.click();
+    await fixture.whenStable();
+
+    const input = overlayContainer.getContainerElement().querySelector('input[type="file"]') as HTMLInputElement;
+    const validFile = new File(['foto'], 'vaca.png', { type: 'image/png' });
+    const invalidFile = new File(['texto'], 'notas.txt', { type: 'text/plain' });
+    Object.defineProperty(input, 'files', { value: [validFile, invalidFile] });
+    input.dispatchEvent(new Event('change'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(overlayContainer.getContainerElement().textContent).toContain('Se ignoraron 1 archivo(s) porque no son imágenes.');
+    const selectedPreviewImages = overlayContainer.getContainerElement().querySelectorAll('.selected-image-preview img') as NodeListOf<HTMLImageElement>;
+    expect(Array.from(selectedPreviewImages).map((image) => image.alt)).toEqual(['vaca.png']);
+
+    const submitButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Guardar imágenes'),
+    ) as HTMLButtonElement;
+    submitButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(imagesServiceMock.addImages).toHaveBeenCalledWith('animal-uuid-1', [validFile]);
   });
 
   it('should render animal rows with a first-image thumbnail preview and stronger identity block', async () => {

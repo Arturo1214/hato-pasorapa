@@ -108,6 +108,22 @@ describe('AnimalFormPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Solo podés seleccionar archivos de imagen.');
   });
 
+  it('should keep valid selected image previews and immediately ignore invalid mixed files', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const { fixture, component, imagesService } = await configure({ uuid: 'animal-uuid-1' });
+    const imageFile = new File(['foto'], 'animal.png', { type: 'image/png' });
+    const textFile = new File(['texto'], 'notas.txt', { type: 'text/plain' });
+
+    component.onImagesSelected({ target: { files: [imageFile, textFile], value: 'seleccion' } } as unknown as Event);
+    fixture.detectChanges();
+
+    const selectedPreviewImages = fixture.nativeElement.querySelectorAll('.selected-image-preview img') as NodeListOf<HTMLImageElement>;
+    expect(imagesService.addImages).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Se ignoraron 1 archivo(s) porque no son imágenes.');
+    expect(component.selectedImageFiles()).toEqual([imageFile]);
+    expect(Array.from(selectedPreviewImages).map((image) => image.alt)).toEqual(['animal.png']);
+  });
+
   it('should preview selected image files before uploading them', async () => {
     const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
     const { fixture, component, imagesService } = await configure({ uuid: 'animal-uuid-1' });

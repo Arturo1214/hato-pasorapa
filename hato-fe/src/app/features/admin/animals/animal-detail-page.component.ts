@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormArray, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -13,6 +13,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
+import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { AnimalsEventsService, type AnimalEventItem } from './data-access/animals-events.service';
 import { AnimalsHealthEventsService, type AnimalHealthEventItem } from './data-access/animals-health-events.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
@@ -113,6 +114,18 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
 
           <mat-tab label="Reproducción">
             <mat-card appearance="outlined" class="detail-card">
+              @if (activeGestation(); as gestation) {
+                <section class="active-gestation" aria-label="Gestación activa">
+                  <h3>Gestación activa</h3>
+                  <dl>
+                    <div><dt>Fecha probable de parto</dt><dd>{{ gestation.expectedBirthDate }}</dd></div>
+                    <div><dt>Estado</dt><dd>{{ gestation.statusLabel }}</dd></div>
+                    @if (gestation.serviceLabel) {
+                      <div><dt>Servicio asociado</dt><dd>{{ gestation.serviceLabel }}</dd></div>
+                    }
+                  </dl>
+                </section>
+              }
               @if (reproductionEvents().length) {
                 <ul class="event-list">
                   @for (event of reproductionEvents(); track event.id) {
@@ -239,6 +252,10 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .thumbnail-strip img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
     .event-list { margin: 0; padding-left: 1.25rem; }
     .event-metadata { display: block; margin-top: .25rem; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
+    .active-gestation { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--mat-sys-primary); border-radius: 1rem; background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); }
+    .active-gestation h3 { margin: 0 0 .75rem; }
+    .active-gestation dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; margin: 0; }
+    .active-gestation dt { color: inherit; opacity: .78; }
     .genealogy-tree { display: grid; justify-items: center; gap: .75rem; text-align: center; }
     .genealogy-generation { width: 100%; display: grid; gap: .75rem; }
     .genealogy-generation h3 { margin: 0; font-size: .95rem; color: var(--mat-sys-on-surface-variant); font-weight: 600; }
@@ -278,6 +295,7 @@ export class AnimalDetailPageComponent {
     .filter((event) => event.reproductionEventType === 'SERVICE')
     .slice(0, 10)
     .map((event) => ({ uuid: event.id, label: serviceEventOptionLabel(event) })));
+  readonly activeGestation = computed(() => buildActiveGestationSummary(this.reproductionEvents()));
 
   constructor() {
     this.loadDetail();
@@ -431,6 +449,20 @@ interface AnimalServiceEventOption {
   uuid: string;
   label: string;
 }
+
+interface ActiveGestationSummary {
+  expectedBirthDate: string;
+  statusLabel: string;
+  serviceLabel: string | null;
+}
+
+type CalfFormGroup = FormGroup<{
+  arete: FormControl<string>;
+  marca: FormControl<string>;
+  tatuaje: FormControl<string>;
+  category: FormControl<AnimalCategory>;
+  weightKg: FormControl<number | null>;
+}>;
 
 @Component({
   selector: 'app-animal-pregnancy-diagnosis-dialog',
@@ -683,31 +715,51 @@ export class AnimalServiceRegistrationDialogComponent {
         </mat-select>
       </mat-form-field>
 
-      <h3>Cría</h3>
-      <mat-form-field appearance="outline">
-        <mat-label>Arete</mat-label>
-        <input matInput formControlName="arete" />
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Marca</mat-label>
-        <input matInput formControlName="marca" />
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Tatuaje</mat-label>
-        <input matInput formControlName="tatuaje" />
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Categoría</mat-label>
-        <mat-select formControlName="category">
-          @for (option of calfCategoryOptions; track option.value) {
-            <mat-option [value]="option.value">{{ option.label }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Peso al nacer (kg)</mat-label>
-        <input matInput type="number" min="0" formControlName="weightKg" />
-      </mat-form-field>
+      <p class="birth-online-note">
+        El registro de parto requiere conexión para crear el ternero y actualizar la genealogía en una sola operación.
+      </p>
+      @if (!isOnline()) {
+        <p class="birth-offline-note" role="status">Necesitás conexión para registrar el parto.</p>
+      }
+
+      <section formArrayName="offspring" class="offspring-list">
+        @for (calfForm of offspring.controls; track $index; let index = $index) {
+          <article class="offspring-card" [formGroupName]="index">
+            <div class="offspring-card__header">
+              <h3>Ternero {{ index + 1 }}</h3>
+              @if (offspring.length > 1) {
+                <button mat-button color="warn" type="button" (click)="removeOffspring(index)">Quitar</button>
+              }
+            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Arete</mat-label>
+              <input matInput formControlName="arete" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Marca</mat-label>
+              <input matInput formControlName="marca" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Tatuaje</mat-label>
+              <input matInput formControlName="tatuaje" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Categoría</mat-label>
+              <mat-select formControlName="category">
+                @for (option of calfCategoryOptions; track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Peso al nacer (kg)</mat-label>
+              <input matInput type="number" min="0" formControlName="weightKg" />
+            </mat-form-field>
+          </article>
+        }
+      </section>
+      <button mat-stroked-button type="button" (click)="addOffspring()">Agregar ternero</button>
+
       <mat-form-field appearance="outline">
         <mat-label>Notas</mat-label>
         <textarea matInput formControlName="notes"></textarea>
@@ -719,12 +771,17 @@ export class AnimalServiceRegistrationDialogComponent {
     </form>
     <div mat-dialog-actions align="end">
       <button mat-button type="button" [mat-dialog-close]="false">Cancelar</button>
-      <button mat-flat-button color="primary" type="button" (click)="submit()" [disabled]="form.invalid || saving()">Registrar</button>
+      <button mat-flat-button color="primary" type="button" (click)="submit()" [disabled]="form.invalid || saving() || !isOnline()">Registrar</button>
     </div>
   `,
   styles: [`
     .birth-form { display: grid; gap: .75rem; }
-    h3 { margin: .5rem 0 0; }
+    .birth-online-note, .birth-offline-note { margin: 0; color: var(--mat-sys-on-surface-variant); }
+    .birth-offline-note { color: var(--mat-sys-error); }
+    .offspring-list { display: grid; gap: .75rem; }
+    .offspring-card { display: grid; gap: .75rem; padding: .75rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: .75rem; }
+    .offspring-card__header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+    h3 { margin: 0; font-size: 1rem; }
     [role="alert"] { color: var(--mat-sys-error); margin: 0; }
   `],
 })
@@ -733,20 +790,18 @@ export class AnimalBirthRegistrationDialogComponent {
   private readonly data = inject<AnimalBirthRegistrationDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<AnimalBirthRegistrationDialogComponent, boolean>);
   private readonly animalsService = inject(AnimalsService);
+  private readonly offlineStatus = inject(OfflineStatusService);
 
   readonly calfCategoryOptions = ANIMAL_CATEGORY_OPTIONS.filter((option) => option.value === ANIMAL_CATEGORY.TERNERO || option.value === ANIMAL_CATEGORY.TERNERA);
   readonly fatherOptions = signal<AnimalItem[]>([]);
   readonly saving = signal(false);
   readonly errorMessage = signal<string | null>(null);
+  readonly isOnline = this.offlineStatus.isOnline;
 
   readonly form = this.fb.nonNullable.group({
     birthDate: [new Date().toISOString().slice(0, 10), Validators.required],
     fatherAnimalUuid: this.fb.control<string | null>(null),
-    arete: [''],
-    marca: [''],
-    tatuaje: [''],
-    category: [ANIMAL_CATEGORY.TERNERA as AnimalCategory, Validators.required],
-    weightKg: this.fb.control<number | null>(null),
+    offspring: this.fb.array<CalfFormGroup>([this.createOffspringForm()]),
     notes: [''],
   });
 
@@ -759,12 +814,22 @@ export class AnimalBirthRegistrationDialogComponent {
 
   animalName(animal: AnimalItem) { return animalName(animal); }
 
+  get offspring(): FormArray<CalfFormGroup> { return this.form.controls.offspring; }
+
+  addOffspring() { this.offspring.push(this.createOffspringForm()); }
+
+  removeOffspring(index: number) {
+    if (this.offspring.length > 1) {
+      this.offspring.removeAt(index);
+    }
+  }
+
   submit() {
-    if (this.form.invalid || this.saving()) return;
+    if (this.form.invalid || this.saving() || !this.isOnline()) return;
     const value = this.form.getRawValue();
-    const hasVisible = [value.arete, value.marca, value.tatuaje].some((visible) => visible.trim().length > 0);
-    if (!hasVisible) {
-      this.errorMessage.set('Informá al menos arete, marca o tatuaje de la cría.');
+    const allCalvesHaveVisible = value.offspring.every((calf) => hasVisibleIdentifier(calf));
+    if (!allCalvesHaveVisible) {
+      this.errorMessage.set('Informá al menos arete, marca o tatuaje para cada ternero.');
       return;
     }
 
@@ -774,21 +839,31 @@ export class AnimalBirthRegistrationDialogComponent {
       birthDate: value.birthDate,
       fatherAnimalUuid: value.fatherAnimalUuid,
       notes: value.notes,
-      offspring: [{
-        arete: value.arete,
-        marca: value.marca,
-        tatuaje: value.tatuaje,
-        category: value.category,
-        sex: value.category === ANIMAL_CATEGORY.TERNERA ? ANIMAL_SEX.HEMBRA : ANIMAL_SEX.MACHO,
+      offspring: value.offspring.map((calf) => ({
+        arete: calf.arete,
+        marca: calf.marca,
+        tatuaje: calf.tatuaje,
+        category: calf.category,
+        sex: calf.category === ANIMAL_CATEGORY.TERNERA ? ANIMAL_SEX.HEMBRA : ANIMAL_SEX.MACHO,
         active: true,
-        weightKg: value.weightKg,
-      }],
+        weightKg: calf.weightKg,
+      })),
     }).subscribe({
       next: () => this.dialogRef.close(true),
       error: () => {
         this.errorMessage.set('No pudimos registrar el nacimiento. Revisá los datos o intentá de nuevo.');
         this.saving.set(false);
       },
+    });
+  }
+
+  private createOffspringForm(): CalfFormGroup {
+    return new FormGroup({
+      arete: new FormControl('', { nonNullable: true }),
+      marca: new FormControl('', { nonNullable: true }),
+      tatuaje: new FormControl('', { nonNullable: true }),
+      category: new FormControl<AnimalCategory>(ANIMAL_CATEGORY.TERNERA, { nonNullable: true, validators: [Validators.required] }),
+      weightKg: new FormControl<number | null>(null),
     });
   }
 }
@@ -804,6 +879,62 @@ function serviceEventOptionLabel(event: AnimalReproductionEventItem) {
     : 'método no informado';
   const sire = firstText(metadata['fatherAnimalUuid'], metadata['bullReference'], metadata['semenReference']);
   return `${event.occurredAt.slice(0, 10)} · ${method}${sire ? ` · ${sire}` : ''}`;
+}
+
+function buildActiveGestationSummary(events: AnimalReproductionEventItem[]): ActiveGestationSummary | null {
+  const sortedEvents = [...events].sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+  const positiveDiagnosis = sortedEvents.find((event) => {
+    const metadata = event.metadata as Record<string, unknown>;
+    return event.reproductionEventType === 'PREGNANCY_DIAGNOSIS'
+      && metadata['result'] === PREGNANCY_DIAGNOSIS_RESULT.PRENADA
+      && Boolean(firstText(metadata['expectedBirthDate']));
+  });
+
+  if (!positiveDiagnosis) {
+    return null;
+  }
+
+  const hasLaterClosure = sortedEvents.some((event) =>
+    event.occurredAt > positiveDiagnosis.occurredAt
+    && (event.reproductionEventType === 'BIRTH' || event.reproductionEventType === 'PREGNANCY_LOSS')
+  );
+  if (hasLaterClosure) {
+    return null;
+  }
+
+  const metadata = positiveDiagnosis.metadata as Record<string, unknown>;
+  const expectedBirthDate = firstText(metadata['expectedBirthDate'])?.slice(0, 10);
+  if (!expectedBirthDate) {
+    return null;
+  }
+
+  const serviceEventUuid = firstText(metadata['serviceEventUuid']);
+  const serviceEvent = serviceEventUuid
+    ? events.find((event) => event.id === serviceEventUuid && event.reproductionEventType === 'SERVICE')
+    : null;
+
+  return {
+    expectedBirthDate,
+    statusLabel: gestationStatusLabel(expectedBirthDate),
+    serviceLabel: serviceEvent ? serviceEventOptionLabel(serviceEvent) : null,
+  } satisfies ActiveGestationSummary;
+}
+
+function gestationStatusLabel(expectedBirthDate: string) {
+  const today = startOfDay(new Date());
+  const expected = startOfDay(new Date(`${expectedBirthDate}T00:00:00`));
+  const diffDays = Math.round((expected.getTime() - today.getTime()) / 86_400_000);
+  if (diffDays > 0) return `Faltan ${diffDays} día(s)`;
+  if (diffDays < 0) return `Vencida hace ${Math.abs(diffDays)} día(s)`;
+  return 'Fecha probable hoy';
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function hasVisibleIdentifier(calf: { arete: string; marca: string; tatuaje: string }) {
+  return [calf.arete, calf.marca, calf.tatuaje].some((visible) => visible.trim().length > 0);
 }
 
 function firstText(...values: unknown[]) {

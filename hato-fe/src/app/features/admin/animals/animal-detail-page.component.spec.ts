@@ -4,10 +4,11 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { of, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
-import { AnimalDetailPageComponent } from './animal-detail-page.component';
+import { OfflineStatusService } from '../../../core/offline/offline-status.service';
+import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent } from './animal-detail-page.component';
 import { AnimalsEventsService } from './data-access/animals-events.service';
 import { AnimalsHealthEventsService } from './data-access/animals-health-events.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
@@ -295,6 +296,58 @@ describe('AnimalDetailPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Fecha probable de parto: 2027-02-14');
   });
 
+  it('should summarize the active gestation when the latest positive diagnosis has no later closure event', async () => {
+    const { fixture } = await configure({
+      reproductionEvents: [
+        createReproductionEvent({
+          id: 'service-event-1',
+          reproductionEventType: 'SERVICE',
+          occurredAt: '2026-05-01T09:00:00.000Z',
+          metadata: { serviceMethod: 'INSEMINACION_ARTIFICIAL', bullReference: 'Toro catálogo 88' },
+        }),
+        createReproductionEvent({
+          id: 'pregnancy-diagnosis-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10T09:00:00.000Z',
+          notes: 'Ecografía positiva',
+          metadata: {
+            diagnosisDate: '2026-05-10T00:00:00.000Z',
+            result: 'PRENADA',
+            expectedBirthDate: '2026-06-20T00:00:00.000Z',
+            serviceEventUuid: 'service-event-1',
+          },
+        }),
+      ],
+    });
+
+    await selectTab(fixture, 'Reproducción');
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Gestación activa');
+    expect(text).toContain('Fecha probable de parto');
+    expect(text).toContain('2026-06-20');
+    expect(text).toContain('Servicio asociado');
+    expect(text).toContain('2026-05-01 · INSEMINACION ARTIFICIAL · Toro catálogo 88');
+  });
+
+  it('should hide the active gestation summary when a later birth closes the diagnosis', async () => {
+    const { fixture } = await configure({
+      reproductionEvents: [
+        createReproductionEvent({
+          id: 'pregnancy-diagnosis-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10T09:00:00.000Z',
+          metadata: { result: 'PRENADA', expectedBirthDate: '2026-06-20T00:00:00.000Z' },
+        }),
+        createReproductionEvent({ id: 'birth-event-1', reproductionEventType: 'BIRTH', occurredAt: '2026-05-11T09:00:00.000Z' }),
+      ],
+    });
+
+    await selectTab(fixture, 'Reproducción');
+
+    expect(fixture.nativeElement.textContent).not.toContain('Gestación activa');
+  });
+
   it('should hide birth registration for male animals', async () => {
     const { fixture } = await configure({ animal: createAnimal({ category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }) });
 
@@ -309,6 +362,108 @@ describe('AnimalDetailPageComponent', () => {
     });
 
     expect(fixture.nativeElement.textContent).toContain('No pudimos cargar la ficha animal');
+  });
+});
+
+describe('AnimalBirthRegistrationDialogComponent', () => {
+  const createAnimal = (overrides: Partial<AnimalItem> = {}): AnimalItem => ({
+    uuid: 'animal-uuid-1',
+    ownerGanaderoId: 'ganadero-uuid-1',
+    arete: 'AR-100',
+    marca: 'Marca Sur',
+    tatuaje: 'TS-10',
+    category: ANIMAL_CATEGORY.TORO,
+    sex: ANIMAL_SEX.MACHO,
+    active: true,
+    birthDate: '2024-04-26',
+    admissionDate: '2026-04-26',
+    weightKg: 420,
+    createdAt: '2026-04-26T10:00:00.000Z',
+    version: 1,
+    updatedAt: '2026-04-26T10:00:00.000Z',
+    lastSyncedAt: '2026-04-26T10:05:00.000Z',
+    motherAnimalUuid: null,
+    fatherAnimalUuid: null,
+    ...overrides,
+  });
+
+  const configureDialog = async (online = true) => {
+    const animalsService = {
+      listAnimals: vi.fn(() => of([createAnimal({ uuid: 'father-uuid-1', arete: 'TORO-001' })])),
+      registerBirth: vi.fn(() => of({
+        eventId: 'birth-event-1',
+        motherAnimalUuid: 'mother-uuid-1',
+        fatherAnimalUuid: null,
+        birthDate: '2026-05-10',
+        offspringCount: 2,
+        offspring: [],
+      })),
+    };
+    const dialogRef = { close: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [AnimalBirthRegistrationDialogComponent],
+      providers: [
+        provideNoopAnimations(),
+        { provide: AnimalsService, useValue: animalsService },
+        { provide: OfflineStatusService, useValue: { isOnline: signal(online) } },
+        { provide: MAT_DIALOG_DATA, useValue: { motherUuid: 'mother-uuid-1', ownerGanaderoId: 'ganadero-uuid-1' } },
+        { provide: MatDialogRef, useValue: dialogRef },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AnimalBirthRegistrationDialogComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, component: fixture.componentInstance, animalsService, dialogRef };
+  };
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('should start with one calf row and submit multiple calves after adding another one', async () => {
+    const { fixture, component, animalsService, dialogRef } = await configureDialog();
+
+    expect(fixture.nativeElement.textContent).toContain('El registro de parto requiere conexión para crear el ternero y actualizar la genealogía en una sola operación.');
+    expect(component.offspring.length).toBe(1);
+
+    component.offspring.at(0).patchValue({ arete: 'CRIA-001', category: ANIMAL_CATEGORY.TERNERA, weightKg: 31.25 });
+    component.addOffspring();
+    component.offspring.at(1).patchValue({ marca: 'CRIA-MARCA-002', category: ANIMAL_CATEGORY.TERNERO, weightKg: 32 });
+    fixture.detectChanges();
+
+    expect(component.offspring.length).toBe(2);
+    expect(fixture.nativeElement.textContent).toContain('Ternero 2');
+
+    component.submit();
+
+    expect(animalsService.registerBirth).toHaveBeenCalledWith('mother-uuid-1', expect.objectContaining({
+      offspring: [
+        expect.objectContaining({ arete: 'CRIA-001', sex: ANIMAL_SEX.HEMBRA, weightKg: 31.25 }),
+        expect.objectContaining({ marca: 'CRIA-MARCA-002', sex: ANIMAL_SEX.MACHO, weightKg: 32 }),
+      ],
+    }));
+    expect(dialogRef.close).toHaveBeenCalledWith(true);
+  });
+
+  it('should block submission when any calf is missing a visible identifier', async () => {
+    const { component, animalsService } = await configureDialog();
+
+    component.offspring.at(0).patchValue({ arete: 'CRIA-001' });
+    component.addOffspring();
+    component.submit();
+
+    expect(component.errorMessage()).toContain('Informá al menos arete, marca o tatuaje para cada ternero.');
+    expect(animalsService.registerBirth).not.toHaveBeenCalled();
+  });
+
+  it('should disable online-only birth registration while offline', async () => {
+    const { fixture, component, animalsService } = await configureDialog(false);
+
+    expect(fixture.nativeElement.textContent).toContain('Necesitás conexión para registrar el parto.');
+    component.offspring.at(0).patchValue({ arete: 'CRIA-001' });
+    component.submit();
+
+    expect(animalsService.registerBirth).not.toHaveBeenCalled();
   });
 });
 

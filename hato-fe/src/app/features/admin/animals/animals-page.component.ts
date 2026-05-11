@@ -25,7 +25,6 @@ import { AnimalsEventsService, type AnimalEventItem } from './data-access/animal
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import {
   AnimalsReproductionEventsService,
-  buildBirthMetadata,
   type AnimalReproductionEventItem,
 } from './data-access/animals-reproduction-events.service';
 import {
@@ -775,7 +774,6 @@ class AnimalReproductionEventDialogComponent {
     { value: 'SERVICE', label: 'Servicio' },
     { value: 'PREGNANCY_CONFIRMED', label: 'Preñez confirmada' },
     { value: 'PREGNANCY_LOSS', label: 'Pérdida de preñez' },
-    { value: 'BIRTH', label: 'Parto' },
   ] as const;
   readonly form = this.formBuilder.group({
     reproductionEventType: ['SERVICE' as AnimalReproductionEventItem['reproductionEventType'], [Validators.required]],
@@ -796,14 +794,7 @@ class AnimalReproductionEventDialogComponent {
       reproductionEventType,
       occurredAt: value.occurredAt ?? currentLocalDateTimeInput(),
       notes: normalizeOptionalText(value.notes),
-      metadata: reproductionEventType === 'BIRTH'
-        ? buildBirthMetadata({
-            birthDate: currentLocalDateTimeInput(),
-            motherAnimalUuid: this.data.animal.uuid,
-            offspringCount: 1,
-            offspringAnimalUuids: [],
-          })
-        : { serviceMethod: normalizeOptionalText(value.serviceMethod) ?? 'Monta controlada' },
+      metadata: { serviceMethod: normalizeOptionalText(value.serviceMethod) ?? 'Monta controlada' },
     });
   }
 }

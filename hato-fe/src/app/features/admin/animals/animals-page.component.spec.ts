@@ -270,6 +270,27 @@ describe('AnimalsPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Evento reproductivo encolado. Se disparó la sincronización automática.');
   });
 
+  it('should not offer birth registration from the legacy row reproduction event dialog', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
+    const { fixture } = await configure(animalsServiceMock);
+
+    const reproductionButton = Array.from(fixture.nativeElement.querySelectorAll('button')).find((button) =>
+      (button as HTMLButtonElement).textContent?.includes('Evento reproductivo'),
+    ) as HTMLButtonElement;
+    reproductionButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const typeSelect = overlayContainer.getContainerElement().querySelector('mat-select') as HTMLElement;
+    typeSelect.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(overlayContainer.getContainerElement().textContent).toContain('Registrar evento reproductivo');
+    expect(overlayContainer.getContainerElement().textContent).not.toContain('Parto');
+  });
+
   it('should expose animal images from the row action dialog and enqueue new files', async () => {
     const animalsServiceMock = createAnimalsServiceMock();
     const imagesServiceMock = createImagesServiceMock();

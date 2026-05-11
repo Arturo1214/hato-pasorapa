@@ -121,22 +121,30 @@ describe('VetVisitFormDialogComponent', () => {
     expect(text).not.toContain('Plan');
   });
 
-  it('should render attend clinical fields with cost and treatment plan controls', async () => {
+  it('should render only the main attend clinical fields and keep treatment controls hidden until enabled', async () => {
     const { fixture, component } = await configure([], { action: 'attend', mode: 'GLOBAL' });
 
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Atender visita');
     expect(text).toContain('Hallazgos / descripción');
     expect(text).toContain('Notas de atención');
-    expect(text).toContain('Costo');
-    expect(text).toContain('BOB');
-    expect(text).toContain('Plan de tratamiento');
-    expect(text).toContain('Agregar paso');
+    expect(text).toContain('Tiene tratamiento');
+    expect(text).not.toContain('Costo');
+    expect(text).not.toContain('BOB');
+    expect(text).not.toContain('Plan de tratamiento');
+    expect(text).not.toContain('Agregar paso');
     expect(component.treatmentPlanControls()).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('input[type="number"][formControlName="cost"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('input[type="number"][formControlName="cost"]')).toBeNull();
+
+    component.form.controls.hasTreatment.setValue(true);
+    fixture.detectChanges();
+
+    const expandedText = fixture.nativeElement.textContent as string;
+    expect(expandedText).toContain('Plan de tratamiento');
+    expect(expandedText).toContain('Agregar paso');
   });
 
-  it('should validate required findings, non-negative cost, and treatment step length in attend mode', async () => {
+  it('should validate required findings and require treatment steps only when treatment is enabled', async () => {
     const { component } = await configure([], { action: 'attend', mode: 'GLOBAL' });
 
     component.form.patchValue({
@@ -145,19 +153,59 @@ describe('VetVisitFormDialogComponent', () => {
       reason: 'Control clínico',
       findings: '',
       attentionNotes: 'Se estabilizó el animal.',
-      cost: -1,
       followUpChoice: 'finalize',
+      hasTreatment: false,
     });
     component.treatmentPlanControls()[0].setValue('');
     component.form.updateValueAndValidity();
 
     expect(component.form.valid).toBe(false);
 
-    component.form.patchValue({ findings: 'Fiebre persistente', cost: 120 });
+    component.form.patchValue({ findings: 'Fiebre persistente' });
+    component.form.updateValueAndValidity();
+
+    expect(component.form.valid).toBe(true);
+
+    component.form.patchValue({ hasTreatment: true });
+    component.form.updateValueAndValidity();
+
+    expect(component.form.valid).toBe(false);
+
     component.treatmentPlanControls()[0].setValue('Aplicar antibiótico por 3 días');
     component.form.updateValueAndValidity();
 
     expect(component.form.valid).toBe(true);
+  });
+
+  it('should prepopulate attend mode with the selected visit data', async () => {
+    const { component } = await configure([], {
+      action: 'attend',
+      mode: 'GLOBAL',
+      animalUuid: null,
+      visitId: 'VISIT-GLOBAL',
+      status: 'ATTENDED',
+      occurredAt: '2026-05-01T10:00:00.000Z',
+      nextDueAt: '2026-05-08T10:00:00.000Z',
+      reason: 'Campaña anual',
+      veterinarianName: 'Dra. Luna',
+      veterinarianLicense: 'MV-1',
+      targetAnimalCount: 12,
+      parentVisitId: null,
+    });
+
+    expect(component.form.getRawValue()).toEqual(expect.objectContaining({
+      mode: 'GLOBAL',
+      animalUuid: null,
+      visitId: 'VISIT-GLOBAL',
+      status: 'ATTENDED',
+      occurredAt: '2026-05-01T10:00:00.000Z',
+      nextDueAt: '2026-05-08T10:00:00.000Z',
+      reason: 'Campaña anual',
+      veterinarianName: 'Dra. Luna',
+      veterinarianLicense: 'MV-1',
+      targetAnimalCount: 12,
+      parentVisitId: null,
+    }));
   });
 
   it('should add and remove dynamic treatment plan steps', async () => {
@@ -186,7 +234,7 @@ describe('VetVisitFormDialogComponent', () => {
       reason: 'Control clínico',
       findings: 'Herida infectada en pata trasera',
       attentionNotes: 'Se limpió y medicó la zona.',
-      cost: 150,
+      hasTreatment: true,
       followUpChoice: 'schedule',
       nextDueAt: new Date(2026, 4, 20),
     });
@@ -199,7 +247,7 @@ describe('VetVisitFormDialogComponent', () => {
         status: 'ATTENDED',
         findings: 'Herida infectada en pata trasera',
         notes: 'Se limpió y medicó la zona.',
-        cost: { amount: 150, currency: 'BOB' },
+        cost: null,
         treatmentPlan: ['Aplicar antibiótico por 3 días'],
         followUpChoice: 'schedule',
         nextDueAt: expect.stringContaining('2026-05-20'),

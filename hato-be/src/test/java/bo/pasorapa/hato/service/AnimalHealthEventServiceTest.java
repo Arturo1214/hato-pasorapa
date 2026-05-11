@@ -313,6 +313,32 @@ class AnimalHealthEventServiceTest {
     }
 
     @Test
+    void shouldProjectOneLatestVetVisitRowPerVisitIdAcrossLifecycleEvents() {
+        UUID animalUuid = UUID.fromString("6ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-LATEST-800", "SPECIFIC", "PENDING", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-LATEST-800", "SPECIFIC", "CANCELED", "Dra. Camila", 1, "2026-05-10T09:00:00");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.visitId = "VISIT-LATEST-800";
+        filter.page = 0;
+        filter.size = 20;
+
+        var response = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+
+        assertEquals(1, response.total());
+        assertEquals("VISIT-LATEST-800", response.items().get(0).visitId());
+        assertEquals("CANCELED", response.items().get(0).status());
+        assertEquals(animalUuid, response.items().get(0).animalUuid());
+
+        filter.status = "PENDING";
+        assertEquals(0, animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).total());
+
+        filter.status = "CANCELED";
+        assertEquals(1, animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).total());
+    }
+
+    @Test
     void shouldProjectFieldVetVisitCostAndTreatmentPlanFromMetadata() {
         UUID animalUuid = UUID.fromString("12e6c94d-4f97-47f1-9c27-db25b2d28cc4");
         seedAnimal(animalUuid);

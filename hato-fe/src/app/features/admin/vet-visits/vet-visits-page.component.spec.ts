@@ -40,6 +40,21 @@ describe('VetVisitsPageComponent', () => {
       costCurrency: null,
       treatmentPlan: null,
     },
+    {
+      visitId: 'VISIT-CANCELED',
+      mode: 'GLOBAL',
+      status: 'CANCELED',
+      veterinarian: { name: 'Dra. Cielo', license: 'MV-9' },
+      occurredAt: '2026-05-04T10:00:00.000Z',
+      nextControlAt: null,
+      parentVisitId: null,
+      animalUuid: null,
+      targetAnimalCount: 8,
+      atencionNotas: 'Cancelada por lluvia',
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
+    },
   ];
 
   const newVisitResult = {
@@ -157,9 +172,11 @@ describe('VetVisitsPageComponent', () => {
 
     const pendingActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[0]));
     const attendedActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[1]));
+    const canceledActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[2]));
 
     expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Cancelar']);
     expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Cancelar']);
+    expect(canceledActions.map((action) => action.label)).toEqual([]);
 
     component.openNewVisitDialog();
 
@@ -187,6 +204,45 @@ describe('VetVisitsPageComponent', () => {
         }),
       }),
     );
+    expect(component.visitRows()[0]).toEqual(expect.objectContaining({
+      visitId: 'VISIT-GLOBAL',
+      status: 'CANCELED',
+      statusLabel: 'Cancelada',
+    }));
+  });
+
+  it('should pass the selected visit data into attend mode so the dialog is prepopulated', async () => {
+    const { component, dialog } = await configure({ dialogResults: [undefined] });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      VetVisitFormDialogComponent,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'attend',
+          visitId: 'VISIT-GLOBAL',
+          status: 'ATTENDED',
+          mode: 'GLOBAL',
+          animalUuid: null,
+          occurredAt: '2026-05-01T10:00:00.000Z',
+          nextDueAt: '2026-05-08T10:00:00.000Z',
+          reason: 'Campaña anual',
+          veterinarianName: 'Dra. Luna',
+          veterinarianLicense: 'MV-1',
+          parentVisitId: null,
+        }),
+      }),
+    );
+  });
+
+  it('should ignore a stale attend action when the selected visit is already canceled', async () => {
+    const { component, dialog, healthEventsService } = await configure({ dialogResults: [attendResult] });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[2] });
+
+    expect(dialog.open).not.toHaveBeenCalledWith(VetVisitFormDialogComponent, expect.anything());
+    expect(healthEventsService.createEvent).not.toHaveBeenCalled();
   });
 
   it('should open attend mode and create attended plus linked follow-up events when scheduling next control', async () => {
@@ -196,7 +252,7 @@ describe('VetVisitsPageComponent', () => {
 
     expect(dialog.open).toHaveBeenCalledWith(
       VetVisitFormDialogComponent,
-      expect.objectContaining({ data: expect.objectContaining({ action: 'attend', parentVisitId: 'VISIT-GLOBAL' }) }),
+      expect.objectContaining({ data: expect.objectContaining({ action: 'attend', visitId: 'VISIT-GLOBAL' }) }),
     );
     expect(healthEventsService.createEvent).toHaveBeenCalledTimes(2);
     expect(healthEventsService.createEvent).toHaveBeenNthCalledWith(
@@ -219,10 +275,25 @@ describe('VetVisitsPageComponent', () => {
             parentVisitId: 'VISIT-GLOBAL',
             status: 'PENDING',
           }),
-          protocol: expect.objectContaining({ status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-15T00:00:00.000Z' }),
+          protocol: { status: 'STARTED' },
         }),
       }),
     );
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual([
+      'VISIT-GLOBAL',
+      expect.stringMatching(/^vet-follow-up-|^[0-9a-f-]{36}$/),
+      'VISIT-SPECIFIC',
+      'VISIT-CANCELED',
+    ]);
+    expect(component.visitRows().filter((visit) => visit.visitId === 'VISIT-GLOBAL')).toEqual([
+      expect.objectContaining({ status: 'ATTENDED', statusLabel: 'Atendida' }),
+    ]);
+    expect(component.visitRows()[1]).toEqual(expect.objectContaining({
+      status: 'PENDING',
+      statusLabel: 'Programada',
+      occurredAt: '2026-05-15T00:00:00.000Z',
+      nextControlAt: null,
+    }));
   });
 
   it('should create a finalized chain event when attend flow chooses finalize', async () => {
@@ -251,6 +322,7 @@ describe('VetVisitsPageComponent', () => {
       'VISIT-NEW',
       'VISIT-GLOBAL',
       'VISIT-SPECIFIC',
+      'VISIT-CANCELED',
     ]);
   });
 
@@ -260,6 +332,6 @@ describe('VetVisitsPageComponent', () => {
     component.handleFiltersChange({ mode: 'Específica' });
     component.openNewVisitDialog();
 
-    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC']);
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC', 'VISIT-CANCELED']);
   });
 });

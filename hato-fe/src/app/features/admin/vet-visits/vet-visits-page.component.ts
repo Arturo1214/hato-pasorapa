@@ -122,7 +122,7 @@ export class VetVisitsPageComponent {
     this.loadVisits();
   }
 
-  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem) {
+  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
     this.loading.set(true);
     this.vetVisitsService
       .listVetVisits(filter)
@@ -153,11 +153,21 @@ export class VetVisitsPageComponent {
   handleRowAction(event: DataTableRowActionEvent) {
     const row = event.row as VetVisitRow;
     if (event.actionId === 'cancel') {
+      if (!canCancel(row)) {
+        return;
+      }
       this.openCancelVisitDialog(row);
       return;
     }
     if (event.actionId === 'attend') {
+      if (!canAttend(row)) {
+        return;
+      }
       this.openAttendVisitDialog(row);
+      return;
+    }
+
+    if (!canContinue(row)) {
       return;
     }
 
@@ -186,8 +196,16 @@ export class VetVisitsPageComponent {
         width: 'min(92vw, 960px)',
         data: {
           action: 'attend',
+          visitId: row.visitId,
+          status: 'ATTENDED',
           mode: row.mode,
-          parentVisitId: row.visitId,
+          animalUuid: row.animalUuid,
+          occurredAt: row.occurredAt,
+          nextDueAt: row.nextControlAt,
+          reason: row.atencionNotas ?? 'Visita veterinaria',
+          veterinarianName: row.veterinarian?.name ?? '',
+          veterinarianLicense: row.veterinarian?.license ?? null,
+          parentVisitId: row.parentVisitId,
           targetAnimalCount: row.targetAnimalCount,
         },
       })
@@ -256,7 +274,7 @@ export class VetVisitsPageComponent {
         )
         .subscribe((feedback) => {
           this.feedbackMessage.set(feedback.message);
-          this.loadVisits(toBackendFilter(this.visitFilters()), followUpVisit);
+          this.loadVisits(toBackendFilter(this.visitFilters()), [attendedVisit, followUpVisit]);
         });
       return;
     }
@@ -329,18 +347,39 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
 
 function mergeRecentlySavedVisit(
   items: VetVisitItem[],
-  recentlySavedVisit: VetVisitItem | undefined,
+  recentlySavedVisit: VetVisitItem | VetVisitItem[] | undefined,
   filter: VetVisitFilter
 ): VetVisitItem[] {
-  if (!recentlySavedVisit || items.some((item) => item.visitId === recentlySavedVisit.visitId)) {
+  const recentlySavedVisits = Array.isArray(recentlySavedVisit)
+    ? recentlySavedVisit
+    : recentlySavedVisit ? [recentlySavedVisit] : [];
+  if (!recentlySavedVisits.length) {
     return items;
   }
 
-  if (!matchesVetVisitFilter(recentlySavedVisit, filter)) {
+  const matchingSavedVisits = recentlySavedVisits.filter((item) => matchesVetVisitFilter(item, filter));
+  if (!matchingSavedVisits.length) {
     return items;
   }
 
-  return [recentlySavedVisit, ...items];
+  const savedByVisitId = new Map(matchingSavedVisits.map((item) => [item.visitId, item]));
+  const merged = items.map((item) => savedByVisitId.get(item.visitId) ?? item);
+  const existingVisitIds = new Set(merged.map((item) => item.visitId));
+  for (const savedVisit of matchingSavedVisits) {
+    if (existingVisitIds.has(savedVisit.visitId)) {
+      continue;
+    }
+    const parentIndex = savedVisit.parentVisitId
+      ? merged.findIndex((item) => item.visitId === savedVisit.parentVisitId)
+      : -1;
+    if (parentIndex >= 0) {
+      merged.splice(parentIndex + 1, 0, savedVisit);
+    } else {
+      merged.unshift(savedVisit);
+    }
+    existingVisitIds.add(savedVisit.visitId);
+  }
+  return merged;
 }
 
 function matchesVetVisitFilter(item: VetVisitItem, filter: VetVisitFilter) {
@@ -501,7 +540,7 @@ function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialo
     visitId: createLocalVisitId(),
     status: 'PENDING',
     occurredAt: attendResult.nextDueAt ?? attendResult.occurredAt,
-    nextDueAt: attendResult.nextDueAt,
+    nextDueAt: null,
     notes: null,
     reason: attendResult.reason,
     veterinarianName: attendResult.veterinarianName,

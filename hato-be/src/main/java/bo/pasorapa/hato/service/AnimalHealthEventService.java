@@ -134,12 +134,14 @@ public class AnimalHealthEventService {
                 filter.animalUuid,
                 filter.normalizedVisitId(),
                 filter.normalizedMode(),
-                filter.normalizedStatus(),
+                null,
                 filter.occurredFrom == null ? null : filter.occurredFrom.toLocalDateTime(),
                 filter.occurredTo == null ? null : filter.occurredTo.toLocalDateTime(),
                 Integer.MAX_VALUE,
                 0);
-        List<VetVisitItemDto> groupedItems = groupVetVisits(animalHealthEventRepository.findFieldVetVisitsByOwner(ownerId, query).items());
+        List<VetVisitItemDto> groupedItems = groupVetVisits(animalHealthEventRepository.findFieldVetVisitsByOwner(ownerId, query).items()).stream()
+                .filter(item -> filter.normalizedStatus() == null || filter.normalizedStatus().equalsIgnoreCase(item.status()))
+                .toList();
         int fromIndex = Math.min(filter.offset(), groupedItems.size());
         int toIndex = Math.min(fromIndex + filter.size, groupedItems.size());
         return new VetVisitListResponse(groupedItems.subList(fromIndex, toIndex), filter.page, filter.size, groupedItems.size());
@@ -181,7 +183,7 @@ public class AnimalHealthEventService {
             Map<String, Object> visit = readVisit(metadata);
             String visitId = readText(visit.get("visitId"));
             String mode = readText(visit.get("mode"));
-            String key = "GLOBAL".equalsIgnoreCase(mode) && visitId != null ? "GLOBAL:" + visitId : "EVENT:" + event.getEventId();
+            String key = visitId != null ? "VISIT:" + visitId : "EVENT:" + event.getEventId();
             groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(event);
         }
         return groups.values().stream()
@@ -193,7 +195,7 @@ public class AnimalHealthEventService {
 
     private VetVisitItemDto toVetVisitItem(List<AnimalHealthEvent> group) {
         AnimalHealthEvent representative = group.stream()
-                .min(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
+                .max(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
                 .orElseThrow();
         Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(representative.getMetadataJson());
         Map<String, Object> visit = readVisit(metadata);

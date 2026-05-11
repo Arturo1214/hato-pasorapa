@@ -10,8 +10,8 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
-import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
 import { AnimalsService, type AnimalItem } from '../animals/data-access/animals.service';
 
@@ -23,6 +23,14 @@ export type VetVisitFollowUpChoice = 'schedule' | 'finalize';
 export interface VetVisitDialogData {
   action?: VetVisitDialogAction;
   mode?: VetVisitDialogMode;
+  animalUuid?: string | null;
+  visitId?: string | null;
+  status?: VetVisitDialogStatus;
+  occurredAt?: string | Date | null;
+  nextDueAt?: string | Date | null;
+  reason?: string | null;
+  veterinarianName?: string | null;
+  veterinarianLicense?: string | null;
   parentVisitId?: string | null;
   targetAnimalCount?: number | null;
 }
@@ -60,8 +68,8 @@ export interface VetVisitDialogResult {
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatRadioModule,
     MatSelectModule,
+    MatSlideToggleModule,
     FormErrorsComponent,
   ],
   providers: [provideNativeDateAdapter()],
@@ -151,52 +159,55 @@ export interface VetVisitDialogResult {
             <textarea matInput formControlName="attentionNotes" rows="3"></textarea>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Costo</mat-label>
-            <input matInput type="number" min="0" formControlName="cost" />
-            <span matTextSuffix>BOB</span>
-          </mat-form-field>
+          <mat-slide-toggle class="form-field--full" formControlName="hasTreatment">Tiene tratamiento</mat-slide-toggle>
 
-          <section class="form-section form-field--full">
-            <div class="form-section__header">
-              <h3>Plan de tratamiento</h3>
-              <button mat-stroked-button type="button" (click)="addTreatmentPlanStep()" [disabled]="treatmentPlanControls().length >= maxTreatmentPlanSteps">
-                Agregar paso
-              </button>
-            </div>
-            <div cdkDropList class="treatment-plan" (cdkDropListDropped)="dropTreatmentPlanStep($event)">
-              @for (step of treatmentPlanControls(); track $index; let index = $index) {
-                <div class="treatment-plan__row" cdkDrag>
-                  <button mat-icon-button type="button" cdkDragHandle aria-label="Reordenar paso">
-                    <mat-icon>drag_indicator</mat-icon>
-                  </button>
-                  <mat-form-field appearance="outline" class="treatment-plan__input">
-                    <mat-label>Paso {{ index + 1 }}</mat-label>
-                    <input matInput [formControl]="step" placeholder="Descripción del paso" />
-                  </mat-form-field>
-                  <button mat-icon-button type="button" aria-label="Eliminar paso" (click)="removeTreatmentPlanStep(index)" [disabled]="treatmentPlanControls().length === 1">
-                    <mat-icon>delete</mat-icon>
-                  </button>
-                </div>
+          @if (form.controls.hasTreatment.value) {
+            <section class="form-section form-field--full">
+              <div class="form-section__header">
+                <h3>Plan de tratamiento</h3>
+                <button mat-stroked-button type="button" (click)="addTreatmentPlanStep()" [disabled]="treatmentPlanControls().length >= maxTreatmentPlanSteps">
+                  Agregar paso
+                </button>
+              </div>
+              <div cdkDropList class="treatment-plan" (cdkDropListDropped)="dropTreatmentPlanStep($event)">
+                @for (step of treatmentPlanControls(); track $index; let index = $index) {
+                  <div class="treatment-plan__row" cdkDrag>
+                    <button mat-icon-button type="button" cdkDragHandle aria-label="Reordenar paso">
+                      <mat-icon>drag_indicator</mat-icon>
+                    </button>
+                    <mat-form-field appearance="outline" class="treatment-plan__input">
+                      <mat-label>Paso {{ index + 1 }}</mat-label>
+                      <input matInput [formControl]="step" placeholder="Descripción del paso" />
+                    </mat-form-field>
+                    <button mat-icon-button type="button" aria-label="Eliminar paso" (click)="removeTreatmentPlanStep(index)" [disabled]="treatmentPlanControls().length === 1">
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </div>
+                }
+              </div>
+            </section>
+          }
+
+          <section class="follow-up-grid form-field--full">
+            <mat-form-field appearance="outline">
+              <mat-label>Acción posterior</mat-label>
+              <mat-select formControlName="followUpChoice">
+                <mat-option value="schedule">Programar próximo control</mat-option>
+                <mat-option value="finalize">Finalizar tratamiento</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <div class="follow-up-grid__date">
+              @if (form.controls.followUpChoice.value === 'schedule') {
+                <mat-form-field appearance="outline">
+                  <mat-label>Fecha del próximo control</mat-label>
+                  <input matInput [matDatepicker]="attendNextDueAtPicker" formControlName="nextDueAt" />
+                  <mat-datepicker-toggle matIconSuffix [for]="attendNextDueAtPicker" />
+                  <mat-datepicker #attendNextDueAtPicker />
+                </mat-form-field>
               }
             </div>
           </section>
-
-          <section class="form-section form-field--full">
-            <mat-radio-group formControlName="followUpChoice" class="follow-up-choice">
-              <mat-radio-button value="schedule">Programar próximo control</mat-radio-button>
-              <mat-radio-button value="finalize">Finalizar tratamiento</mat-radio-button>
-            </mat-radio-group>
-          </section>
-
-          @if (form.controls.followUpChoice.value === 'schedule') {
-            <mat-form-field appearance="outline">
-              <mat-label>Fecha del próximo control</mat-label>
-              <input matInput [matDatepicker]="attendNextDueAtPicker" formControlName="nextDueAt" />
-              <mat-datepicker-toggle matIconSuffix [for]="attendNextDueAtPicker" />
-              <mat-datepicker #attendNextDueAtPicker />
-            </mat-form-field>
-          }
         }
 
         @if (showAnimalRequiredError()) {
@@ -229,8 +240,10 @@ export interface VetVisitDialogResult {
       .treatment-plan { display: grid; gap: .75rem; }
       .treatment-plan__row { align-items: start; display: grid; gap: .5rem; grid-template-columns: auto minmax(0, 1fr) auto; }
       .treatment-plan__input { width: 100%; }
-      .follow-up-choice { display: grid; gap: .75rem; }
+      .follow-up-grid { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+      .follow-up-grid__date mat-form-field { width: 100%; }
       @media (max-width: 720px) { .dialog-form { grid-template-columns: minmax(0, 1fr); } }
+      @media (max-width: 720px) { .follow-up-grid { grid-template-columns: minmax(0, 1fr); } }
     `,
   ],
 })
@@ -253,21 +266,22 @@ export class VetVisitFormDialogComponent {
   readonly form = this.formBuilder.group(
     {
       mode: [this.data.mode ?? 'SPECIFIC' as VetVisitDialogMode, [Validators.required]],
-      animalUuid: this.formBuilder.control<string | null>(null),
+      animalUuid: this.formBuilder.control<string | null>(this.data.animalUuid ?? null),
       animalSearch: [''],
-      visitId: [createUuid(), [Validators.required]],
-      status: [this.isAttendMode ? 'ATTENDED' as VetVisitDialogStatus : 'PENDING' as VetVisitDialogStatus, [Validators.required]],
-      occurredAt: [currentLocalDateInput(), [Validators.required]],
-      nextDueAt: this.formBuilder.control<Date | null>(null),
+      visitId: [this.data.visitId ?? createUuid(), [Validators.required]],
+      status: [this.data.status ?? (this.isAttendMode ? 'ATTENDED' as VetVisitDialogStatus : 'PENDING' as VetVisitDialogStatus), [Validators.required]],
+      occurredAt: [this.data.occurredAt ?? currentLocalDateInput(), [Validators.required]],
+      nextDueAt: this.formBuilder.control<Date | string | null>(this.data.nextDueAt ?? null),
       notes: [''],
       findings: ['', this.isAttendMode ? [Validators.required, Validators.minLength(5)] : []],
       attentionNotes: ['', this.isAttendMode ? [Validators.required] : []],
       cost: this.formBuilder.control<number | null>(null, [nonNegativeCostValidator]),
+      hasTreatment: [false],
       treatmentPlan: this.formBuilder.array<FormControl<string>>([this.createTreatmentPlanControl()]),
       followUpChoice: [this.isAttendMode ? 'schedule' as VetVisitFollowUpChoice : null],
-      reason: ['', [Validators.required]],
-      veterinarianName: ['', [Validators.required]],
-      veterinarianLicense: [''],
+      reason: [this.data.reason ?? '', [Validators.required]],
+      veterinarianName: [this.data.veterinarianName ?? '', [Validators.required]],
+      veterinarianLicense: [this.data.veterinarianLicense ?? ''],
       targetAnimalCount: [this.data.targetAnimalCount ?? null],
       parentVisitId: [this.data.parentVisitId ?? null],
     },
@@ -313,6 +327,13 @@ export class VetVisitFormDialogComponent {
     this.form.controls.followUpChoice.valueChanges.subscribe((choice) => {
       if (choice === 'finalize') {
         this.form.controls.nextDueAt.setValue(null);
+      }
+      this.form.updateValueAndValidity();
+    });
+
+    this.form.controls.hasTreatment.valueChanges.subscribe((hasTreatment) => {
+      if (!hasTreatment) {
+        this.treatmentPlanControls().forEach((control) => control.setValue(''));
       }
       this.form.updateValueAndValidity();
     });
@@ -373,7 +394,7 @@ export class VetVisitFormDialogComponent {
     const value = this.form.getRawValue();
     const attentionNotes = this.isAttendMode ? normalizeOptionalText(value.attentionNotes) : normalizeOptionalText(value.notes);
     const costAmount = normalizeCostAmount(value.cost);
-    const treatmentPlan = value.treatmentPlan.map((step) => step.trim()).filter(Boolean);
+    const treatmentPlan = value.hasTreatment ? value.treatmentPlan.map((step) => step.trim()).filter(Boolean) : [];
     this.dialogRef.close({
       mode: value.mode ?? 'SPECIFIC',
       animalUuid: value.mode === 'GLOBAL' ? null : value.animalUuid,
@@ -395,7 +416,7 @@ export class VetVisitFormDialogComponent {
   }
 
   private createTreatmentPlanControl(value = '') {
-    const validators = this.isAttendMode ? [Validators.required, Validators.maxLength(300)] : [];
+    const validators = this.isAttendMode ? [Validators.maxLength(300)] : [];
     return this.formBuilder.control(value, { nonNullable: true, validators });
   }
 }
@@ -436,7 +457,13 @@ const followUpDateValidator: ValidatorFn = (control: AbstractControl): Validatio
 
 const treatmentPlanLimitValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
   const treatmentPlan = control.get('treatmentPlan') as FormArray<FormControl<string>> | null;
-  return treatmentPlan && treatmentPlan.length <= 20 ? null : { treatmentPlanLimit: true };
+  if (!treatmentPlan || treatmentPlan.length > 20) {
+    return { treatmentPlanLimit: true };
+  }
+
+  const value = control.value as { hasTreatment?: boolean | null };
+  const hasTreatmentPlan = treatmentPlan.controls.some((step) => Boolean(step.value.trim()));
+  return value.hasTreatment && !hasTreatmentPlan ? { treatmentPlanRequired: true } : null;
 };
 
 function filterAnimalCandidates(candidates: AnimalItem[], search: string | null | undefined) {

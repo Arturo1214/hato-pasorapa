@@ -66,6 +66,56 @@ class AnimalHealthEventMapperTest {
 
         assertEquals("FIELD_VET_VISIT", request.healthEventType().name());
         assertEquals("VISIT-001", mapper.readVisitId(request.metadata()));
+        assertEquals("GLOBAL", ((Map<?, ?>) request.metadata().get("visit")).get("mode"));
+        assertEquals("PROGRAMADA", ((Map<?, ?>) request.metadata().get("visit")).get("status"));
+    }
+
+    @Test
+    void shouldRejectFieldVetVisitWithoutVisitMode() {
+        Map<String, Object> metadata = validFieldVetMetadata("VISIT-001", "STARTED", null);
+        Map<String, Object> visit = new java.util.LinkedHashMap<>((Map<String, Object>) metadata.get("visit"));
+        visit.remove("mode");
+        metadata = new java.util.LinkedHashMap<>(metadata);
+        metadata.put("visit", visit);
+
+        Map<String, Object> payload = Map.of(
+                "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                "healthEventType", "FIELD_VET_VISIT",
+                "occurredAt", "2026-04-27T10:00:00Z",
+                "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                "sourceChannel", "OFFLINE",
+                "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                "metadata", metadata);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> mapper.toRequest(payload, OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_VISIT_MODE_REQUIRED", exception.getMessage());
+    }
+
+    @Test
+    void shouldRejectFieldVetVisitInvalidLifecycleStatus() {
+        Map<String, Object> metadata = validFieldVetMetadata("VISIT-001", "STARTED", null);
+        Map<String, Object> visit = new java.util.LinkedHashMap<>((Map<String, Object>) metadata.get("visit"));
+        visit.put("status", "EN_PROCESO");
+        metadata = new java.util.LinkedHashMap<>(metadata);
+        metadata.put("visit", visit);
+
+        Map<String, Object> payload = Map.of(
+                "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                "healthEventType", "FIELD_VET_VISIT",
+                "occurredAt", "2026-04-27T10:00:00Z",
+                "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                "sourceChannel", "OFFLINE",
+                "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                "metadata", metadata);
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> mapper.toRequest(payload, OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_VISIT_STATUS_INVALID", exception.getMessage());
     }
 
     @Test
@@ -95,7 +145,7 @@ class AnimalHealthEventMapperTest {
                         "sourceChannel", "OFFLINE",
                         "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
                         "metadata", Map.of(
-                                "visit", Map.of("visitId", "VISIT-001"),
+                                "visit", validVisitBlock("VISIT-001"),
                                 "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)),
                                 "protocol", Map.of("status", "STARTED"))),
                 OffsetDateTime.parse("2026-04-27T10:05:00Z")));
@@ -114,7 +164,7 @@ class AnimalHealthEventMapperTest {
                         "sourceChannel", "OFFLINE",
                         "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
                         "metadata", Map.of(
-                                "visit", Map.of("visitId", "VISIT-001"),
+                                "visit", validVisitBlock("VISIT-001"),
                                 "checklist", List.of(Map.of("code", "FREE_TEXT", "ok", true)),
                                 "clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguir"),
                                 "protocol", Map.of("status", "STARTED"))),
@@ -182,7 +232,7 @@ class AnimalHealthEventMapperTest {
                         "sourceChannel", "OFFLINE",
                         "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
                         "metadata", Map.of(
-                                "visit", Map.of("visitId", "VISIT-001"),
+                                "visit", validVisitBlock("VISIT-001"),
                                 "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)),
                                 "clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguir"),
                                 "protocol", Map.of("status", "STARTED"),
@@ -216,9 +266,25 @@ class AnimalHealthEventMapperTest {
         }
 
         return Map.of(
-                "visit", visitId == null ? Map.of() : Map.of("visitId", visitId),
+                "visit", visitId == null ? Map.of() : Map.of(
+                        "visitId", visitId,
+                        "mode", "GLOBAL",
+                        "status", "PROGRAMADA",
+                        "veterinarian", Map.of("name", "Dra. Ana", "license", "MAT-1"),
+                        "targetAnimalCount", 10,
+                        "atencionNotas", "Control realizado"),
                 "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true), Map.of("code", "APPETITE", "ok", false, "note", "Baja")),
                 "clinicalNote", Map.of("reason", "Control", "findings", "Leve fiebre", "plan", "Seguir protocolo"),
                 "protocol", protocol);
+    }
+
+    private Map<String, Object> validVisitBlock(String visitId) {
+        return Map.of(
+                "visitId", visitId,
+                "mode", "GLOBAL",
+                "status", "PROGRAMADA",
+                "veterinarian", Map.of("name", "Dra. Ana", "license", "MAT-1"),
+                "targetAnimalCount", 10,
+                "atencionNotas", "Control realizado");
     }
 }

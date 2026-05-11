@@ -36,12 +36,12 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Backend Service — Scoping + Fan-out Grouping + Lifecycle
 
-- [ ] 2.1 RED: Write failing test in `AnimalHealthEventServiceTest.java` for `getGlobalVisitsByOwner(ownerId, filter)` returning grouped items with `targetAnimalCount`
-- [ ] 2.2 GREEN: Implement `getGlobalVisitsByOwner` in `AnimalHealthEventService.java`: query repo with scoping by ganadero owner, project metadata fields (`visit.mode`, `visit.status`, `visit.veterinarian.name`), group by `visitId` for globals
-- [ ] 2.3 Add `visit.mode` / `visit.status` / `visit.veterinarian` / `visit.targetAnimalCount` to `AnimalHealthEventMapper.java` validation; reject if `modo` absent on `FIELD_VET_VISIT`
-- [ ] 2.4 RED: Write failing test for `AnimalHealthEventMapper` rejecting `FIELD_VET_VISIT` without `visit.modo`
-- [ ] 2.5 GREEN: Implement metadata block validation in `AnimalHealthEventMapper`; add `visit` block parsing with `JsonNode`
-- [ ] 2.6 Add BE unit test for lifecycle continuity: `PROGRAMADA→ATENDIDA`, `ATENDIDA→REPROGRAMADA→ATENDIDA`, `ATENDIDA→FINALIZADA`
+- [x] 2.1 RED: Write failing test in `AnimalHealthEventServiceTest.java` for `getGlobalVisitsByOwner(ownerId, filter)` returning grouped items with `targetAnimalCount`
+- [x] 2.2 GREEN: Implement `getGlobalVisitsByOwner` in `AnimalHealthEventService.java`: query repo with scoping by ganadero owner, project metadata fields (`visit.mode`, `visit.status`, `visit.veterinarian.name`), group by `visitId` for globals
+- [x] 2.3 Add `visit.mode` / `visit.status` / `visit.veterinarian` / `visit.targetAnimalCount` to `AnimalHealthEventMapper.java` validation; reject if `modo` absent on `FIELD_VET_VISIT`
+- [x] 2.4 RED: Write failing test for `AnimalHealthEventMapper` rejecting `FIELD_VET_VISIT` without `visit.modo`
+- [x] 2.5 GREEN: Implement metadata block validation in `AnimalHealthEventMapper`; add `visit` block parsing with `JsonNode`
+- [x] 2.6 Add BE unit test for lifecycle continuity: `PROGRAMADA→ATENDIDA`, `ATENDIDA→REPROGRAMADA→ATENDIDA`, `ATENDIDA→FINALIZADA`
 
 ## Phase 3: Frontend — Service + Form Dialog + Mapper Extension
 

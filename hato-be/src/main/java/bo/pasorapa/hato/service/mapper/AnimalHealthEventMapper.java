@@ -22,6 +22,10 @@ public class AnimalHealthEventMapper {
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
     private static final Set<String> FIELD_VET_PROTOCOL_STATUSES = Set.of("STARTED", "FOLLOW_UP_REQUIRED", "CLOSED");
+    private static final Set<String> FIELD_VET_VISIT_MODES = Set.of("GLOBAL", "SPECIFIC", "ESPECIFICA");
+    private static final Set<String> FIELD_VET_VISIT_STATUSES = Set.of(
+            "PROGRAMADA", "ATENDIDA", "REPROGRAMADA", "FINALIZADA", "CANCELADA",
+            "PENDING", "ATTENDED", "RESCHEDULED", "FINALIZED", "CANCELED");
     private static final Set<String> FIELD_VET_CHECKLIST_CODES =
             Set.of("GENERAL_APPEARANCE", "TEMPERATURE", "HYDRATION", "APPETITE", "LOCOMOTION");
 
@@ -182,7 +186,16 @@ public class AnimalHealthEventMapper {
         return protocol == null ? null : readOptionalText(protocol.get("status"));
     }
 
+    public String readFieldVetVisitStatus(Map<String, Object> metadata) {
+        Map<String, Object> visit = readOptionalMap(metadata.get("visit"));
+        return visit == null ? null : readOptionalText(visit.get("status"));
+    }
+
     public OffsetDateTime readNextDueAt(Map<String, Object> metadata) {
+        Map<String, Object> visit = readOptionalMap(metadata.get("visit"));
+        if (visit != null && visit.get("nextControlAt") != null) {
+            return requireOffsetDateTime(visit.get("nextControlAt"), "ANIMAL_HEALTH_EVENT_VET_VISIT_NEXT_CONTROL_AT_INVALID");
+        }
         Map<String, Object> protocol = readOptionalMap(metadata.get("protocol"));
         if (protocol != null && protocol.get("nextDueAt") != null) {
             return requireOffsetDateTime(protocol.get("nextDueAt"), "ANIMAL_HEALTH_EVENT_VET_PROTOCOL_NEXT_DUE_AT_INVALID");
@@ -247,6 +260,25 @@ public class AnimalHealthEventMapper {
     private void validateFieldVetVisit(Map<String, Object> metadata) {
         Map<String, Object> visit = requireMap(metadata.get("visit"), "ANIMAL_HEALTH_EVENT_VET_VISIT_REQUIRED");
         requireText(visit.get("visitId"), "ANIMAL_HEALTH_EVENT_VET_VISIT_ID_REQUIRED");
+        String mode = requireText(visit.get("mode"), "ANIMAL_HEALTH_EVENT_VET_VISIT_MODE_REQUIRED").toUpperCase();
+        if (!FIELD_VET_VISIT_MODES.contains(mode)) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_VISIT_MODE_INVALID");
+        }
+        String visitStatus = requireText(visit.get("status"), "ANIMAL_HEALTH_EVENT_VET_VISIT_STATUS_REQUIRED").toUpperCase();
+        if (!FIELD_VET_VISIT_STATUSES.contains(visitStatus)) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_VISIT_STATUS_INVALID");
+        }
+        Map<String, Object> veterinarian = requireMap(visit.get("veterinarian"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_REQUIRED");
+        requireText(veterinarian.get("name"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_NAME_REQUIRED");
+        readOptionalText(veterinarian.get("license"));
+        readOptionalText(visit.get("atencionNotas"));
+        readOptionalText(visit.get("parentVisitId"));
+        if (visit.get("targetAnimalCount") != null && !(visit.get("targetAnimalCount") instanceof Number)) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_VISIT_TARGET_ANIMAL_COUNT_INVALID");
+        }
+        if (visit.get("nextControlAt") != null) {
+            requireOffsetDateTime(visit.get("nextControlAt"), "ANIMAL_HEALTH_EVENT_VET_VISIT_NEXT_CONTROL_AT_INVALID");
+        }
 
         List<Map<String, Object>> checklist = requireListOfMaps(metadata.get("checklist"), "ANIMAL_HEALTH_EVENT_VET_CHECKLIST_REQUIRED");
         if (checklist.isEmpty()) {

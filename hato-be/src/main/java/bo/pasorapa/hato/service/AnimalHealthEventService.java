@@ -122,6 +122,13 @@ public class AnimalHealthEventService {
 
     public VetVisitListResponse listVetVisits(VetVisitFilterDto filter, UUID currentUserId, boolean ganaderoScoped) {
         UUID ownerId = ganaderoScoped ? resolveAuthenticatedGanaderoId(currentUserId) : null;
+        if (ownerId != null) {
+            return getGlobalVisitsByOwner(ownerId, filter);
+        }
+        return getGlobalVisitsByOwner(null, filter);
+    }
+
+    public VetVisitListResponse getGlobalVisitsByOwner(UUID ownerId, VetVisitFilterDto filter) {
         VetVisitQuery query = new VetVisitQuery(
                 filter.animalUuid,
                 filter.normalizedVisitId(),
@@ -324,6 +331,12 @@ public class AnimalHealthEventService {
         }
 
         String visitId = animalHealthEventMapper.readVisitId(metadata);
+        String visitStatus = normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(metadata));
+        if (visitStatus != null) {
+            validateFieldVetVisitLifecycle(animalUuid, visitId, visitStatus);
+            return;
+        }
+
         String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
         List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByVisit(animalUuid, visitId, null, null);
         boolean hasStarted = timeline.stream().anyMatch(event -> hasFieldVetStatus(event, "STARTED") || hasFieldVetStatus(event, "FOLLOW_UP_REQUIRED"));
@@ -375,6 +388,62 @@ public class AnimalHealthEventService {
         return expectedStatus.equals(animalHealthEventMapper.readFieldVetProtocolStatus(metadata));
     }
 
+    private void validateFieldVetVisitLifecycle(UUID animalUuid, String visitId, String nextStatus) {
+        List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByVisit(animalUuid, visitId, null, null);
+        String currentStatus = timeline.stream()
+                .map(event -> normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(
+                        animalHealthEventMapper.readMetadataJson(event.getMetadataJson()))))
+                .filter(status -> status != null)
+                .reduce((ignored, latest) -> latest)
+                .orElse(null);
+
+        if (currentStatus == null) {
+            return;
+        }
+        if (isTerminalVisitStatus(currentStatus)) {
+            throw new BusinessException(
+                    "ANIMAL_HEALTH_EVENT_VET_VISIT_CLOSED",
+                    "Esa visita veterinaria ya fue cerrada.",
+                    Response.Status.BAD_REQUEST);
+        }
+        if (!isAllowedVisitTransition(currentStatus, nextStatus)) {
+            throw new BusinessException(
+                    "ANIMAL_HEALTH_EVENT_VET_VISIT_INVALID_TRANSITION",
+                    "La transición de estado de la visita veterinaria no es válida.",
+                    Response.Status.BAD_REQUEST);
+        }
+    }
+
+    private boolean isAllowedVisitTransition(String currentStatus, String nextStatus) {
+        return switch (currentStatus) {
+            case "PROGRAMADA" -> "ATENDIDA".equals(nextStatus)
+                    || "REPROGRAMADA".equals(nextStatus)
+                    || "FINALIZADA".equals(nextStatus)
+                    || "CANCELADA".equals(nextStatus);
+            case "ATENDIDA" -> "REPROGRAMADA".equals(nextStatus) || "FINALIZADA".equals(nextStatus) || "CANCELADA".equals(nextStatus);
+            case "REPROGRAMADA" -> "ATENDIDA".equals(nextStatus) || "FINALIZADA".equals(nextStatus) || "CANCELADA".equals(nextStatus);
+            default -> false;
+        };
+    }
+
+    private boolean isTerminalVisitStatus(String status) {
+        return "FINALIZADA".equals(status) || "CANCELADA".equals(status);
+    }
+
+    private String normalizeVisitStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return switch (status.trim().toUpperCase()) {
+            case "PENDING" -> "PROGRAMADA";
+            case "ATTENDED" -> "ATENDIDA";
+            case "RESCHEDULED" -> "REPROGRAMADA";
+            case "FINALIZED" -> "FINALIZADA";
+            case "CANCELED" -> "CANCELADA";
+            default -> status.trim().toUpperCase();
+        };
+    }
+
     private Map<String, FollowUpProjection> buildFollowUpProjections(List<AnimalHealthEvent> timeline) {
         Map<String, FollowUpProjection> projections = new LinkedHashMap<>();
         for (AnimalHealthEvent event : timeline) {
@@ -413,6 +482,12 @@ public class AnimalHealthEventService {
 
     private FollowUpProjection mapFollowUpProjection(AnimalHealthEventType type, Map<String, Object> metadata) {
         if (type == AnimalHealthEventType.FIELD_VET_VISIT) {
+            String visitStatus = normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(metadata));
+            if (visitStatus != null) {
+                return new FollowUpProjection(
+                        isTerminalVisitStatus(visitStatus) ? "CLOSED" : "ACTIVE",
+                        animalHealthEventMapper.readNextDueAt(metadata));
+            }
             String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
             return new FollowUpProjection(
                     "CLOSED".equals(protocolStatus) ? "CLOSED" : "ACTIVE",

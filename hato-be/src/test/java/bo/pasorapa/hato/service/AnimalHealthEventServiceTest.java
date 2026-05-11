@@ -12,7 +12,9 @@ import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
+import bo.pasorapa.hato.service.dto.vetvisit.VetVisitFilterDto;
 import bo.pasorapa.hato.service.error.BusinessException;
+import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -45,6 +47,9 @@ class AnimalHealthEventServiceTest {
 
     @Inject
     GanaderoRepository ganaderoRepository;
+
+    @Inject
+    AnimalHealthEventMapper animalHealthEventMapper;
 
     @Inject
     IntegrationDatabaseCleaner integrationDatabaseCleaner;
@@ -280,6 +285,69 @@ class AnimalHealthEventServiceTest {
         assertEquals("ANIMAL_HEALTH_EVENT_PERFORMED_BY_MISMATCH", exception.code());
     }
 
+    @Test
+    void shouldGroupGlobalVisitsByOwnerWithTargetAnimalCountAndScopedMetadata() {
+        UUID firstAnimal = UUID.fromString("7ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        UUID secondAnimal = UUID.fromString("8ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(firstAnimal);
+        seedAnimal(secondAnimal);
+        seedFieldVetEvent(firstAnimal, "VISIT-GLOBAL-700", "GLOBAL", "PROGRAMADA", "Dra. Camila", 2, "2026-05-10T08:00:00");
+        seedFieldVetEvent(secondAnimal, "VISIT-GLOBAL-700", "GLOBAL", "PROGRAMADA", "Dra. Camila", 2, "2026-05-10T08:00:00");
+        seedFieldVetEvent(firstAnimal, "VISIT-SPECIFIC-701", "SPECIFIC", "PROGRAMADA", "Dr. Luis", 1, "2026-05-11T08:00:00");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.mode = "GLOBAL";
+        filter.status = "PROGRAMADA";
+        filter.page = 0;
+        filter.size = 20;
+
+        var response = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+
+        assertEquals(1, response.total());
+        assertEquals("VISIT-GLOBAL-700", response.items().get(0).visitId());
+        assertEquals("GLOBAL", response.items().get(0).mode());
+        assertEquals("PROGRAMADA", response.items().get(0).status());
+        assertEquals("Dra. Camila", response.items().get(0).veterinarian().name());
+        assertEquals(2, response.items().get(0).targetAnimalCount());
+        assertEquals(null, response.items().get(0).animalUuid());
+    }
+
+    @Test
+    void shouldAcceptFieldVetVisitLifecycleContinuityAndRejectReopeningClosedChain() {
+        UUID animalUuid = UUID.fromString("9ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+
+        animalHealthEventService.create(request(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("11111111-1111-4111-8111-111111111111"), "Programada",
+                fieldVetMetadata("VISIT-LIFE-001", "PROGRAMADA", null), "2026-05-10T08:00:00Z"), USER_ID);
+        animalHealthEventService.create(request(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("22222222-2222-4222-8222-222222222222"), "Atendida con notas",
+                fieldVetMetadata("VISIT-LIFE-001", "ATENDIDA", null), "2026-05-10T09:00:00Z"), USER_ID);
+        animalHealthEventService.create(request(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("33333333-3333-4333-8333-333333333333"), "Reprogramada",
+                fieldVetMetadata("VISIT-LIFE-001", "REPROGRAMADA", "2026-05-12T08:00:00Z"), "2026-05-10T10:00:00Z"), USER_ID);
+        animalHealthEventService.create(request(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("44444444-4444-4444-8444-444444444444"), "Atendida seguimiento",
+                fieldVetMetadata("VISIT-LIFE-001", "ATENDIDA", null), "2026-05-12T09:00:00Z"), USER_ID);
+        animalHealthEventService.create(request(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("55555555-5555-4555-8555-555555555555"), "Finalizada",
+                fieldVetMetadata("VISIT-LIFE-001", "FINALIZADA", null), "2026-05-12T10:00:00Z"), USER_ID);
+
+        var timeline = animalHealthEventService.list(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT, null, null, "VISIT-LIFE-001");
+        assertEquals(5, timeline.size());
+        assertEquals(List.of("CLOSED", "CLOSED", "CLOSED", "CLOSED", "CLOSED"), timeline.stream().map(item -> item.followUpStatus()).toList());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalHealthEventService.create(request(
+                animalUuid,
+                AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("66666666-6666-4666-8666-666666666666"),
+                "Reapertura inválida",
+                fieldVetMetadata("VISIT-LIFE-001", "ATENDIDA", null),
+                "2026-05-12T11:00:00Z"), USER_ID));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_VISIT_CLOSED", exception.code());
+    }
+
     private AnimalHealthEventRequest request(
             UUID animalUuid,
             AnimalHealthEventType type,
@@ -305,16 +373,75 @@ class AnimalHealthEventServiceTest {
 
     private Map<String, Object> fieldVetMetadata(String visitId, String status, String nextDueAt) {
         LinkedHashMap<String, Object> protocol = new LinkedHashMap<>();
-        protocol.put("status", status);
+        protocol.put("status", toProtocolStatus(status));
         if (nextDueAt != null) {
             protocol.put("nextDueAt", nextDueAt);
         }
 
         return Map.of(
-                "visit", Map.of("visitId", visitId),
+                "visit", Map.of(
+                        "visitId", visitId,
+                        "mode", "SPECIFIC",
+                        "status", toVisitStatus(status),
+                        "veterinarian", Map.of("name", "Dra. Salud"),
+                        "atencionNotas", "Notas clínicas"),
                 "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true), Map.of("code", "APPETITE", "ok", false, "note", "Disminuido")),
                 "clinicalNote", Map.of("reason", "Control", "findings", "Leve fiebre", "plan", "Seguir tratamiento"),
                 "protocol", protocol);
+    }
+
+    private String toVisitStatus(String status) {
+        return switch (status) {
+            case "STARTED" -> "PENDING";
+            case "FOLLOW_UP_REQUIRED" -> "RESCHEDULED";
+            case "CLOSED" -> "FINALIZED";
+            default -> status;
+        };
+    }
+
+    private String toProtocolStatus(String status) {
+        return switch (status) {
+            case "PROGRAMADA", "ATENDIDA" -> "STARTED";
+            case "REPROGRAMADA" -> "FOLLOW_UP_REQUIRED";
+            case "FINALIZADA", "CANCELADA" -> "CLOSED";
+            default -> status;
+        };
+    }
+
+    private void seedFieldVetEvent(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            String veterinarianName,
+            int targetAnimalCount,
+            String occurredAt) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
+            event.setEventId(UUID.randomUUID());
+            event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
+            event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);
+            event.setOccurredAt(LocalDateTime.parse(occurredAt));
+            event.setClientCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
+            event.setNotes("Visita veterinaria");
+            event.setPerformedByUserId(USER_ID);
+            event.setSourceChannel("OFFLINE");
+            event.setOperationId(UUID.randomUUID());
+            event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(Map.of(
+                    "visit", Map.of(
+                            "visitId", visitId,
+                            "mode", mode,
+                            "status", status,
+                            "veterinarian", Map.of("name", veterinarianName),
+                            "targetAnimalCount", targetAnimalCount,
+                            "atencionNotas", "Atención " + visitId),
+                    "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)),
+                    "clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguimiento"),
+                    "protocol", Map.of("status", "STARTED"))));
+            event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
+            event.setUpdatedAt(event.getCreatedAt());
+            animalHealthEventRepository.persist(event);
+        });
     }
 
     private void seedAnimal(UUID animalUuid) {

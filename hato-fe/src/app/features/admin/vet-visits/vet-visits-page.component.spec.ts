@@ -18,6 +18,9 @@ describe('VetVisitsPageComponent', () => {
       animalUuid: null,
       targetAnimalCount: 12,
       atencionNotas: 'Campaña anual',
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
     },
     {
       visitId: 'VISIT-SPECIFIC',
@@ -29,6 +32,9 @@ describe('VetVisitsPageComponent', () => {
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: null,
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
     },
   ];
 

@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
-import { VetVisitsService } from './vet-visits.service';
+import { VetVisitsService, type VetVisitItem } from './vet-visits.service';
 
 describe('VetVisitsService', () => {
   let service: VetVisitsService;
@@ -71,5 +71,83 @@ describe('VetVisitsService', () => {
     request.flush({ items: [], page: 2, size: 5, total: 0 });
 
     expect(count).toBe(0);
+  });
+
+  it('should parse cost, currency, and treatment plan from the backend list DTO', () => {
+    let received: VetVisitItem[] | undefined;
+
+    service.listVetVisits({ visitId: 'visit-attended-1' }).subscribe((items) => {
+      received = items;
+    });
+
+    const request = httpMock.expectOne('/api/vet-visits?visitId=visit-attended-1&page=0&size=20');
+    request.flush({
+      items: [
+        {
+          visitId: 'visit-attended-1',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dr. Soliz', license: null },
+          occurredAt: '2026-05-10T10:00:00Z',
+          nextControlAt: null,
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: 'Estable tras atención',
+          costo: 150,
+          costCurrency: 'BOB',
+          treatmentPlan: ['Antibiótico por 3 días', 'Control en 7 días'],
+        },
+      ],
+      page: 0,
+      size: 20,
+      total: 1,
+    });
+
+    expect(received?.[0]).toEqual({
+      visitId: 'visit-attended-1',
+      mode: 'SPECIFIC',
+      status: 'ATTENDED',
+      veterinarian: { name: 'Dr. Soliz', license: null },
+      occurredAt: '2026-05-10T10:00:00Z',
+      nextControlAt: null,
+      animalUuid: 'animal-1',
+      targetAnimalCount: null,
+      atencionNotas: 'Estable tras atención',
+      costo: 150,
+      costCurrency: 'BOB',
+      treatmentPlan: ['Antibiótico por 3 días', 'Control en 7 días'],
+    });
+  });
+
+  it('should default missing optional backend list fields to null', () => {
+    let received: VetVisitItem[] | undefined;
+
+    service.listVetVisits({ visitId: 'visit-legacy-1' }).subscribe((items) => {
+      received = items;
+    });
+
+    const request = httpMock.expectOne('/api/vet-visits?visitId=visit-legacy-1&page=0&size=20');
+    request.flush({
+      items: [
+        {
+          visitId: 'visit-legacy-1',
+          mode: 'SPECIFIC',
+          status: 'PENDING',
+          veterinarian: null,
+          occurredAt: '2026-05-10T10:00:00Z',
+          nextControlAt: null,
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: null,
+        },
+      ],
+      page: 0,
+      size: 20,
+      total: 1,
+    });
+
+    expect(received?.[0].costo).toBeNull();
+    expect(received?.[0].costCurrency).toBeNull();
+    expect(received?.[0].treatmentPlan).toBeNull();
   });
 });

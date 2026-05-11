@@ -529,6 +529,7 @@ export interface FieldVetVisitBlock {
   };
   targetAnimalCount?: number;
   parentVisitId?: string;
+  cancelReason?: string;
 }
 
 export interface FieldVetChecklistItem extends Record<string, unknown> {
@@ -540,7 +541,7 @@ export interface FieldVetChecklistItem extends Record<string, unknown> {
 export interface FieldVetClinicalNote extends Record<string, unknown> {
   reason: string;
   findings?: string;
-  plan?: string;
+  plan?: string | string[];
 }
 
 export interface FieldVetProtocol extends Record<string, unknown> {
@@ -553,6 +554,8 @@ export interface FieldVetVisitMetadata extends Record<string, unknown> {
   checklist: FieldVetChecklistItem[];
   clinicalNote: FieldVetClinicalNote;
   protocol: FieldVetProtocol;
+  cost?: { amount: number; currency: 'BOB' };
+  treatmentPlan?: string[];
 }
 
 export type AnimalHealthEventOfflineMetadata =

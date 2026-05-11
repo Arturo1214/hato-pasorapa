@@ -66,25 +66,25 @@ Chain strategy: feature-branch-chain
 
 ### 2.1 Frontend — offline-types: extend typed metadata
 
-- [ ] 2.1.1 Add `cost?: { amount: number; currency: 'BOB' }` to `FieldVetVisitMetadata`
-- [ ] 2.1.2 Add `treatmentPlan?: string[]` to `FieldVetVisitMetadata`
-- [ ] 2.1.3 Update `FieldVetClinicalNote` to add `plan?: string | string[]` (accepts both legacy string and new array)
-- [ ] 2.1.4 Add `cancelReason?: string` to `FieldVetVisitBlock`
+- [x] 2.1.1 Add `cost?: { amount: number; currency: 'BOB' }` to `FieldVetVisitMetadata`
+- [x] 2.1.2 Add `treatmentPlan?: string[]` to `FieldVetVisitMetadata`
+- [x] 2.1.3 Update `FieldVetClinicalNote` to add `plan?: string | string[]` (accepts both legacy string and new array)
+- [x] 2.1.4 Add `cancelReason?: string` to `FieldVetVisitBlock`
 
 ### 2.2 Frontend — VetVisitsService: add new DTO fields
 
-- [ ] 2.2.1 Update `VetVisitListItem` interface to include `costo: number | null`, `costCurrency: string | null`, `treatmentPlan: string[] | null`
-- [ ] 2.2.2 Update `createVetVisitEvent()` / `updateVetVisitEvent()` to accept `cost`, `treatmentPlan`, `cancelReason` in metadata payload
-- [ ] 2.2.3 Ensure API response mapping parses `costo`, `costCurrency`, `treatmentPlan` from backend DTO
+- [x] 2.2.1 Update `VetVisitListItem` interface to include `costo: number | null`, `costCurrency: string | null`, `treatmentPlan: string[] | null`
+- [x] 2.2.2 Update `createVetVisitEvent()` / `updateVetVisitEvent()` to accept `cost`, `treatmentPlan`, `cancelReason` in metadata payload
+- [x] 2.2.3 Ensure API response mapping parses `costo`, `costCurrency`, `treatmentPlan` from backend DTO
 
 ### 2.3 Frontend — VetVisitFormMapper: map clinical note fields
 
-- [ ] 2.3.1 **TDD RED**: Add unit test — `toRequestPayload()` with `action='cancel'` must produce `metadata.visit.cancelReason`; missing reason must cause validation error
-- [ ] 2.3.2 **TDD RED**: Add unit test — `toRequestPayload()` with `action='attend'` must produce `metadata.clinicalNote.findings`, `metadata.atencionNotas`, `metadata.cost`, `metadata.treatmentPlan` as string array
-- [ ] 2.3.3 **GREEN**: In `toRequestPayload()`, handle `action: 'cancel'` — set `visit.status = 'CANCELED'` and `visit.cancelReason` from form
-- [ ] 2.3.4 **GREEN**: In `toRequestPayload()`, handle `action: 'attend'` — set `visit.status = 'ATTENDED'`, `clinicalNote.findings`, `atencionNotas`, `cost`, `treatmentPlan`; derive `protocol.status` based on follow-up choice
-- [ ] 2.3.5 **GREEN**: In `toRequestPayload()`, handle legacy `plan: string` (normalize to `plan: [string]`)
-- [ ] 2.3.6 Add helper `normalizePlan(plan: string | string[] | undefined): string[]` for backward compat
+- [x] 2.3.1 **TDD RED**: Add unit test — `toRequestPayload()` with `action='cancel'` must produce `metadata.visit.cancelReason`; missing reason must cause validation error
+- [x] 2.3.2 **TDD RED**: Add unit test — `toRequestPayload()` with `action='attend'` must produce `metadata.clinicalNote.findings`, `metadata.atencionNotas`, `metadata.cost`, `metadata.treatmentPlan` as string array
+- [x] 2.3.3 **GREEN**: In `toRequestPayload()`, handle `action: 'cancel'` — set `visit.status = 'CANCELED'` and `visit.cancelReason` from form
+- [x] 2.3.4 **GREEN**: In `toRequestPayload()`, handle `action: 'attend'` — set `visit.status = 'ATTENDED'`, `clinicalNote.findings`, `atencionNotas`, `cost`, `treatmentPlan`; derive `protocol.status` based on follow-up choice
+- [x] 2.3.5 **GREEN**: In `toRequestPayload()`, handle legacy `plan: string` (normalize to `plan: [string]`)
+- [x] 2.3.6 Add helper `normalizePlan(plan: string | string[] | undefined): string[]` for backward compat
 
 ---
 

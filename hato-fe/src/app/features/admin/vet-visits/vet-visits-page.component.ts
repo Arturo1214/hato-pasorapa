@@ -220,6 +220,9 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
     animalUuid: result.animalUuid,
     targetAnimalCount: result.targetAnimalCount,
     atencionNotas: result.notes,
+    costo: null,
+    costCurrency: null,
+    treatmentPlan: null,
   };
 }
 

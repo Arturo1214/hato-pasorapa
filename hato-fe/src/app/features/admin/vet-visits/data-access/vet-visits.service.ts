@@ -34,10 +34,13 @@ export interface VetVisitItem {
   animalUuid: string | null;
   targetAnimalCount: number | null;
   atencionNotas: string | null;
+  costo: number | null;
+  costCurrency: string | null;
+  treatmentPlan: string[] | null;
 }
 
 interface VetVisitListResponse {
-  items: VetVisitItem[];
+  items: Array<Record<string, unknown>>;
   page: number;
   size: number;
   total: number;
@@ -56,13 +59,73 @@ export class VetVisitsService {
         headers: this.buildHeaders(),
         params: buildVetVisitParams(normalized),
       })
-      .pipe(map((response) => response.items ?? []));
+      .pipe(map((response) => (response.items ?? []).map(mapVetVisitItem)));
   }
 
   private buildHeaders() {
     const token = this.authService.getAccessToken();
     return token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : new HttpHeaders();
   }
+}
+
+function mapVetVisitItem(item: Record<string, unknown>): VetVisitItem {
+  return {
+    visitId: String(item['visitId']),
+    mode: item['mode'] === 'GLOBAL' ? 'GLOBAL' : 'SPECIFIC',
+    status: normalizeStatus(item['status']),
+    veterinarian: normalizeVeterinarian(item['veterinarian']),
+    occurredAt: String(item['occurredAt']),
+    nextControlAt: normalizeNullableString(item['nextControlAt']),
+    animalUuid: normalizeNullableString(item['animalUuid']),
+    targetAnimalCount: typeof item['targetAnimalCount'] === 'number' ? item['targetAnimalCount'] : null,
+    atencionNotas: normalizeNullableString(item['atencionNotas']),
+    costo: typeof item['costo'] === 'number' ? item['costo'] : null,
+    costCurrency: normalizeNullableString(item['costCurrency']),
+    treatmentPlan: normalizeTreatmentPlan(item['treatmentPlan']),
+  };
+}
+
+function normalizeStatus(value: unknown): Exclude<VetVisitStatus, ''> {
+  if (
+    value === 'PENDING' ||
+    value === 'ATTENDED' ||
+    value === 'RESCHEDULED' ||
+    value === 'FINALIZED' ||
+    value === 'CANCELED'
+  ) {
+    return value;
+  }
+  return 'PENDING';
+}
+
+function normalizeVeterinarian(value: unknown): VetVisitVeterinarian | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const name = normalizeNullableString(record['name']);
+  if (!name) {
+    return null;
+  }
+
+  return {
+    name,
+    license: normalizeNullableString(record['license']),
+  };
+}
+
+function normalizeTreatmentPlan(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const steps = value.filter((step): step is string => typeof step === 'string');
+  return steps.length ? steps : null;
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
 }
 
 function buildVetVisitParams(filter: VetVisitFilter) {

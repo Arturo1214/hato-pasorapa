@@ -25,59 +25,67 @@ The system MUST persist each health event as append-only with required fields: `
 
 ### Requirement: Metadata tipada para visita veterinaria de campo
 
-The system MUST accept `FIELD_VET_VISIT` events with typed metadata blocks for `visit`, `checklist`, `clinicalNote`, and `protocol`; every block SHALL satisfy schema validation.
+The system MUST accept `FIELD_VET_VISIT` events with typed metadata blocks for `visit` (containing visitId, modo, veterinarianId, atencionNotas, estado, parentVisitId, nextControlAt), `checklist`, `clinicalNote` (reason, findings, plan), and `protocol`; every block SHALL satisfy schema validation.
 
-#### Scenario: Evento de visita con metadata completa
+#### Scenario: Evento FIELD_VET_VISIT con metadata extendida
 
-- GIVEN un payload `FIELD_VET_VISIT` válido con todos los bloques tipados
-- WHEN se valida el evento
-- THEN el sistema acepta y persiste el registro en el ledger
+- GIVEN a payload `FIELD_VET_VISIT` with all visit blocks including modo, veterinarianId, atencionNotas, estado
+- WHEN the event is validated
+- THEN the system accepts and persists the record in the ledger
 
-#### Scenario: Bloque tipado ausente
+#### Scenario: Campo modo ausente
 
-- GIVEN un `FIELD_VET_VISIT` sin bloque `clinicalNote`
-- WHEN se valida el evento
-- THEN el sistema MUST reject la operación por contrato incompleto
+- GIVEN a `FIELD_VET_VISIT` without the `modo` field in visit block
+- WHEN the event is validated
+- THEN the system MUST reject the operation for incomplete contract
 
 ### Requirement: Tipos V1 y exclusiones explícitas
 
-The system SHALL accept only `VACCINATION`, `DEWORMING`, `DISEASE_REPORTED`, `TREATMENT_STARTED`, `TREATMENT_FOLLOW_UP`, `TREATMENT_CLOSED`, `FIELD_VET_VISIT` for this change.
-The system MUST NOT store reproduction events, image/attachment payloads, advanced clinical analytics, billing/costing, or complex prescription-rule payloads in this ledger.
+The system SHALL accept `FIELD_VET_VISIT` with modo GLOBAL (animalUuid=NULL) or ESPECIFICA (animalUuid required). The system MUST NOT store reproduction events, image/attachment payloads, or billing/costing payloads in this ledger.
 
-#### Scenario: Evento permitido en catálogo V1
+#### Scenario: Evento GLOBAL sin animal
 
-- GIVEN un payload `DISEASE_REPORTED` válido
-- WHEN se procesa el alta
-- THEN el sistema lo registra en el ledger sanitario
+- GIVEN a `FIELD_VET_VISIT` payload with modo=GLOBAL and animalUuid=NULL
+- WHEN the event is processed
+- THEN the system accepts and persists the global visit
+- AND the visit is queryable via global listing but NOT via per-animalUuid filter
 
 #### Scenario: Evento fuera de alcance
 
-- GIVEN un payload de reproducción o con adjunto clínico
-- WHEN se intenta registrar
-- THEN el sistema MUST reject la operación por tipo fuera de alcance V1
+- GIVEN a payload with multimedia attachment block
+- WHEN the system evaluates it for V1
+- THEN the event MUST be rejected by explicit exclusion
 
 ### Requirement: Listado por visita dentro del animal
 
-The system SHOULD allow filtering the per-animal health timeline by visit identifier in addition to `healthEventType` and occurredAt range.
+The system MUST allow filtering the per-animal health timeline by visit identifier for ESPECIFICA visits only. GLOBAL visits MUST NOT appear in per-animalUuid filtered queries unless the animal is explicitly linked via a campaign association.
 
-#### Scenario: Filtro por visit identifier
+#### Scenario: Filtro por visit identifier en animal específica
 
-- GIVEN múltiples eventos sanitarios ligados a visitas distintas del mismo animal
-- WHEN se consulta con filtro por identificador de visita
-- THEN el sistema devuelve solo eventos de esa visita
+- GIVEN multiple FIELD_VET_VISIT events (específica) linked to animal A
+- WHEN querying with animalUuid=A and visitId filter
+- THEN only matching specific visits are returned
+
+#### Scenario: GLOBAL visit en historia animal
+
+- GIVEN a GLOBAL visit with nextControlAt
+- WHEN the animal history is projected
+- THEN the GLOBAL visit appears as a CAMPAIGN entry in the animal's timeline
+- AND is distinguishable from ESPECIFICA entries by modo flag
 
 ### Requirement: Listado sanitario por animal
 
-The system MUST provide a health timeline by `animalUuid`, and SHOULD allow filters by `healthEventType` and occurredAt range.
+The system MUST provide a health timeline by `animalUuid` for ESPECIFICA visits, and MUST project GLOBAL campaign visits into every animal's timeline as CAMPAIGN entries.
 
-#### Scenario: Listado base por animal
+#### Scenario: Timeline animal con campaña global
 
-- GIVEN múltiples eventos sanitarios de distintos animales
-- WHEN se consulta por `animalUuid`
-- THEN el sistema devuelve solo eventos del animal solicitado
+- GIVEN a GLOBAL visit (modo=GLOBAL, estado=ATENDIDA)
+- WHEN animalUuid=A's timeline is queried
+- THEN the visit appears as a CAMPAIGN entry
+- AND reflects the veterinarian and notes from that specific visit event
 
-#### Scenario: Filtros por tipo y rango
+#### Scenario: Timeline animal sin global visits si no está vinculada
 
-- GIVEN eventos del mismo animal en diferentes fechas y tipos
-- WHEN se consulta con filtro por tipo y rango temporal
-- THEN el sistema devuelve solo los eventos que cumplen ambos filtros
+- GIVEN a GLOBAL visit with no animal association
+- WHEN an animal's timeline is queried
+- THEN the global visit does NOT automatically appear unless explicitly linked

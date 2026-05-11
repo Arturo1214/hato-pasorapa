@@ -32,6 +32,8 @@ export interface VetVisitItem {
   occurredAt: string;
   nextControlAt: string | null;
   parentVisitId: string | null;
+  cancelReason: string | null;
+  chainStatus: 'OPEN' | 'CLOSED' | null;
   animalUuid: string | null;
   targetAnimalCount: number | null;
   atencionNotas: string | null;
@@ -78,6 +80,8 @@ function mapVetVisitItem(item: Record<string, unknown>): VetVisitItem {
     occurredAt: String(item['occurredAt']),
     nextControlAt: normalizeNullableString(item['nextControlAt']),
     parentVisitId: normalizeNullableString(item['parentVisitId']),
+    cancelReason: normalizeNullableString(item['cancelReason']),
+    chainStatus: normalizeChainStatus(item['chainStatus']),
     animalUuid: normalizeNullableString(item['animalUuid']),
     targetAnimalCount: typeof item['targetAnimalCount'] === 'number' ? item['targetAnimalCount'] : null,
     atencionNotas: normalizeNullableString(item['atencionNotas']),
@@ -85,6 +89,16 @@ function mapVetVisitItem(item: Record<string, unknown>): VetVisitItem {
     costCurrency: normalizeNullableString(item['costCurrency']),
     treatmentPlan: normalizeTreatmentPlan(item['treatmentPlan']),
   };
+}
+
+function normalizeChainStatus(value: unknown): 'OPEN' | 'CLOSED' | null {
+  if (value === 'CLOSED') {
+    return 'CLOSED';
+  }
+  if (value === 'OPEN' || value === 'ACTIVE') {
+    return 'OPEN';
+  }
+  return null;
 }
 
 function normalizeStatus(value: unknown): Exclude<VetVisitStatus, ''> {

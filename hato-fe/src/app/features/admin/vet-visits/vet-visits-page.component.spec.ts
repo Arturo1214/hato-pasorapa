@@ -18,6 +18,8 @@ describe('VetVisitsPageComponent', () => {
       occurredAt: '2026-05-01T10:00:00.000Z',
       nextControlAt: '2026-05-08T10:00:00.000Z',
       parentVisitId: null,
+      cancelReason: null,
+      chainStatus: null,
       animalUuid: null,
       targetAnimalCount: 12,
       atencionNotas: 'Campaña anual',
@@ -33,6 +35,8 @@ describe('VetVisitsPageComponent', () => {
       occurredAt: '2026-05-02T11:00:00.000Z',
       nextControlAt: null,
       parentVisitId: null,
+      cancelReason: null,
+      chainStatus: 'OPEN',
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: null,
@@ -48,6 +52,8 @@ describe('VetVisitsPageComponent', () => {
       occurredAt: '2026-05-04T10:00:00.000Z',
       nextControlAt: null,
       parentVisitId: null,
+      cancelReason: 'Cancelada por lluvia',
+      chainStatus: null,
       animalUuid: null,
       targetAnimalCount: 8,
       atencionNotas: 'Cancelada por lluvia',
@@ -59,11 +65,12 @@ describe('VetVisitsPageComponent', () => {
 
   const newVisitResult = {
     mode: 'GLOBAL' as const,
+    creationMode: 'scheduled' as const,
     animalUuid: null,
     visitId: 'VISIT-NEW',
     status: 'PENDING' as const,
     occurredAt: '2026-05-03T12:00:00.000Z',
-    nextDueAt: '2026-05-10T12:00:00.000Z',
+    nextDueAt: null,
     notes: 'Control preventivo',
     reason: 'Control preventivo',
     veterinarianName: 'Dra. Nueva',
@@ -75,6 +82,7 @@ describe('VetVisitsPageComponent', () => {
   const attendResult: VetVisitDialogResult = {
     ...newVisitResult,
     visitId: 'VISIT-GLOBAL',
+    creationMode: 'attendedNow',
     status: 'ATTENDED',
     findings: 'Animal estable con signos leves de infección.',
     notes: 'Aplicar antibiótico y observar evolución.',
@@ -305,7 +313,7 @@ describe('VetVisitsPageComponent', () => {
     expect(healthEventsService.createEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         metadata: expect.objectContaining({
-          visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'FINALIZED' }),
+          visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'ATTENDED' }),
           protocol: expect.objectContaining({ status: 'CLOSED' }),
         }),
       }),

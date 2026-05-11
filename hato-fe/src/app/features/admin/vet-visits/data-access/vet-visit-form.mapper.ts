@@ -7,6 +7,7 @@ import type { AnimalHealthEventCreateInput } from '../../animals/data-access/ani
 
 export interface VetVisitFormValue {
   action?: 'create' | 'cancel' | 'attend' | 'reschedule' | 'followUp';
+  creationMode?: 'scheduled' | 'attendedNow';
   animalUuid: string | null;
   visitId: string;
   mode?: 'GLOBAL' | 'SPECIFIC';
@@ -33,6 +34,7 @@ export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHe
   const normalizedPlan = normalizePlan(value.treatmentPlan ?? value.clinicalNote.plan);
   const status = resolveVisitStatus(value);
   const protocolStatus = resolveProtocolStatus(value);
+  const includeClinicalFields = status === 'ATTENDED';
 
   if (action === 'cancel' && !cancelReason) {
     throw new Error('VET_VISIT_CANCEL_REASON_REQUIRED');
@@ -58,13 +60,13 @@ export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHe
         ok: item.ok,
         ...(normalizeOptionalText(item.note) ? { note: normalizeOptionalText(item.note)! } : {}),
       })),
-      ...(normalizeOptionalText(value.notes) ? { atencionNotas: normalizeOptionalText(value.notes)! } : {}),
-      ...(value.cost ? { cost: value.cost } : {}),
-      ...(normalizedPlan.length ? { treatmentPlan: normalizedPlan } : {}),
+      ...(includeClinicalFields && normalizeOptionalText(value.notes) ? { atencionNotas: normalizeOptionalText(value.notes)! } : {}),
+      ...(includeClinicalFields && value.cost ? { cost: value.cost } : {}),
+      ...(includeClinicalFields && normalizedPlan.length ? { treatmentPlan: normalizedPlan } : {}),
       clinicalNote: {
         reason: value.clinicalNote.reason.trim(),
-        ...(normalizeOptionalText(value.clinicalNote.findings) ? { findings: normalizeOptionalText(value.clinicalNote.findings)! } : {}),
-        ...(normalizedPlan.length ? { plan: normalizedPlan } : {}),
+        ...(includeClinicalFields && normalizeOptionalText(value.clinicalNote.findings) ? { findings: normalizeOptionalText(value.clinicalNote.findings)! } : {}),
+        ...(includeClinicalFields && normalizedPlan.length ? { plan: normalizedPlan } : {}),
       },
       protocol: {
         status: protocolStatus,
@@ -105,8 +107,11 @@ function resolveVisitStatus(value: VetVisitFormValue) {
   if (value.action === 'cancel') {
     return 'CANCELED';
   }
-  if (value.action === 'attend') {
+  if (value.action === 'attend' || value.creationMode === 'attendedNow') {
     return 'ATTENDED';
+  }
+  if (value.creationMode === 'scheduled' || value.action === 'followUp') {
+    return 'PENDING';
   }
   return value.status;
 }

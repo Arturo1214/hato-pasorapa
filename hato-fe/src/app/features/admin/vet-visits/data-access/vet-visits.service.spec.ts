@@ -73,7 +73,7 @@ describe('VetVisitsService', () => {
     expect(count).toBe(0);
   });
 
-  it('should parse cost, currency, and treatment plan from the backend list DTO', () => {
+  it('should parse cost, currency, treatment plan, and chain fields from the backend list DTO', () => {
     let received: VetVisitItem[] | undefined;
 
     service.listVetVisits({ visitId: 'visit-attended-1' }).subscribe((items) => {
@@ -91,6 +91,8 @@ describe('VetVisitsService', () => {
           occurredAt: '2026-05-10T10:00:00Z',
           nextControlAt: null,
           parentVisitId: 'visit-parent-1',
+          cancelReason: 'Animal vendido',
+          chainStatus: 'ACTIVE',
           animalUuid: 'animal-1',
           targetAnimalCount: null,
           atencionNotas: 'Estable tras atención',
@@ -112,6 +114,8 @@ describe('VetVisitsService', () => {
       occurredAt: '2026-05-10T10:00:00Z',
       nextControlAt: null,
       parentVisitId: 'visit-parent-1',
+      cancelReason: 'Animal vendido',
+      chainStatus: 'OPEN',
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: 'Estable tras atención',
@@ -152,5 +156,39 @@ describe('VetVisitsService', () => {
     expect(received?.[0].costCurrency).toBeNull();
     expect(received?.[0].treatmentPlan).toBeNull();
     expect(received?.[0].parentVisitId).toBeNull();
+    expect(received?.[0].cancelReason).toBeNull();
+    expect(received?.[0].chainStatus).toBeNull();
+  });
+
+  it('should keep CLOSED chain status from the backend DTO', () => {
+    let received: VetVisitItem[] | undefined;
+
+    service.listVetVisits({ visitId: 'visit-closed-1' }).subscribe((items) => {
+      received = items;
+    });
+
+    const request = httpMock.expectOne('/api/vet-visits?visitId=visit-closed-1&page=0&size=20');
+    request.flush({
+      items: [
+        {
+          visitId: 'visit-closed-1',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dra. Luna' },
+          occurredAt: '2026-05-10T10:00:00Z',
+          nextControlAt: null,
+          parentVisitId: null,
+          chainStatus: 'CLOSED',
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: 'Alta clínica',
+        },
+      ],
+      page: 0,
+      size: 20,
+      total: 1,
+    });
+
+    expect(received?.[0].chainStatus).toBe('CLOSED');
   });
 });

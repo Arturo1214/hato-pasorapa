@@ -3,7 +3,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { AnimalsService, ANIMAL_CATEGORY, ANIMAL_SEX, type AnimalItem } from '../animals/data-access/animals.service';
-import { VetVisitFormDialogComponent, type VetVisitDialogData, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
+import { DateTimeClock, VetVisitFormDialogComponent, type VetVisitDialogData, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
 
 describe('VetVisitFormDialogComponent', () => {
   const dialogRef = { close: vi.fn() };
@@ -29,6 +29,7 @@ describe('VetVisitFormDialogComponent', () => {
     ...overrides,
   });
 
+  const fixedNow = '2026-05-11T14:30:45.000Z';
   const configure = async (animals = [createAnimal()], data: VetVisitDialogData = {}) => {
     dialogRef.close.mockClear();
     await TestBed.configureTestingModule({
@@ -38,6 +39,7 @@ describe('VetVisitFormDialogComponent', () => {
         { provide: MAT_DIALOG_DATA, useValue: data },
         { provide: MatDialogRef, useValue: dialogRef },
         { provide: AnimalsService, useValue: { listAnimals: vi.fn(() => of(animals)) } },
+        { provide: DateTimeClock, useValue: { nowIso: () => fixedNow } },
       ],
     }).compileComponents();
 
@@ -73,42 +75,47 @@ describe('VetVisitFormDialogComponent', () => {
     );
   });
 
-  it('should use Material datepicker controls for visit dates', async () => {
+  it('should show visit date only for scheduled creation and hide next control plus clinical decisions', async () => {
     const { fixture } = await configure();
 
-    expect(fixture.nativeElement.querySelectorAll('mat-datepicker-toggle')).toHaveLength(2);
-    expect(fixture.nativeElement.textContent).toContain('Fecha de visita');
-    expect(fixture.nativeElement.textContent).toContain('Próximo control');
+    const text = fixture.nativeElement.textContent as string;
+    expect(fixture.nativeElement.querySelectorAll('mat-datepicker-toggle')).toHaveLength(1);
+    expect(text).toContain('Fecha de visita');
+    expect(text).not.toContain('Próximo control');
+    expect(text).not.toContain('Hallazgos / descripción');
+    expect(text).not.toContain('Acción posterior');
   });
 
-  it('should offer only Programada and Atendida as initial statuses in the new visit form', async () => {
+  it('should choose creation mode instead of exposing raw visit statuses in the new visit form', async () => {
     const { fixture, component } = await configure();
 
-    expect(component.initialStatusOptions.map((option) => option.label)).toEqual(['Programada', 'Atendida']);
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('Programada');
-    expect(text).toContain('Atendida');
+    expect(component.creationModeOptions.map((option) => option.label)).toEqual(['Programada', 'Atendida inmediata']);
+    expect(component.form.controls.creationMode.value).toBe('scheduled');
+    expect(text).not.toContain('Estado');
     expect(text).not.toContain('Reprogramada');
     expect(text).not.toContain('Finalizada');
     expect(text).not.toContain('Cancelada');
   });
 
-  it('should require only motive for scheduled visits and attention notes for attended visits', async () => {
+  it('should require only scheduling fields for scheduled visits and clinical fields for attended-now creation', async () => {
     const { component } = await configure([], { mode: 'GLOBAL' });
 
     component.form.patchValue({
       mode: 'GLOBAL',
-      status: 'PENDING',
+      creationMode: 'scheduled',
       veterinarianName: 'Dra. Luna',
       reason: 'Campaña de control',
       notes: '',
     });
     expect(component.form.valid).toBe(true);
 
-    component.form.patchValue({ status: 'ATTENDED', notes: '' });
+    component.form.patchValue({ creationMode: 'attendedNow', findings: '', attentionNotes: '', followUpChoice: null });
+    component.form.updateValueAndValidity();
     expect(component.form.valid).toBe(false);
 
-    component.form.patchValue({ notes: 'Se aplicó tratamiento inmediato.' });
+    component.form.patchValue({ findings: 'Fiebre persistente', attentionNotes: 'Se aplicó tratamiento inmediato.', followUpChoice: 'finalize' });
+    component.form.updateValueAndValidity();
     expect(component.form.valid).toBe(true);
   });
 
@@ -142,6 +149,65 @@ describe('VetVisitFormDialogComponent', () => {
     const expandedText = fixture.nativeElement.textContent as string;
     expect(expandedText).toContain('Plan de tratamiento');
     expect(expandedText).toContain('Agregar paso');
+  });
+
+  it('should render attended-now creation with current moment and no visit date picker', async () => {
+    const { fixture, component } = await configure([], { mode: 'GLOBAL', creationMode: 'attendedNow' });
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Hallazgos / descripción');
+    expect(text).toContain('Acción posterior');
+    expect(text).not.toContain('Fecha de visita');
+    expect(fixture.nativeElement.querySelectorAll('mat-datepicker-toggle')).toHaveLength(0);
+
+    component.form.patchValue({
+      mode: 'GLOBAL',
+      veterinarianName: 'Dra. Luna',
+      reason: 'Urgencia clínica',
+      findings: 'Cojera severa',
+      attentionNotes: 'Se estabilizó al animal.',
+      followUpChoice: 'finalize',
+    });
+    component.submit();
+
+    expect(dialogRef.close).toHaveBeenCalledWith(
+      expect.objectContaining({
+        creationMode: 'attendedNow',
+        status: 'ATTENDED',
+        occurredAt: fixedNow,
+        nextDueAt: null,
+        findings: 'Cojera severa',
+        followUpChoice: 'finalize',
+      } satisfies Partial<VetVisitDialogResult>),
+    );
+  });
+
+  it('should require follow-up choice and next date only when scheduling the next visit', async () => {
+    const { component } = await configure([], { action: 'attend', mode: 'GLOBAL' });
+
+    component.form.patchValue({
+      mode: 'GLOBAL',
+      veterinarianName: 'Dra. Luna',
+      reason: 'Control clínico',
+      findings: 'Respiración estable',
+      attentionNotes: 'Sin complicaciones',
+      followUpChoice: null,
+      nextDueAt: null,
+    });
+    component.form.updateValueAndValidity();
+    expect(component.form.valid).toBe(false);
+
+    component.form.patchValue({ followUpChoice: 'finalize' });
+    component.form.updateValueAndValidity();
+    expect(component.form.valid).toBe(true);
+
+    component.form.patchValue({ followUpChoice: 'schedule', nextDueAt: null });
+    component.form.updateValueAndValidity();
+    expect(component.form.valid).toBe(false);
+
+    component.form.patchValue({ nextDueAt: new Date(2026, 4, 20) });
+    component.form.updateValueAndValidity();
+    expect(component.form.valid).toBe(true);
   });
 
   it('should validate required findings and require treatment steps only when treatment is enabled', async () => {

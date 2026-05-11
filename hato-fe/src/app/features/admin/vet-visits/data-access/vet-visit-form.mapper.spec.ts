@@ -87,6 +87,7 @@ describe('vet-visit-form.mapper', () => {
 
   it('should map scheduled visits with motive only and no attention notes', () => {
     const input = mapVetVisitFormToCreateInput({
+      creationMode: 'scheduled',
       animalUuid: 'animal-4',
       visitId: 'visit-scheduled-1',
       mode: 'SPECIFIC',
@@ -104,6 +105,64 @@ describe('vet-visit-form.mapper', () => {
     expect(input.occurredAt).toBe('2026-05-12T00:00:00.000Z');
     expect(metadata.clinicalNote).toEqual({ reason: 'Control preventivo' });
     expect(metadata.checklist).toEqual([]);
+    expect(metadata.protocol.nextDueAt).toBeUndefined();
+    expect(metadata.cost).toBeUndefined();
+    expect(metadata.treatmentPlan).toBeUndefined();
+  });
+
+  it('should map attended-now creation with current occurrence, clinical fields, and closed chain', () => {
+    const input = mapVetVisitFormToCreateInput({
+      creationMode: 'attendedNow',
+      animalUuid: 'animal-10',
+      visitId: 'visit-attended-now-1',
+      mode: 'SPECIFIC',
+      status: 'PENDING',
+      occurredAt: '2026-05-11T14:30:45.000Z',
+      notes: ' Se estabilizó al animal ',
+      checklist: [],
+      clinicalNote: { reason: 'Urgencia', findings: 'Cojera severa', plan: '' },
+      protocolStatus: 'STARTED',
+      cost: { amount: 80, currency: 'BOB' },
+      treatmentPlan: ['Reposo 48 horas'],
+      followUpChoice: 'finalize',
+      veterinarianName: 'Dra. Luna',
+    });
+    const metadata = input.metadata as FieldVetVisitMetadata;
+
+    expect(input.occurredAt).toBe('2026-05-11T14:30:45.000Z');
+    expect(metadata.visit.status).toBe('ATTENDED');
+    expect(metadata.clinicalNote.findings).toBe('Cojera severa');
+    expect(metadata['atencionNotas']).toBe('Se estabilizó al animal');
+    expect(metadata.protocol.status).toBe('CLOSED');
+    expect(metadata.protocol.nextDueAt).toBeUndefined();
+  });
+
+  it('should map scheduled follow-up child with parentVisitId and no clinical findings', () => {
+    const input = mapVetVisitFormToCreateInput({
+      action: 'followUp',
+      creationMode: 'scheduled',
+      animalUuid: 'animal-11',
+      visitId: 'visit-child-1',
+      mode: 'SPECIFIC',
+      status: 'PENDING',
+      occurredAt: '2026-05-20T09:00',
+      notes: null,
+      checklist: [],
+      clinicalNote: { reason: 'Control posterior', findings: 'No debería enviarse', plan: 'No debería enviarse' },
+      protocolStatus: 'STARTED',
+      parentVisitId: 'visit-parent-1',
+      followUpChoice: null,
+    });
+    const metadata = input.metadata as FieldVetVisitMetadata;
+
+    expect(metadata.visit).toEqual({
+      visitId: 'visit-child-1',
+      mode: 'SPECIFIC',
+      status: 'PENDING',
+      parentVisitId: 'visit-parent-1',
+    });
+    expect(metadata.clinicalNote).toEqual({ reason: 'Control posterior' });
+    expect(metadata.protocol.status).toBe('STARTED');
   });
 
   it('should map attended visits with attention notes instead of findings and plan', () => {

@@ -40,20 +40,20 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: FE Types, Form Dialog, Mapper, Service
 
-- [ ] 2.1 Add `VetVisitCreationMode = 'scheduled' | 'attendedNow'` to `vet-visit-form-dialog.component.ts` exports
-- [ ] 2.2 Replace status selector in form dialog with `creationMode: 'scheduled' | 'attendedNow'` toggle — scheduled shows only `Fecha de visita` + veterinarian + reason + next control; attendedNow shows clinical form
-- [ ] 2.3 Make `findings` required when `creationMode === 'attendedNow'`; add `attendedNowValidator` that enforces findings + attentionNotes
-- [ ] 2.4 Default `occurredAt` to `new Date().toISOString()` (injectable `DateTimeClock`) for `attendedNow` mode
-- [ ] 2.5 Hide `nextDueAt` datepicker for `creationMode === 'attendedNow'` unless `followUpChoice === 'schedule'`
-- [ ] 2.6 Update `VetVisitDialogData` to include `creationMode?: VetVisitCreationMode`
-- [ ] 2.7 Update `VetVisitDialogResult` to include `creationMode: VetVisitCreationMode` and `findings: string | null`
-- [ ] 2.8 Update `VetVisitItem` in service to add `cancelReason: string | null` and `chainStatus: 'OPEN' | 'CLOSED' | null`
-- [ ] 2.9 Update `vet-visits.service.ts` mapper to parse `cancelReason` and `chainStatus` from API response
-- [ ] 2.10 Update `vet-visit-form.mapper.ts`: add `VetVisitFormValue.creationMode`, map it to payload; `scheduled` creation omits clinical fields entirely
-- [ ] 2.11 Write Vitest spec: `vet-visit-form-dialog.component.spec.ts` — mode-specific visibility, attended-now clock, `followUpChoice` mandatory
-- [ ] 2.12 Write Vitest spec: `vet-visits.service.spec.ts` — `cancelReason` and `chainStatus` mapping
-- [ ] 2.13 Write Vitest spec: `vet-visit-form.mapper.spec.ts` — scheduled/attendedNow payloads
-- [ ] 2.14 Run FE tests with Node 20.19.6: `npm test -- --run --reporter=verbose` (no build)
+- [x] 2.1 Add `VetVisitCreationMode = 'scheduled' | 'attendedNow'` to `vet-visit-form-dialog.component.ts` exports
+- [x] 2.2 Replace status selector in form dialog with `creationMode: 'scheduled' | 'attendedNow'` toggle — scheduled shows only `Fecha de visita` + veterinarian + reason + next control; attendedNow shows clinical form
+- [x] 2.3 Make `findings` required when `creationMode === 'attendedNow'`; add `attendedNowValidator` that enforces findings + attentionNotes
+- [x] 2.4 Default `occurredAt` to `new Date().toISOString()` (injectable `DateTimeClock`) for `attendedNow` mode
+- [x] 2.5 Hide `nextDueAt` datepicker for `creationMode === 'attendedNow'` unless `followUpChoice === 'schedule'`
+- [x] 2.6 Update `VetVisitDialogData` to include `creationMode?: VetVisitCreationMode`
+- [x] 2.7 Update `VetVisitDialogResult` to include `creationMode: VetVisitCreationMode` and `findings: string | null`
+- [x] 2.8 Update `VetVisitItem` in service to add `cancelReason: string | null` and `chainStatus: 'OPEN' | 'CLOSED' | null`
+- [x] 2.9 Update `vet-visits.service.ts` mapper to parse `cancelReason` and `chainStatus` from API response
+- [x] 2.10 Update `vet-visit-form.mapper.ts`: add `VetVisitFormValue.creationMode`, map it to payload; `scheduled` creation omits clinical fields entirely
+- [x] 2.11 Write Vitest spec: `vet-visit-form-dialog.component.spec.ts` — mode-specific visibility, attended-now clock, `followUpChoice` mandatory
+- [x] 2.12 Write Vitest spec: `vet-visits.service.spec.ts` — `cancelReason` and `chainStatus` mapping
+- [x] 2.13 Write Vitest spec: `vet-visit-form.mapper.spec.ts` — scheduled/attendedNow payloads
+- [x] 2.14 Run FE tests with Node 20.19.6: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` (no build)
 
 ---
 

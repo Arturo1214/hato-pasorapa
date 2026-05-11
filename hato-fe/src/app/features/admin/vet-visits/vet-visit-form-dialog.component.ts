@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, Injectable, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type FormControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
 import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideNativeDateAdapter } from '@angular/material/core';
@@ -19,6 +19,14 @@ export type VetVisitDialogMode = 'GLOBAL' | 'SPECIFIC';
 export type VetVisitDialogStatus = 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED';
 export type VetVisitDialogAction = 'create' | 'attend' | 'reschedule' | 'followUp';
 export type VetVisitFollowUpChoice = 'schedule' | 'finalize';
+export type VetVisitCreationMode = 'scheduled' | 'attendedNow';
+
+@Injectable({ providedIn: 'root' })
+export class DateTimeClock {
+  nowIso() {
+    return new Date().toISOString();
+  }
+}
 
 export interface VetVisitDialogData {
   action?: VetVisitDialogAction;
@@ -26,6 +34,7 @@ export interface VetVisitDialogData {
   animalUuid?: string | null;
   visitId?: string | null;
   status?: VetVisitDialogStatus;
+  creationMode?: VetVisitCreationMode;
   occurredAt?: string | Date | null;
   nextDueAt?: string | Date | null;
   reason?: string | null;
@@ -37,6 +46,7 @@ export interface VetVisitDialogData {
 
 export interface VetVisitDialogResult {
   mode: VetVisitDialogMode;
+  creationMode: VetVisitCreationMode;
   animalUuid: string | null;
   visitId: string;
   status: VetVisitDialogStatus;
@@ -88,13 +98,12 @@ export interface VetVisitDialogResult {
 
         @if (!isAttendMode) {
           <mat-form-field appearance="outline">
-            <mat-label>Estado</mat-label>
-            <mat-select formControlName="status">
-              @for (option of initialStatusOptions; track option.value) {
+            <mat-label>Tipo de creación</mat-label>
+            <mat-select formControlName="creationMode">
+              @for (option of creationModeOptions; track option.value) {
                 <mat-option [value]="option.value">{{ option.label }}</mat-option>
               }
             </mat-select>
-            <mat-hint>Inicial: Programada o Atendida</mat-hint>
           </mat-form-field>
         }
 
@@ -110,19 +119,12 @@ export interface VetVisitDialogResult {
           </mat-form-field>
         }
 
-        <mat-form-field appearance="outline">
-          <mat-label>Fecha de visita</mat-label>
-          <input matInput [matDatepicker]="occurredAtPicker" formControlName="occurredAt" />
-          <mat-datepicker-toggle matIconSuffix [for]="occurredAtPicker" />
-          <mat-datepicker #occurredAtPicker />
-        </mat-form-field>
-
-        @if (!isAttendMode) {
+        @if (showVisitDateField()) {
           <mat-form-field appearance="outline">
-            <mat-label>Próximo control</mat-label>
-            <input matInput [matDatepicker]="nextDueAtPicker" formControlName="nextDueAt" />
-            <mat-datepicker-toggle matIconSuffix [for]="nextDueAtPicker" />
-            <mat-datepicker #nextDueAtPicker />
+            <mat-label>Fecha de visita</mat-label>
+            <input matInput [matDatepicker]="occurredAtPicker" formControlName="occurredAt" />
+            <mat-datepicker-toggle matIconSuffix [for]="occurredAtPicker" />
+            <mat-datepicker #occurredAtPicker />
           </mat-form-field>
         }
 
@@ -141,14 +143,7 @@ export interface VetVisitDialogResult {
           <input matInput formControlName="reason" />
         </mat-form-field>
 
-        @if (!isAttendMode && form.controls.status.value === 'ATTENDED') {
-          <mat-form-field appearance="outline" class="form-field--full">
-            <mat-label>Notas de atención</mat-label>
-            <textarea matInput formControlName="notes"></textarea>
-          </mat-form-field>
-        }
-
-        @if (isAttendMode) {
+        @if (isClinicalMode()) {
           <mat-form-field appearance="outline" class="form-field--full">
             <mat-label>Hallazgos / descripción</mat-label>
             <textarea matInput formControlName="findings" rows="3"></textarea>
@@ -252,40 +247,42 @@ export class VetVisitFormDialogComponent {
   readonly dialogRef = inject(MatDialogRef<VetVisitFormDialogComponent, VetVisitDialogResult | undefined>);
   private readonly formBuilder = inject(FormBuilder);
   private readonly animalsService = inject(AnimalsService);
+  private readonly clock = inject(DateTimeClock);
   private readonly animalCandidates = signal<AnimalItem[]>([]);
   readonly maxTreatmentPlanSteps = 20;
   readonly isAttendMode = this.data.action === 'attend';
   readonly dialogTitle = this.isAttendMode ? 'Atender visita' : 'Nueva visita veterinaria';
   readonly submitLabel = this.isAttendMode ? 'Guardar atención' : 'Guardar visita';
-
-  readonly initialStatusOptions: readonly { value: VetVisitDialogStatus; label: string }[] = [
-    { value: 'PENDING', label: 'Programada' },
-    { value: 'ATTENDED', label: 'Atendida' },
+  readonly creationModeOptions: readonly { value: VetVisitCreationMode; label: string }[] = [
+    { value: 'scheduled', label: 'Programada' },
+    { value: 'attendedNow', label: 'Atendida inmediata' },
   ];
 
   readonly form = this.formBuilder.group(
     {
+      action: [this.data.action ?? 'create' as VetVisitDialogAction],
       mode: [this.data.mode ?? 'SPECIFIC' as VetVisitDialogMode, [Validators.required]],
+      creationMode: [this.data.creationMode ?? 'scheduled' as VetVisitCreationMode, [Validators.required]],
       animalUuid: this.formBuilder.control<string | null>(this.data.animalUuid ?? null),
       animalSearch: [''],
       visitId: [this.data.visitId ?? createUuid(), [Validators.required]],
       status: [this.data.status ?? (this.isAttendMode ? 'ATTENDED' as VetVisitDialogStatus : 'PENDING' as VetVisitDialogStatus), [Validators.required]],
-      occurredAt: [this.data.occurredAt ?? currentLocalDateInput(), [Validators.required]],
+      occurredAt: [this.data.occurredAt ?? (this.data.creationMode === 'attendedNow' ? this.clock.nowIso() : currentLocalDateInput()), [Validators.required]],
       nextDueAt: this.formBuilder.control<Date | string | null>(this.data.nextDueAt ?? null),
       notes: [''],
-      findings: ['', this.isAttendMode ? [Validators.required, Validators.minLength(5)] : []],
-      attentionNotes: ['', this.isAttendMode ? [Validators.required] : []],
+      findings: [''],
+      attentionNotes: [''],
       cost: this.formBuilder.control<number | null>(null, [nonNegativeCostValidator]),
       hasTreatment: [false],
       treatmentPlan: this.formBuilder.array<FormControl<string>>([this.createTreatmentPlanControl()]),
-      followUpChoice: [this.isAttendMode ? 'schedule' as VetVisitFollowUpChoice : null],
+      followUpChoice: [null as VetVisitFollowUpChoice | null],
       reason: [this.data.reason ?? '', [Validators.required]],
       veterinarianName: [this.data.veterinarianName ?? '', [Validators.required]],
       veterinarianLicense: [this.data.veterinarianLicense ?? ''],
       targetAnimalCount: [this.data.targetAnimalCount ?? null],
       parentVisitId: [this.data.parentVisitId ?? null],
     },
-    { validators: [specificAnimalValidator, attendedNotesValidator, followUpDateValidator, treatmentPlanLimitValidator] },
+    { validators: [specificAnimalValidator, attendedNowValidator, followUpDateValidator, treatmentPlanLimitValidator] },
   );
 
   readonly messages = {
@@ -324,6 +321,17 @@ export class VetVisitFormDialogComponent {
       this.form.updateValueAndValidity();
     });
 
+    this.form.controls.creationMode.valueChanges.subscribe((creationMode) => {
+      if (creationMode === 'attendedNow' && !this.isAttendMode) {
+        this.form.controls.occurredAt.setValue(this.clock.nowIso());
+        this.form.controls.nextDueAt.setValue(null);
+      }
+      if (creationMode === 'scheduled' && !this.isAttendMode) {
+        this.form.controls.followUpChoice.setValue(null);
+      }
+      this.form.updateValueAndValidity();
+    });
+
     this.form.controls.followUpChoice.valueChanges.subscribe((choice) => {
       if (choice === 'finalize') {
         this.form.controls.nextDueAt.setValue(null);
@@ -341,6 +349,14 @@ export class VetVisitFormDialogComponent {
 
   treatmentPlanControls() {
     return this.form.controls.treatmentPlan.controls;
+  }
+
+  isClinicalMode() {
+    return this.isAttendMode || this.form.controls.creationMode.value === 'attendedNow';
+  }
+
+  showVisitDateField() {
+    return this.isAttendMode || this.form.controls.creationMode.value === 'scheduled';
   }
 
   addTreatmentPlanStep(description = '') {
@@ -392,15 +408,17 @@ export class VetVisitFormDialogComponent {
     }
 
     const value = this.form.getRawValue();
-    const attentionNotes = this.isAttendMode ? normalizeOptionalText(value.attentionNotes) : normalizeOptionalText(value.notes);
+    const isClinicalMode = this.isAttendMode || value.creationMode === 'attendedNow';
+    const attentionNotes = isClinicalMode ? normalizeOptionalText(value.attentionNotes) : normalizeOptionalText(value.notes);
     const costAmount = normalizeCostAmount(value.cost);
     const treatmentPlan = value.hasTreatment ? value.treatmentPlan.map((step) => step.trim()).filter(Boolean) : [];
     this.dialogRef.close({
       mode: value.mode ?? 'SPECIFIC',
+      creationMode: this.isAttendMode ? 'attendedNow' : value.creationMode ?? 'scheduled',
       animalUuid: value.mode === 'GLOBAL' ? null : value.animalUuid,
       visitId: value.visitId ?? '',
-      status: this.isAttendMode ? 'ATTENDED' : value.status ?? 'PENDING',
-      occurredAt: normalizeDateValue(value.occurredAt ?? currentLocalDateInput()),
+      status: isClinicalMode ? 'ATTENDED' : 'PENDING',
+      occurredAt: value.creationMode === 'attendedNow' && !this.isAttendMode ? this.clock.nowIso() : normalizeDateValue(value.occurredAt ?? currentLocalDateInput()),
       nextDueAt: normalizeOptionalDate(value.nextDueAt),
       notes: attentionNotes,
       reason: normalizeRequiredText(value.reason),
@@ -408,10 +426,10 @@ export class VetVisitFormDialogComponent {
       veterinarianLicense: normalizeOptionalText(value.veterinarianLicense),
       targetAnimalCount: value.targetAnimalCount,
       parentVisitId: normalizeOptionalText(value.parentVisitId),
-      findings: this.isAttendMode ? normalizeOptionalText(value.findings) : null,
-      cost: this.isAttendMode && costAmount !== null ? { amount: costAmount, currency: 'BOB' } : null,
-      treatmentPlan: this.isAttendMode ? treatmentPlan : [],
-      followUpChoice: this.isAttendMode ? value.followUpChoice : null,
+      findings: isClinicalMode ? normalizeOptionalText(value.findings) : null,
+      cost: isClinicalMode && costAmount !== null ? { amount: costAmount, currency: 'BOB' } : null,
+      treatmentPlan: isClinicalMode ? treatmentPlan : [],
+      followUpChoice: isClinicalMode ? value.followUpChoice : null,
     });
   }
 
@@ -426,19 +444,26 @@ const specificAnimalValidator: ValidatorFn = (control: AbstractControl): Validat
   return value.mode === 'SPECIFIC' && !value.animalUuid ? { animalRequired: true } : null;
 };
 
-const attendedNotesValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const value = control.value as { status?: VetVisitDialogStatus | null; notes?: string | null; attentionNotes?: string | null };
-  const notesControl = control.get('notes');
-  const currentErrors = notesControl?.errors ?? null;
-  if (value.status === 'ATTENDED' && !normalizeOptionalText(value.notes) && !normalizeOptionalText(value.attentionNotes)) {
-    notesControl?.setErrors({ ...(currentErrors ?? {}), attentionRequired: true });
-    return { attentionNotesRequired: true };
+export const attendedNowValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+  const value = control.value as {
+    action?: VetVisitDialogAction | null;
+    creationMode?: VetVisitCreationMode | null;
+    findings?: string | null;
+    attentionNotes?: string | null;
+  };
+  const isClinicalMode = value.action === 'attend' || value.creationMode === 'attendedNow' || control.get('status')?.value === 'ATTENDED' && control.get('creationMode')?.value === 'attendedNow';
+  if (!isClinicalMode) {
+    return null;
   }
-  if (currentErrors?.['attentionRequired']) {
-    const { attentionRequired: _attentionRequired, ...remainingErrors } = currentErrors;
-    notesControl?.setErrors(Object.keys(remainingErrors).length ? remainingErrors : null);
+
+  const errors: ValidationErrors = {};
+  if (!normalizeOptionalText(value.findings)) {
+    errors['findingsRequired'] = true;
   }
-  return null;
+  if (!normalizeOptionalText(value.attentionNotes)) {
+    errors['attentionNotesRequired'] = true;
+  }
+  return Object.keys(errors).length ? errors : null;
 };
 
 const nonNegativeCostValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
@@ -451,7 +476,14 @@ const nonNegativeCostValidator: ValidatorFn = (control: AbstractControl): Valida
 };
 
 const followUpDateValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const value = control.value as { followUpChoice?: VetVisitFollowUpChoice | null; nextDueAt?: Date | string | null };
+  const value = control.value as { action?: VetVisitDialogAction | null; creationMode?: VetVisitCreationMode | null; followUpChoice?: VetVisitFollowUpChoice | null; nextDueAt?: Date | string | null };
+  const isClinicalMode = value.action === 'attend' || value.creationMode === 'attendedNow' || control.get('status')?.value === 'ATTENDED' && control.get('creationMode')?.value === 'attendedNow';
+  if (!isClinicalMode) {
+    return null;
+  }
+  if (!value.followUpChoice) {
+    return { followUpChoiceRequired: true };
+  }
   return value.followUpChoice === 'schedule' && !value.nextDueAt ? { nextDueAtRequired: true } : null;
 };
 

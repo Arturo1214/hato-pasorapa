@@ -233,7 +233,7 @@ export class VetVisitsPageComponent {
   private cancelVisit(row: VetVisitRow, result: VetVisitCancelDialogResult) {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
-    const canceledVisit = toVetVisitItemFromRow(row, { status: 'CANCELED' });
+    const canceledVisit = toVetVisitItemFromRow(row, { status: 'CANCELED', cancelReason: result.cancelReason, chainStatus: null });
     this.healthEventsService
       .createEvent(mapRowActionToCreateInput(row, {
         action: 'cancel',
@@ -252,9 +252,10 @@ export class VetVisitsPageComponent {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
     const closesChain = result.followUpChoice === 'finalize';
-    const attendedStatus = closesChain ? 'FINALIZED' : 'ATTENDED';
+    const attendedStatus = 'ATTENDED';
     const attendedVisit = toVetVisitItemFromRow(row, {
       status: attendedStatus,
+      chainStatus: closesChain ? 'CLOSED' : 'OPEN',
       nextControlAt: result.nextDueAt,
       atencionNotas: result.notes,
       costo: result.cost?.amount ?? null,
@@ -336,6 +337,8 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
     occurredAt: result.occurredAt,
     nextControlAt: result.nextDueAt,
     parentVisitId: result.parentVisitId,
+    cancelReason: null,
+    chainStatus: result.status === 'ATTENDED' && result.followUpChoice === 'finalize' ? 'CLOSED' : result.status === 'ATTENDED' ? 'OPEN' : null,
     animalUuid: result.animalUuid,
     targetAnimalCount: result.targetAnimalCount,
     atencionNotas: result.notes,
@@ -451,6 +454,7 @@ function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
     occurredAt: result.occurredAt,
     notes: result.notes,
     checklist: [],
+    creationMode: result.creationMode,
     clinicalNote: {
       reason: result.reason,
       findings: result.findings ?? '',
@@ -524,6 +528,8 @@ function toVetVisitItemFromRow(row: VetVisitRow, overrides: Partial<VetVisitItem
     occurredAt: overrides.occurredAt ?? row.occurredAt,
     nextControlAt: overrides.nextControlAt ?? row.nextControlAt,
     parentVisitId: overrides.parentVisitId ?? row.parentVisitId,
+    cancelReason: overrides.cancelReason ?? row.cancelReason,
+    chainStatus: overrides.chainStatus ?? row.chainStatus,
     animalUuid: overrides.animalUuid ?? row.animalUuid,
     targetAnimalCount: overrides.targetAnimalCount ?? row.targetAnimalCount,
     atencionNotas: overrides.atencionNotas ?? row.atencionNotas,
@@ -536,6 +542,7 @@ function toVetVisitItemFromRow(row: VetVisitRow, overrides: Partial<VetVisitItem
 function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialogResult): VetVisitDialogResult {
   return {
     mode: row.mode,
+    creationMode: 'scheduled',
     animalUuid: row.animalUuid,
     visitId: createLocalVisitId(),
     status: 'PENDING',

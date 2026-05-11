@@ -1,8 +1,11 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
+import { provideNativeDateAdapter } from '@angular/material/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
+import { MatAutocompleteModule, type MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -35,12 +38,15 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
     ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
+    MatAutocompleteModule,
+    MatDatepickerModule,
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     FormErrorsComponent,
   ],
+  providers: [provideNativeDateAdapter()],
   template: `
     <section class="animal-form-page">
       <div class="form-actions">
@@ -100,15 +106,6 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
             <mat-form-field appearance="outline"><mat-label>Tatuaje</mat-label><input matInput formControlName="tatuaje" /></mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Categoría</mat-label>
-              <mat-select formControlName="category">
-                @for (option of categoryOptions; track option.value) {
-                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
-            <mat-form-field appearance="outline">
               <mat-label>Sexo</mat-label>
               <mat-select formControlName="sex">
                 @for (option of sexOptions; track option.value) {
@@ -118,32 +115,49 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Estado</mat-label>
-              <mat-select formControlName="active"><mat-option [value]="true">Activo</mat-option><mat-option [value]="false">Inactivo</mat-option></mat-select>
+              <mat-label>Categoría</mat-label>
+              <mat-select formControlName="category">
+                @for (option of categoryOptions(); track option.value) {
+                  <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                }
+              </mat-select>
             </mat-form-field>
 
-            <mat-form-field appearance="outline"><mat-label>Fecha de nacimiento</mat-label><input matInput type="date" formControlName="birthDate" /></mat-form-field>
-            <mat-form-field appearance="outline"><mat-label>Fecha de ingreso</mat-label><input matInput type="date" formControlName="admissionDate" /></mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha de nacimiento</mat-label>
+              <input matInput [matDatepicker]="birthDatePicker" formControlName="birthDate" />
+              <mat-datepicker-toggle matIconSuffix [for]="birthDatePicker" />
+              <mat-datepicker #birthDatePicker />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha de ingreso al rodeo</mat-label>
+              <input matInput [matDatepicker]="admissionDatePicker" formControlName="admissionDate" />
+              <mat-hint>Puede diferir de la fecha de registro cuando el animal fue comprado o adquirido.</mat-hint>
+              <mat-datepicker-toggle matIconSuffix [for]="admissionDatePicker" />
+              <mat-datepicker #admissionDatePicker />
+            </mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Peso (kg)</mat-label><input matInput type="number" min="0" formControlName="weightKg" /></mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Madre</mat-label>
-              <mat-select formControlName="motherAnimalUuid">
-                <mat-option [value]="null">Sin madre registrada</mat-option>
+              <input matInput formControlName="motherSearch" [matAutocomplete]="motherAutocomplete" placeholder="Buscar por arete, marca o tatuaje" />
+              <mat-autocomplete #motherAutocomplete="matAutocomplete" (optionSelected)="selectParent('mother', $event)">
+                <mat-option [value]="NO_PARENT_VALUE">Sin madre registrada</mat-option>
                 @for (mother of motherOptions(); track mother.uuid) {
                   <mat-option [value]="mother.uuid">{{ parentLabel(mother) }}</mat-option>
                 }
-              </mat-select>
+              </mat-autocomplete>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Padre</mat-label>
-              <mat-select formControlName="fatherAnimalUuid">
-                <mat-option [value]="null">Sin padre registrado</mat-option>
+              <input matInput formControlName="fatherSearch" [matAutocomplete]="fatherAutocomplete" placeholder="Buscar por arete, marca o tatuaje" />
+              <mat-autocomplete #fatherAutocomplete="matAutocomplete" (optionSelected)="selectParent('father', $event)">
+                <mat-option [value]="NO_PARENT_VALUE">Sin padre registrado</mat-option>
                 @for (father of fatherOptions(); track father.uuid) {
                   <mat-option [value]="father.uuid">{{ parentLabel(father) }}</mat-option>
                 }
-              </mat-select>
+              </mat-autocomplete>
             </mat-form-field>
 
             <div class="parent-summary form-field--full">
@@ -193,8 +207,8 @@ export class AnimalFormPageComponent {
   private readonly formBuilder = inject(FormBuilder);
   private readonly uuid = this.route.snapshot.paramMap.get('uuid');
 
-  readonly categoryOptions = ANIMAL_CATEGORY_OPTIONS;
   readonly sexOptions = ANIMAL_SEX_OPTIONS;
+  readonly NO_PARENT_VALUE = NO_PARENT_VALUE;
   readonly animal = signal<AnimalItem | null>(null);
   readonly parentCandidates = signal<AnimalItem[]>([]);
   readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
@@ -211,14 +225,15 @@ export class AnimalFormPageComponent {
       ownerGanaderoId: ['', this.canSelectOwner() ? [Validators.required] : []],
       motherAnimalUuid: [null as string | null],
       fatherAnimalUuid: [null as string | null],
+      motherSearch: [''],
+      fatherSearch: [''],
       arete: [''],
       marca: [''],
       tatuaje: [''],
-      category: [ANIMAL_CATEGORY.VACA as AnimalCategory, [Validators.required]],
+      category: [ANIMAL_CATEGORY.VACA as AnimalCategory | null, [Validators.required]],
       sex: [ANIMAL_SEX.HEMBRA as AnimalSex, [Validators.required]],
-      active: [true, [Validators.required]],
-      birthDate: [''],
-      admissionDate: ['', [Validators.required]],
+      birthDate: [null as Date | string | null],
+      admissionDate: [null as Date | string | null, [Validators.required]],
       weightKg: [null as number | null, [Validators.min(0)]],
     },
     { validators: [visibleIdentifierValidator, categorySexValidator, birthDateRequiredForYoungAnimalsValidator] },
@@ -232,15 +247,20 @@ export class AnimalFormPageComponent {
     weightKg: { min: 'El peso no puede ser negativo.' },
   };
 
-  constructor() { void this.load(); }
+  constructor() {
+    this.form.controls.sex.valueChanges.subscribe((sex) => this.resetCategoryIfInvalid(sex));
+    void this.load();
+  }
 
   goBack() { void this.router.navigateByUrl(this.uuid ? `${this.routeBase()}/${this.uuid}` : this.routeBase()); }
 
-  parentLabel(animal: AnimalItem) { return [animal.arete, animal.marca].filter((value): value is string => Boolean(value)).join(' · ') || 'Animal sin identificador'; }
+  parentLabel(animal: AnimalItem) { return [animal.arete, animal.marca, animal.tatuaje].filter((value): value is string => Boolean(value)).join(' · ') || 'Animal sin identificador'; }
 
-  motherOptions() { return this.parentCandidatesForSelectedOwner().filter((animal) => animal.sex === ANIMAL_SEX.HEMBRA); }
+  categoryOptions() { return categoryOptionsForSex(this.form.controls.sex.value); }
 
-  fatherOptions() { return this.parentCandidatesForSelectedOwner().filter((animal) => animal.sex === ANIMAL_SEX.MACHO); }
+  motherOptions() { return this.filterParentOptions(ANIMAL_SEX.HEMBRA, this.form.controls.motherSearch.value); }
+
+  fatherOptions() { return this.filterParentOptions(ANIMAL_SEX.MACHO, this.form.controls.fatherSearch.value); }
 
   parentOptionsLabel() {
     const labels = [...this.motherOptions(), ...this.fatherOptions()].map((animal) => this.parentLabel(animal));
@@ -248,6 +268,23 @@ export class AnimalFormPageComponent {
   }
 
   imageAlt() { return `Foto de ${this.animal()?.arete || this.form.controls.arete.value || 'animal sin identificador'}`; }
+
+  selectParent(kind: 'mother' | 'father', event: MatAutocompleteSelectedEvent) {
+    const selectedUuid = event.option.value as string;
+    const uuidControl = kind === 'mother' ? this.form.controls.motherAnimalUuid : this.form.controls.fatherAnimalUuid;
+    const searchControl = kind === 'mother' ? this.form.controls.motherSearch : this.form.controls.fatherSearch;
+    const options = kind === 'mother' ? this.motherOptions() : this.fatherOptions();
+
+    if (selectedUuid === NO_PARENT_VALUE) {
+      uuidControl.setValue(null);
+      searchControl.setValue('');
+      return;
+    }
+
+    const selectedParent = options.find((animal) => animal.uuid === selectedUuid) ?? null;
+    uuidControl.setValue(selectedParent?.uuid ?? null);
+    searchControl.setValue(selectedParent ? this.parentLabel(selectedParent) : '');
+  }
 
   showVisibleIdentifiersError() { return this.form.hasError('visibleIdentifierRequired') && (this.form.touched || this.form.dirty); }
   showCategorySexError() { return this.form.hasError('categorySexMismatch') && (this.form.touched || this.form.dirty); }
@@ -297,11 +334,12 @@ export class AnimalFormPageComponent {
           tatuaje: animal.tatuaje ?? '',
           category: animal.category,
           sex: animal.sex ?? inferAnimalSexFromCategory(animal.category),
-          active: animal.active,
-          birthDate: animal.birthDate ?? '',
-          admissionDate: animal.admissionDate,
+          birthDate: dateFromIsoDate(animal.birthDate),
+          admissionDate: dateFromIsoDate(animal.admissionDate),
           weightKg: animal.weightKg,
         });
+        this.form.controls.motherSearch.setValue(this.parentSearchLabel(animal.motherAnimalUuid));
+        this.form.controls.fatherSearch.setValue(this.parentSearchLabel(animal.fatherAnimalUuid));
         this.images.set((await firstValueFrom(this.imagesService.listImages(this.uuid))).filter((image) => Boolean(image.previewUrl)));
       } else if (this.ownerOptions()[0]) {
         this.form.controls.ownerGanaderoId.setValue(this.ownerOptions()[0].id);
@@ -328,11 +366,31 @@ export class AnimalFormPageComponent {
       tatuaje: normalizeOptionalText(value.tatuaje),
       category: value.category ?? ANIMAL_CATEGORY.VACA,
       sex: value.sex ?? inferAnimalSexFromCategory(value.category ?? ANIMAL_CATEGORY.VACA),
-      active: Boolean(value.active),
-      birthDate: normalizeOptionalText(value.birthDate),
-      admissionDate: value.admissionDate ?? '',
+      active: this.animal()?.active ?? true,
+      birthDate: isoDateFromControlValue(value.birthDate),
+      admissionDate: isoDateFromControlValue(value.admissionDate) ?? '',
       weightKg: value.weightKg ?? null,
     };
+  }
+
+  private resetCategoryIfInvalid(sex: AnimalSex | null) {
+    const category = this.form.controls.category.value;
+    if (category && !categoryOptionsForSex(sex).some((option) => option.value === category)) {
+      this.form.controls.category.setValue(null);
+    }
+  }
+
+  private filterParentOptions(sex: AnimalSex, search: string | null) {
+    const normalizedSearch = normalizeOptionalText(search)?.toLocaleLowerCase('es') ?? '';
+    return this.parentCandidatesForSelectedOwner()
+      .filter((animal) => animal.sex === sex)
+      .filter((animal) => !normalizedSearch || parentSearchText(animal).includes(normalizedSearch))
+      .slice(0, 10);
+  }
+
+  private parentSearchLabel(uuid: string | null | undefined) {
+    const parent = this.parentCandidates().find((animal) => animal.uuid === uuid);
+    return parent ? this.parentLabel(parent) : '';
   }
 
   private parentCandidatesForSelectedOwner() {
@@ -369,4 +427,35 @@ const birthDateRequiredForYoungAnimalsValidator: ValidatorFn = (control: Abstrac
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+const NO_PARENT_VALUE = '__NO_PARENT__';
+
+function categoryOptionsForSex(sex: AnimalSex | null) {
+  const allowedCategories = sex === ANIMAL_SEX.MACHO
+    ? [ANIMAL_CATEGORY.TERNERO, ANIMAL_CATEGORY.TORO, ANIMAL_CATEGORY.BUEY]
+    : [ANIMAL_CATEGORY.VACA, ANIMAL_CATEGORY.VAQUILLONA, ANIMAL_CATEGORY.TERNERA];
+
+  return allowedCategories.map((category) => ANIMAL_CATEGORY_OPTIONS.find((option) => option.value === category)!);
+}
+
+function parentSearchText(animal: AnimalItem) {
+  return [animal.arete, animal.marca, animal.tatuaje]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLocaleLowerCase('es');
+}
+
+function dateFromIsoDate(value: string | null | undefined) {
+  return value ? new Date(`${value}T00:00:00`) : null;
+}
+
+function isoDateFromControlValue(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  return normalizeOptionalText(value);
 }

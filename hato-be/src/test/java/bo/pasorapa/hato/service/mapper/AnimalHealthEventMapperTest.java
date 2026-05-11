@@ -2,6 +2,7 @@ package bo.pasorapa.hato.service.mapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
@@ -109,7 +110,7 @@ class AnimalHealthEventMapperTest {
                         "metadata", Map.of(
                                 "visit", visit,
                                 "checklist", List.of(),
-                                "clinicalNote", Map.of("reason", "Cojera"),
+                                "clinicalNote", Map.of("reason", "Cojera", "findings", "Cojera leve sin fiebre"),
                                 "protocol", Map.of("status", "CLOSED"))),
                 OffsetDateTime.parse("2026-04-27T10:05:00Z"));
 
@@ -311,6 +312,118 @@ class AnimalHealthEventMapperTest {
                 OffsetDateTime.parse("2026-04-27T10:05:00Z")));
 
         assertEquals("ANIMAL_HEALTH_EVENT_ATTACHMENTS_NOT_SUPPORTED", exception.getMessage());
+    }
+
+    @Test
+    void shouldAcceptCostOnlyForFieldVetVisitAndRejectItForVaccination() {
+        Map<String, Object> fieldVetMetadata = new java.util.LinkedHashMap<>(validFieldVetMetadata("VISIT-COST", "STARTED", null));
+        fieldVetMetadata.put("cost", Map.of("amount", 150, "currency", "BOB"));
+
+        var request = mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", fieldVetMetadata),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z"));
+
+        assertEquals(Map.of("amount", 150, "currency", "BOB"), mapper.readCost(request.metadata()));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "VACCINATION",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of("productName", "Clostridial", "cost", Map.of("amount", 150, "currency", "BOB"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_ATTACHMENTS_NOT_SUPPORTED", exception.getMessage());
+    }
+
+    @Test
+    void shouldRequireCancelReasonForCanceledFieldVetVisit() {
+        Map<String, Object> visit = new java.util.LinkedHashMap<>(validVisitBlock("VISIT-CANCEL"));
+        visit.put("status", "CANCELADA");
+        visit.remove("atencionNotas");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "visit", visit,
+                                "checklist", List.of(),
+                                "clinicalNote", Map.of("reason", "Control"),
+                                "protocol", Map.of("status", "CLOSED"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_CANCEL_REASON_REQUIRED", exception.getMessage());
+    }
+
+    @Test
+    void shouldRequireFindingsForAttendedFieldVetVisit() {
+        Map<String, Object> visit = new java.util.LinkedHashMap<>(validVisitBlock("VISIT-ATTENDED-FINDINGS"));
+        visit.put("status", "ATENDIDA");
+        visit.put("atencionNotas", "Se atendió y queda estable.");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "visit", visit,
+                                "checklist", List.of(),
+                                "clinicalNote", Map.of("reason", "Cojera"),
+                                "protocol", Map.of("status", "STARTED"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_FINDINGS_REQUIRED", exception.getMessage());
+    }
+
+    @Test
+    void shouldReadCancelReasonAndNormalizeTreatmentPlanVariants() {
+        assertEquals("Motivo clínico documentado", mapper.readCancelReason(Map.of(
+                "visit", Map.of("cancelReason", " Motivo clínico documentado "))));
+        assertEquals(List.of("Aplicar antibiótico", "Revisar en 7 días"), mapper.readTreatmentPlan(Map.of(
+                "treatmentPlan", List.of(
+                        Map.of("description", "Aplicar antibiótico", "order", 2),
+                        Map.of("description", "Revisar en 7 días", "order", 3)))));
+        assertEquals(List.of("Reposo y observación"), mapper.readTreatmentPlan(Map.of(
+                "clinicalNote", Map.of("plan", " Reposo y observación "))));
+        assertNull(mapper.readCost(Map.of()));
+    }
+
+    @Test
+    void shouldRejectInvalidTreatmentPlanSteps() {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(validFieldVetMetadata("VISIT-PLAN", "STARTED", null));
+        metadata.put("treatmentPlan", List.of(Map.of("description", "", "order", 1)));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", metadata),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_REQUIRED", exception.getMessage());
     }
 
     @Test

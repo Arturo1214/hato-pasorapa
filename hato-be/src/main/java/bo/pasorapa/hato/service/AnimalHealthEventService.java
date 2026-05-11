@@ -20,6 +20,7 @@ import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -211,7 +212,29 @@ public class AnimalHealthEventService {
                 nextControlAt,
                 "GLOBAL".equalsIgnoreCase(mode) ? null : representative.getAnimal().getUuid(),
                 resolveTargetAnimalCount(visit, group.size()),
-                readAtencionNotas(visit, metadata));
+                readAtencionNotas(visit, metadata),
+                readCostAmount(metadata),
+                readCostCurrency(metadata),
+                animalHealthEventMapper.readTreatmentPlan(metadata));
+    }
+
+    private BigDecimal readCostAmount(Map<String, Object> metadata) {
+        Map<String, Object> cost = animalHealthEventMapper.readCost(metadata);
+        if (cost == null || !(cost.get("amount") instanceof Number amount)) {
+            return null;
+        }
+        if (amount instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        return BigDecimal.valueOf(amount.doubleValue());
+    }
+
+    private String readCostCurrency(Map<String, Object> metadata) {
+        Map<String, Object> cost = animalHealthEventMapper.readCost(metadata);
+        if (cost == null) {
+            return null;
+        }
+        return readText(cost.get("currency"));
     }
 
     private Integer resolveTargetAnimalCount(Map<String, Object> visit, int groupSize) {

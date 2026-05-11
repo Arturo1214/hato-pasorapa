@@ -313,6 +313,51 @@ class AnimalHealthEventServiceTest {
     }
 
     @Test
+    void shouldProjectFieldVetVisitCostAndTreatmentPlanFromMetadata() {
+        UUID animalUuid = UUID.fromString("12e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-COST-PLAN",
+                "SPECIFIC",
+                "ATENDIDA",
+                "Dra. Camila",
+                1,
+                "2026-05-10T08:00:00",
+                Map.of("amount", new BigDecimal("150.50"), "currency", "BOB"),
+                List.of("Aplicar antibiótico", "Revisar en 7 días"));
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.mode = "SPECIFIC";
+        filter.page = 0;
+        filter.size = 20;
+
+        var item = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).items().get(0);
+
+        assertEquals(0, new BigDecimal("150.50").compareTo(item.costo()));
+        assertEquals("BOB", item.costCurrency());
+        assertEquals(List.of("Aplicar antibiótico", "Revisar en 7 días"), item.treatmentPlan());
+    }
+
+    @Test
+    void shouldProjectLegacyStringPlanAndNullCostForFieldVetVisits() {
+        UUID animalUuid = UUID.fromString("13e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-PLAN", "SPECIFIC", "ATENDIDA", "Dr. Luis", 1, "2026-05-11T08:00:00");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.mode = "SPECIFIC";
+        filter.page = 0;
+        filter.size = 20;
+
+        var item = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).items().get(0);
+
+        assertEquals(null, item.costo());
+        assertEquals(null, item.costCurrency());
+        assertEquals(List.of("Seguimiento"), item.treatmentPlan());
+    }
+
+    @Test
     void shouldAcceptFieldVetVisitLifecycleContinuityAndRejectReopeningClosedChain() {
         UUID animalUuid = UUID.fromString("9ae6c94d-4f97-47f1-9c27-db25b2d28cc4");
         seedAnimal(animalUuid);
@@ -416,7 +461,38 @@ class AnimalHealthEventServiceTest {
             String veterinarianName,
             int targetAnimalCount,
             String occurredAt) {
+        seedFieldVetEvent(animalUuid, visitId, mode, status, veterinarianName, targetAnimalCount, occurredAt, null, null);
+    }
+
+    private void seedFieldVetEvent(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            String veterinarianName,
+            int targetAnimalCount,
+            String occurredAt,
+            Map<String, Object> cost,
+            List<String> treatmentPlan) {
         QuarkusTransaction.requiringNew().run(() -> {
+            LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("visit", Map.of(
+                    "visitId", visitId,
+                    "mode", mode,
+                    "status", status,
+                    "veterinarian", Map.of("name", veterinarianName),
+                    "targetAnimalCount", targetAnimalCount,
+                    "atencionNotas", "Atención " + visitId));
+            metadata.put("checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)));
+            metadata.put("clinicalNote", Map.of(
+                    "reason", "Control",
+                    "findings", "Ok",
+                    "plan", treatmentPlan == null ? "Seguimiento" : treatmentPlan));
+            metadata.put("protocol", Map.of("status", "STARTED"));
+            if (cost != null) {
+                metadata.put("cost", cost);
+            }
+
             var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
             event.setEventId(UUID.randomUUID());
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
@@ -427,17 +503,7 @@ class AnimalHealthEventServiceTest {
             event.setPerformedByUserId(USER_ID);
             event.setSourceChannel("OFFLINE");
             event.setOperationId(UUID.randomUUID());
-            event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(Map.of(
-                    "visit", Map.of(
-                            "visitId", visitId,
-                            "mode", mode,
-                            "status", status,
-                            "veterinarian", Map.of("name", veterinarianName),
-                            "targetAnimalCount", targetAnimalCount,
-                            "atencionNotas", "Atención " + visitId),
-                    "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)),
-                    "clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguimiento"),
-                    "protocol", Map.of("status", "STARTED"))));
+            event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(metadata));
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
             event.setUpdatedAt(event.getCreatedAt());
             animalHealthEventRepository.persist(event);

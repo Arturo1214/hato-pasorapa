@@ -115,6 +115,9 @@ class VetVisitResourceTest {
                 .body("items[0].animalUuid", nullValue())
                 .body("items[0].targetAnimalCount", equalTo(2))
                 .body("items[0].atencionNotas", equalTo("Campaña inicial"))
+                .body("items[0].costo", nullValue())
+                .body("items[0].costCurrency", nullValue())
+                .body("items[0].treatmentPlan", equalTo(List.of("Seguir")))
                 .body("page", equalTo(0))
                 .body("size", equalTo(1))
                 .body("total", equalTo(1));
@@ -140,6 +143,30 @@ class VetVisitResourceTest {
                 .body("items[0].visitId", equalTo("VISIT-SPECIFIC-OWN"))
                 .body("items[0].animalUuid", equalTo(SPECIFIC_ANIMAL.toString()))
                 .body("total", equalTo(1));
+    }
+
+    @Test
+    void shouldProjectVetVisitCostCurrencyAndTreatmentPlanInListResponse() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        Map<String, Object> metadata = new LinkedHashMap<>(vetVisitMetadata("VISIT-COST-1", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Atención puntual"));
+        metadata.put("cost", Map.of("amount", new BigDecimal("150.50"), "currency", "BOB"));
+        metadata.put("clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", List.of("Antibiótico", "Control en 7 días")));
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-600", metadata);
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("mode", "SPECIFIC")
+                .when()
+                .get("/api/vet-visits")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].visitId", equalTo("VISIT-COST-1"))
+                .body("items[0].costo", equalTo(150.50f))
+                .body("items[0].costCurrency", equalTo("BOB"))
+                .body("items[0].treatmentPlan", equalTo(List.of("Antibiótico", "Control en 7 días")));
     }
 
     private String loginAs(String username, String password) {

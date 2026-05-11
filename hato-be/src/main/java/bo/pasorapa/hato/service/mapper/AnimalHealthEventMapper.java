@@ -8,9 +8,11 @@ import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,7 +149,7 @@ public class AnimalHealthEventMapper {
     }
 
     public void validateMetadata(AnimalHealthEventType type, Map<String, Object> metadata, String notes) {
-        rejectOutOfScopeAttachments(metadata);
+        rejectOutOfScopeAttachments(type, metadata);
 
         switch (type) {
             case VACCINATION, DEWORMING -> requireText(metadata.get("productName"), "ANIMAL_HEALTH_EVENT_PRODUCT_NAME_REQUIRED");
@@ -191,6 +193,28 @@ public class AnimalHealthEventMapper {
         return visit == null ? null : readOptionalText(visit.get("status"));
     }
 
+    public Map<String, Object> readCost(Map<String, Object> metadata) {
+        Map<String, Object> cost = readOptionalMap(metadata.get("cost"));
+        return cost == null ? null : cost;
+    }
+
+    public List<String> readTreatmentPlan(Map<String, Object> metadata) {
+        Map<String, Object> clinicalNote = readOptionalMap(metadata.get("clinicalNote"));
+        if (clinicalNote != null && clinicalNote.get("plan") != null) {
+            return readPlanDescriptions(clinicalNote.get("plan"), "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_INVALID");
+        }
+        if (metadata.get("treatmentPlan") != null) {
+            return readOrderedTreatmentPlan(metadata.get("treatmentPlan"));
+        }
+        return null;
+    }
+
+    public String readCancelReason(Map<String, Object> metadata) {
+        Map<String, Object> visit = readOptionalMap(metadata.get("visit"));
+        String visitReason = visit == null ? null : readOptionalText(visit.get("cancelReason"));
+        return visitReason == null ? readOptionalText(metadata.get("cancelReason")) : visitReason;
+    }
+
     public OffsetDateTime readNextDueAt(Map<String, Object> metadata) {
         Map<String, Object> visit = readOptionalMap(metadata.get("visit"));
         if (visit != null && visit.get("nextControlAt") != null) {
@@ -221,13 +245,15 @@ public class AnimalHealthEventMapper {
         return FIELD_VET_CHECKLIST_CODES;
     }
 
-    private void rejectOutOfScopeAttachments(Map<String, Object> metadata) {
+    private void rejectOutOfScopeAttachments(AnimalHealthEventType type, Map<String, Object> metadata) {
         boolean containsUnsupportedField = collectMetadataKeys(metadata).stream().anyMatch(key -> key.contains("attachment")
                 || key.contains("image")
                 || key.contains("multimedia")
                 || key.contains("billing")
-                || key.contains("cost")
+                || (key.contains("cost") && type != AnimalHealthEventType.FIELD_VET_VISIT)
+                || key.contains("costo")
                 || key.contains("price")
+                || ("amount".equals(key) && type != AnimalHealthEventType.FIELD_VET_VISIT)
                 || key.contains("prescription"));
 
         if (containsUnsupportedField) {
@@ -268,6 +294,9 @@ public class AnimalHealthEventMapper {
         if (!FIELD_VET_VISIT_STATUSES.contains(visitStatus)) {
             throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_VISIT_STATUS_INVALID");
         }
+        if ("CANCELED".equals(visitStatus) || "CANCELADA".equals(visitStatus)) {
+            requireTextBetween(readCancelReason(metadata), 5, 500, "ANIMAL_HEALTH_EVENT_VET_CANCEL_REASON_REQUIRED");
+        }
         Map<String, Object> veterinarian = requireMap(visit.get("veterinarian"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_REQUIRED");
         requireText(veterinarian.get("name"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_NAME_REQUIRED");
         readOptionalText(veterinarian.get("license"));
@@ -300,8 +329,20 @@ public class AnimalHealthEventMapper {
 
         Map<String, Object> clinicalNote = requireMap(metadata.get("clinicalNote"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_NOTE_REQUIRED");
         requireText(clinicalNote.get("reason"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_REASON_REQUIRED");
-        readOptionalText(clinicalNote.get("findings"));
-        readOptionalText(clinicalNote.get("plan"));
+        String findings = readOptionalText(clinicalNote.get("findings"));
+        if (("ATTENDED".equals(visitStatus) || "ATENDIDA".equals(visitStatus) || "FINALIZED".equals(visitStatus) || "FINALIZADA".equals(visitStatus))
+                && findings == null) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_FINDINGS_REQUIRED");
+        }
+        if (clinicalNote.get("plan") != null) {
+            readPlanDescriptions(clinicalNote.get("plan"), "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_INVALID");
+        }
+        if (metadata.get("treatmentPlan") != null) {
+            readOrderedTreatmentPlan(metadata.get("treatmentPlan"));
+        }
+        if (metadata.get("cost") != null) {
+            validateCost(metadata.get("cost"));
+        }
 
         Map<String, Object> protocol = requireMap(metadata.get("protocol"), "ANIMAL_HEALTH_EVENT_VET_PROTOCOL_REQUIRED");
         String status = requireText(protocol.get("status"), "ANIMAL_HEALTH_EVENT_VET_PROTOCOL_STATUS_REQUIRED");
@@ -320,6 +361,86 @@ public class AnimalHealthEventMapper {
         List<String> keys = new ArrayList<>();
         collectMetadataKeys(metadata, keys);
         return keys;
+    }
+
+    private void validateCost(Object rawCost) {
+        Map<String, Object> cost = requireMap(rawCost, "ANIMAL_HEALTH_EVENT_VET_COST_INVALID");
+        Object amount = cost.get("amount");
+        if (!(amount instanceof Number number) || !isFinite(number) || BigDecimal.valueOf(number.doubleValue()).compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_COST_AMOUNT_INVALID");
+        }
+        String currency = requireText(cost.get("currency"), "ANIMAL_HEALTH_EVENT_VET_COST_CURRENCY_REQUIRED");
+        if (!"BOB".equals(currency)) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_COST_CURRENCY_INVALID");
+        }
+    }
+
+    private boolean isFinite(Number number) {
+        if (number instanceof Double doubleValue) {
+            return Double.isFinite(doubleValue);
+        }
+        if (number instanceof Float floatValue) {
+            return Float.isFinite(floatValue);
+        }
+        return true;
+    }
+
+    private List<String> readPlanDescriptions(Object value, String errorCode) {
+        if (value instanceof String text) {
+            String normalized = requireText(text, "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_REQUIRED");
+            return List.of(normalized);
+        }
+        if (!(value instanceof Iterable<?> iterable)) {
+            throw new IllegalArgumentException(errorCode);
+        }
+        List<String> steps = new ArrayList<>();
+        for (Object item : iterable) {
+            String description = requireText(item, "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_REQUIRED");
+            requireMaxLength(description, 300, "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_TOO_LONG");
+            steps.add(description);
+        }
+        validateTreatmentPlanSize(steps.size());
+        return steps;
+    }
+
+    private List<String> readOrderedTreatmentPlan(Object value) {
+        List<Map<String, Object>> steps = requireListOfMaps(value, "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_INVALID");
+        validateTreatmentPlanSize(steps.size());
+        return steps.stream()
+                .sorted(Comparator.comparingInt(this::readTreatmentPlanOrder))
+                .map(step -> {
+                    String description = requireText(step.get("description"), "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_REQUIRED");
+                    requireMaxLength(description, 300, "ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_DESCRIPTION_TOO_LONG");
+                    return description;
+                })
+                .toList();
+    }
+
+    private int readTreatmentPlanOrder(Map<String, Object> step) {
+        if (!(step.get("order") instanceof Number number)) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_STEP_ORDER_REQUIRED");
+        }
+        return number.intValue();
+    }
+
+    private void validateTreatmentPlanSize(int size) {
+        if (size > 20) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_TREATMENT_PLAN_TOO_LONG");
+        }
+    }
+
+    private String requireTextBetween(String value, int minLength, int maxLength, String errorCode) {
+        String text = requireText(value, errorCode);
+        if (text.length() < minLength || text.length() > maxLength) {
+            throw new IllegalArgumentException(errorCode);
+        }
+        return text;
+    }
+
+    private void requireMaxLength(String value, int maxLength, String errorCode) {
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(errorCode);
+        }
     }
 
     private void collectMetadataKeys(Object value, List<String> keys) {

@@ -92,27 +92,27 @@ Chain strategy: feature-branch-chain
 
 ### 3.1 Frontend — VetVisitCancelDialogComponent
 
-- [ ] 3.1.1 Create `vet-visit-cancel-dialog.component.ts` in `features/admin/vet-visits/`
-- [ ] 3.1.2 Dialog template: `MatDialogTitle` "Cancelar visita", `TextareaFormField` "Motivo de cancelación" (`MatFormField` with `MatInput`), `MatDialogActions` with Cancel and Confirm buttons
-- [ ] 3.1.3 Validation: `confirmValidators` require `cancelReason.length >= 5`; confirm button disabled until valid (using `mat-dialog-confirm` pattern)
-- [ ] 3.1.4 Return `Observable<{ cancelReason: string }>` on confirm, `null` on cancel/close
-- [ ] 3.1.5 Add Spanish i18n labels and error messages for min-length validation
+- [x] 3.1.1 Create `vet-visit-cancel-dialog.component.ts` in `features/admin/vet-visits/`
+- [x] 3.1.2 Dialog template: `MatDialogTitle` "Cancelar visita", `TextareaFormField` "Motivo de cancelación" (`MatFormField` with `MatInput`), `MatDialogActions` with Cancel and Confirm buttons
+- [x] 3.1.3 Validation: `confirmValidators` require `cancelReason.length >= 5`; confirm button disabled until valid (using `mat-dialog-confirm` pattern)
+- [x] 3.1.4 Return `Observable<{ cancelReason: string }>` on confirm, `null` on cancel/close
+- [x] 3.1.5 Add Spanish i18n labels and error messages for min-length validation
 
 ### 3.2 Frontend — VetVisitFormDialogComponent: extend for attend
 
-- [ ] 3.2.1 Add `action: 'create' | 'attend' | 'reschedule' | 'followUp'` input to dialog
-- [ ] 3.2.2 **TDD RED**: Add spec — `action='attend'` mode shows `findings` (required), `notas` (optional), `costo` (optional, number input), `Plan de tratamiento` section with dynamic step list
-- [ ] 3.2.3 **GREEN**: When `action='attend'`, show `findings: MatFormField` (required, min 5 chars), `notas: MatFormField` (optional textarea), `costo: MatFormField` (number input with BOB suffix), and `Plan de tratamiento` section
-- [ ] 3.2.4 **GREEN**: Implement dynamic treatmentPlan step list: "Agregar paso" button adds `{ description: '' }` row; each row has text input + delete icon; drag handle for reorder (CDK DragDrop)
-- [ ] 3.2.5 **GREEN**: Add follow-up/finalize choice at bottom of attend form: radio group with "Programar próximo control" (shows nextDueAt date picker) and "Finalizar tratamiento" (no date)
-- [ ] 3.2.6 Validation: findings required, cost >= 0 if provided, treatmentPlan max 20 steps, each step description 1..300 chars
-- [ ] 3.2.7 When user selects "Programar próximo control", set `visit.nextControlAt` and `protocol.status = 'FOLLOW_UP_REQUIRED'`; when "Finalizar", set `protocol.status = 'CLOSED'`
+- [x] 3.2.1 Add `action: 'create' | 'attend' | 'reschedule' | 'followUp'` input to dialog
+- [x] 3.2.2 **TDD RED**: Add spec — `action='attend'` mode shows `findings` (required), `notas` (optional), `costo` (optional, number input), `Plan de tratamiento` section with dynamic step list
+- [x] 3.2.3 **GREEN**: When `action='attend'`, show `findings: MatFormField` (required, min 5 chars), `notas: MatFormField` (optional textarea), `costo: MatFormField` (number input with BOB suffix), and `Plan de tratamiento` section
+- [x] 3.2.4 **GREEN**: Implement dynamic treatmentPlan step list: "Agregar paso" button adds `{ description: '' }` row; each row has text input + delete icon; drag handle for reorder (CDK DragDrop)
+- [x] 3.2.5 **GREEN**: Add follow-up/finalize choice at bottom of attend form: radio group with "Programar próximo control" (shows nextDueAt date picker) and "Finalizar tratamiento" (no date)
+- [x] 3.2.6 Validation: findings required, cost >= 0 if provided, treatmentPlan max 20 steps, each step description 1..300 chars
+- [x] 3.2.7 When user selects "Programar próximo control", set `visit.nextControlAt` and `protocol.status = 'FOLLOW_UP_REQUIRED'`; when "Finalizar", set `protocol.status = 'CLOSED'`
 
 ### 3.3 Frontend — VetVisitFormDialogComponent: handle cancel action
 
 - [ ] 3.3.1 When `action='cancel'`, dialog shows only cancel reason field (reuse or simplify — consider composing VetVisitCancelDialog instead of duplicating)
 - [ ] 3.3.2 Alternative: call `VetVisitCancelDialogComponent` from within form dialog as sub-flow
-- [ ] 3.3.3 Decision: prefer composition — import and open `VetVisitCancelDialogComponent` from within `VetVisitsPageComponent` before opening form dialog for cancel; form dialog handles create/attend/reschedule only
+- [x] 3.3.3 Decision: prefer composition — import and open `VetVisitCancelDialogComponent` from within `VetVisitsPageComponent` before opening form dialog for cancel; form dialog handles create/attend/reschedule only
 
 ---
 
@@ -145,8 +145,8 @@ Chain strategy: feature-branch-chain
 
 ### 5.2 Frontend tests
 
-- [ ] 5.2.1 `vet-visit-cancel-dialog.component.spec.ts` — renders, validates min-length, returns cancelReason on confirm, null on cancel
-- [ ] 5.2.2 `vet-visit-form-dialog.component.spec.ts` — action=attend shows all clinical fields, validates findings required, cost >= 0, treatmentPlan max 20 steps, follow-up vs finalize radio works
+- [x] 5.2.1 `vet-visit-cancel-dialog.component.spec.ts` — renders, validates min-length, returns cancelReason on confirm, null on cancel
+- [x] 5.2.2 `vet-visit-form-dialog.component.spec.ts` — action=attend shows all clinical fields, validates findings required, cost >= 0, treatmentPlan max 20 steps, follow-up vs finalize radio works
 - [ ] 5.2.3 `vet-visits-page.component.spec.ts` — row actions show correct buttons by state, cancel flow opens dialog and sends correct payload, attend flow opens dialog and creates follow-up event when selected
 - [ ] 5.2.4 `vet-visit-form.mapper.spec.ts` — cancel action mapping, attend action mapping, legacy plan normalization
 

@@ -4,7 +4,7 @@
 **Artifact store**: hybrid (OpenSpec + Engram)
 **Delivery strategy**: auto-chain
 **Chain strategy**: feature-branch-chain
-**Current PR slice**: PR 2 — Frontend contracts/mapper: offline types, vet visit list DTO parsing, form mapper payload contract
+**Current PR slice**: PR 3 — FE dialogs: cancel dialog + attend form UI/validation
 
 ## Completed Tasks
 
@@ -39,6 +39,21 @@
 - [x] 2.3.4 Map attend action to `visit.status='ATTENDED'`, clinical fields, cost, plan, and protocol status from follow-up choice.
 - [x] 2.3.5 Normalize legacy plan string into a single-step array.
 - [x] 2.3.6 Export `normalizePlan()` helper for backward-compatible plan normalization.
+- [x] 3.1.1 Create standalone `VetVisitCancelDialogComponent`.
+- [x] 3.1.2 Add Spanish cancel dialog template with reason textarea and dialog actions.
+- [x] 3.1.3 Require cancellation reason length >= 5 and disable confirm until valid.
+- [x] 3.1.4 Return `{ cancelReason }` on confirm and `null` on cancel.
+- [x] 3.1.5 Add Spanish labels and min-length validation message.
+- [x] 3.2.1 Add `action: 'create' | 'attend' | 'reschedule' | 'followUp'` dialog input.
+- [x] 3.2.2 Add RED attend-mode dialog specs for clinical fields, cost, treatment plan, validation, and follow-up/finalize choice.
+- [x] 3.2.3 Render attend-mode findings, attention notes, cost with BOB suffix, and treatment plan section.
+- [x] 3.2.4 Implement dynamic treatment plan step list with add/remove controls and CDK drag handle support.
+- [x] 3.2.5 Add radio choice for `Programar próximo control` vs `Finalizar tratamiento` with datepicker for follow-up.
+- [x] 3.2.6 Validate findings, non-negative cost, max 20 treatment steps, and step length.
+- [x] 3.2.7 Return attend dialog result with `nextDueAt` for follow-up or `null` for finalize, ready for PR4 mapper/page wiring.
+- [x] 3.3.3 Keep cancel as composed standalone dialog; form dialog remains scoped to create/attend/reschedule/follow-up actions.
+- [x] 5.2.1 Add cancel dialog component tests for rendering, validation, confirm result, and cancel result.
+- [x] 5.2.2 Add attend form dialog component tests for clinical fields, validation, treatment plan dynamics, and follow-up/finalize choice.
 
 ## TDD Cycle Evidence
 
@@ -51,6 +66,9 @@
 | 2.1 Offline metadata types | `vet-visit-form.mapper.spec.ts` | Type compile + unit | ✅ 7/7 focused FE baseline passed with Node 20.19.6 | ✅ RED compile failed for missing `cancelReason`, `cost`, `treatmentPlan`, and `plan: string[]` typed fields | ✅ Focused mapper/service specs passed: 14/14 | ✅ Cost, cancel reason, string-array plan, and legacy string plan compile/exercise typed metadata | ➖ Structural type extension; no runtime refactor needed |
 | 2.2 VetVisitsService DTO parsing | `vet-visits.service.spec.ts` | Unit | ✅ 7/7 focused FE baseline passed with Node 20.19.6 | ✅ RED compile/runtime failed before `VetVisitItem` exposed new fields and list mapping normalized them | ✅ Focused mapper/service specs passed: 14/14 | ✅ Backend DTO with cost/plan and legacy DTO without fields | ✅ Added dedicated normalization helpers for status, veterinarian, strings, and treatment plan |
 | 2.3 VetVisitFormMapper payload contract | `vet-visit-form.mapper.spec.ts` | Unit | ✅ 7/7 focused FE baseline passed with Node 20.19.6 | ✅ RED compile failed for missing `action`, `normalizePlan`, `cost`, `treatmentPlan`, `cancelReason`; cancel validation missing | ✅ Focused mapper/service specs passed: 14/14 | ✅ Cancel happy/error, attend follow-up, attend finalize, legacy string plan normalization | ✅ Extracted `normalizePlan`, visit status, and protocol status helpers |
+| 3.1 Cancel dialog | `vet-visit-cancel-dialog.component.spec.ts` | FE component unit | N/A (new component); existing form dialog safety net ✅ 7/7 passed with Node 20.19.6 | ✅ RED compile failed for missing `VetVisitCancelDialogComponent` | ✅ Focused dialog specs passed: 13/13 | ✅ Disabled invalid reason and confirm/cancel return paths | ✅ Kept standalone small destructive dialog with typed result |
+| 3.2 Attend dialog form | `vet-visit-form-dialog.component.spec.ts` | FE component unit | ✅ 7/7 focused form dialog baseline passed with Node 20.19.6 | ✅ RED compile failed for missing `action`, `findings`, `cost`, `treatmentPlanControls`, dynamic step helpers, and follow-up choice | ✅ Focused dialog specs passed: 13/13; dialog+mapper specs passed: 23/23 | ✅ Render fields, validation, dynamic add/remove, follow-up submit, finalize submit | ✅ Conditional attend mode preserved create form behavior |
+| 3.3 Cancel composition decision | `vet-visit-cancel-dialog.component.spec.ts`, `vet-visit-form-dialog.component.spec.ts` | FE component unit | ✅ 7/7 focused form dialog baseline | ✅ RED covered standalone cancel dialog instead of form `action='cancel'` | ✅ Focused dialog+mapper specs passed: 23/23 | ✅ Standalone cancel dialog + form dialog create/attend modes | ➖ Architectural boundary decision; page composition remains PR4 |
 
 ## Test Summary
 
@@ -61,6 +79,11 @@
 - **Total PR2 tests written/updated**: 7 focused data-access scenarios added; page spec fixtures adjusted for extended DTO shape.
 - **Layers used**: FE unit tests (mapper/service) plus page spec compile coverage.
 - **Production build**: Not run, per instruction.
+- **PR3 Safety net**: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts` → 7 tests passing before PR3 production changes.
+- **PR3 RED**: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits/vet-visit-cancel-dialog.component.spec.ts --include src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts` → expected compile failures for missing cancel component/action/attend controls/helpers.
+- **PR3 GREEN/REFACTOR**: Same focused dialog command → 13 tests passing, 0 failures.
+- **PR3 dialog + mapper verification**: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits/vet-visit-cancel-dialog.component.spec.ts --include src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts --include src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.spec.ts` → 23 tests passing, 0 failures.
+- **Total PR3 tests written/updated**: 6 component scenarios added (2 cancel dialog, 4 attend dialog) plus existing dialog regression coverage preserved.
 
 ## Files Changed
 
@@ -73,34 +96,42 @@
 | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.spec.ts` | Modified | Added cancel, attend, follow-up/finalize, and legacy plan normalization coverage. |
 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` | Modified | Set new DTO fields to null for locally merged newly-created visits to preserve compile/runtime shape. |
 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Modified | Updated fixtures with null defaults for new DTO fields. |
+| `hato-fe/src/app/features/admin/vet-visits/vet-visit-cancel-dialog.component.ts` | Created | Standalone Material cancel dialog with required Spanish reason validation and typed result. |
+| `hato-fe/src/app/features/admin/vet-visits/vet-visit-cancel-dialog.component.spec.ts` | Created | Covers rendering, validation, disabled confirm, confirm result, and cancel result. |
+| `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.ts` | Modified | Added action-aware attend mode with clinical fields, cost, treatment plan FormArray, CDK drag handles, and follow-up/finalize choice. |
+| `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts` | Modified | Added attend-mode tests for rendered fields, validation, dynamic plan list, and submit choices. |
 | `openspec/changes/vet-visit-lifecycle-actions-v1/tasks.md` | Modified | Marked PR2 frontend contracts/mapper tasks complete. |
-| `openspec/changes/vet-visit-lifecycle-actions-v1/apply-progress.md` | Modified | Merged PR1 progress with PR2 progress and TDD evidence. |
+| `openspec/changes/vet-visit-lifecycle-actions-v1/tasks.md` | Modified | Marked PR3 dialog tasks complete, preserving PR4 page wiring as pending. |
+| `openspec/changes/vet-visit-lifecycle-actions-v1/apply-progress.md` | Modified | Merged PR1+PR2 progress with PR3 dialog progress and TDD evidence. |
 
 ## Deviations from Design
 
 - None for the PR2 boundary. UI dialogs/page actions were intentionally not implemented.
 - `createVetVisitEvent()` / `updateVetVisitEvent()` do not exist as methods in the current FE service; the payload contract is owned by `mapVetVisitFormToCreateInput()` and `AnimalsHealthEventsService.createEvent()`, so PR2 extended the mapper contract instead of inventing service methods.
+- PR3 intentionally did not implement `action='cancel'` inside `VetVisitFormDialogComponent`; the design decision prefers composition through `VetVisitCancelDialogComponent`, with page opening that dialog in PR4.
+- PR3 returns attend dialog fields (`findings`, `cost`, `treatmentPlan`, `followUpChoice`) but does not wire them into page row actions; that is explicitly reserved for PR4.
 
 ## Discoveries
 
 - Current FE vet visit creation routes through `mapVetVisitFormToCreateInput()` → `AnimalsHealthEventsService.createEvent()`; there are no dedicated `createVetVisitEvent()` or `updateVetVisitEvent()` methods in `VetVisitsService`.
 - Updating `VetVisitItem` requires local page merge objects/fixtures to carry null defaults for new API fields, even though PR2 does not implement display/actions yet.
 - The correct local Node for strict FE testing is `$HOME/.nvm/versions/node/v20.19.6/bin`; default shell `node` is v26.0.0.
+- `VetVisitFormDialogComponent` already had an attended-create validation tied to the existing `notes` field; PR3 had to keep that behavior while allowing attend mode to validate the new `attentionNotes` field instead.
 
 ## Remaining Tasks
 
-- [ ] Phase 3: Frontend Dialogs — Cancel + Attend Forms (3.1.1–3.3.3).
+- [x] Phase 3: Frontend Dialogs — Cancel + Attend Forms (3.1.1–3.2.7 and 3.3.3 complete; 3.3.1/3.3.2 intentionally superseded by composition decision).
 - [ ] Phase 4: Frontend Page — Actions Wiring + Follow-up Chain (4.1.1–4.2.2).
 - [ ] Phase 5.1: Backend tests checklist remains unchecked for the final cross-cutting PR slice, though PR1 added focused backend coverage.
-- [ ] Phase 5.2: Frontend tests checklist remains for final cross-cutting PR slice; PR2 added focused mapper/service tests only.
+- [ ] Phase 5.2: Frontend page/mapper final checklist remains for the final cross-cutting PR slice; PR3 completed dialog tests 5.2.1–5.2.2.
 
 ## Workload / PR Boundary
 
 - **Mode**: chained PR slice.
-- **Boundary**: Frontend contracts/mapper only — offline metadata types, vet visit list DTO parsing, mapper payload support, focused data-access tests.
-- **Excluded**: Cancel dialog, attend dialog UI, row action wiring, linked follow-up creation, history/list display enhancements, production build.
-- **Review budget impact**: PR2 is a focused FE contract slice, but it touches shared `VetVisitItem` shape and mapper tests; later slices should remain chained.
+- **Boundary**: Frontend dialog UX only — standalone cancel dialog and attend-mode form structure/validation/result contract.
+- **Excluded**: Page row action wiring, linked follow-up event creation, history/list display enhancements, backend changes, production build.
+- **Review budget impact**: PR3 is a focused FE component slice; PR4 should remain chained for page orchestration and row actions.
 
 ## Status
 
-31/31 PR1+PR2 tasks complete for assigned slices. Ready for PR3 FE dialogs slice or SDD verify for PR2.
+46/46 PR1+PR2+PR3 assigned tasks complete for assigned slices. Ready for PR4 FE page wiring slice or SDD verify for PR3.

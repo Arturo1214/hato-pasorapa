@@ -8,12 +8,12 @@
 | 400-line budget risk | High |
 | Chained PRs recommended | Yes |
 | Suggested split | 4-PR feature-branch-chain |
-| Delivery strategy | ask-on-risk |
-| Chain strategy | pending |
+| Delivery strategy | feature-branch-chain / work-unit slice |
+| Chain strategy | feature-branch-chain |
 
-Decision needed before apply: Yes
+Decision needed before apply: No
 Chained PRs recommended: Yes
-Chain strategy: pending
+Chain strategy: feature-branch-chain
 400-line budget risk: High
 
 ### Suggested Work Units
@@ -31,15 +31,15 @@ Chain strategy: pending
 
 ## Phase 1: Backend — Raza Catalog Foundation (PR 1)
 
-- [ ] 1.1 Create `hato-be/src/main/java/bo/pasorapa/hato/domain/Raza.java` — entity with `uuid`, `nombre`, `descripcion`, `activo`, `sortOrder`, `createdAt`, `updatedAt`, `@Version`
-- [ ] 1.2 Create `hato-be/src/main/java/bo/pasorapa/hato/repository/RazaRepository.java` — Panache repo with `findByUuid`, `findByNombreIgnoreCase`, `findAllActiveOrdered`
-- [ ] 1.3 Create DTOs under `hato-be/src/main/java/bo/pasorapa/hato/service/dto/raza/` — `CreateRazaRequest`, `UpdateRazaRequest`, `RazaResponse`, `RazaOptionResponse`
-- [ ] 1.4 Create `hato-be/src/main/java/bo/pasorapa/hato/service/RazaService.java` — ABM logic, normalized uniqueness check, soft-delete block when in use
-- [ ] 1.5 Create `hato-be/src/main/java/bo/pasorapa/hato/web/rest/RazaResource.java` — `GET /api/razas/active` (ADMIN/GANADERO), `GET/POST/PUT /api/admin/razas` (ADMIN), `PATCH /api/admin/razas/{uuid}/active` (ADMIN)
-- [ ] 1.6 Create `hato-be/src/main/resources/db/changelog/018-animal-breed-catalog-v1.yaml` — table `razas` with indexes, seed `Criolla` as `sort_order=1`
-- [ ] 1.7 Register `018-animal-breed-catalog-v1.yaml` in `master.yaml`
-- [ ] 1.8 Write `hato-be/src/test/java/bo/pasorapa/hato/service/RazaServiceTest.java` — CRUD, uniqueness, soft-delete block
-- [ ] 1.9 Write `hato-be/src/test/java/bo/pasorapa/hato/web/rest/RazaResourceTest.java` — REST endpoints for admin and active list
+- [x] 1.1 Create `hato-be/src/main/java/bo/pasorapa/hato/domain/Raza.java` — entity with `uuid`, `nombre`, `descripcion`, `activo`, `sortOrder`, `createdAt`, `updatedAt`, `@Version`
+- [x] 1.2 Create `hato-be/src/main/java/bo/pasorapa/hato/repository/RazaRepository.java` — Panache repo with `findByUuid`, `findByNombreIgnoreCase`, `findAllActiveOrdered`
+- [x] 1.3 Create DTOs under `hato-be/src/main/java/bo/pasorapa/hato/service/dto/raza/` — `CreateRazaRequest`, `UpdateRazaRequest`, `RazaResponse`, `RazaOptionResponse`
+- [x] 1.4 Create `hato-be/src/main/java/bo/pasorapa/hato/service/RazaService.java` — ABM logic, normalized uniqueness check, soft-delete block when in use
+- [x] 1.5 Create `hato-be/src/main/java/bo/pasorapa/hato/web/rest/RazaResource.java` — `GET /api/razas/active` (ADMIN/GANADERO), `GET/POST/PUT /api/admin/razas` (ADMIN), `PATCH /api/admin/razas/{uuid}/active` (ADMIN)
+- [x] 1.6 Create `hato-be/src/main/resources/db/changelog/018-animal-breed-catalog-v1.yaml` — table `razas` with indexes, seed `Criolla` as `sort_order=1`
+- [x] 1.7 Register `018-animal-breed-catalog-v1.yaml` in `master.yaml`
+- [x] 1.8 Write `hato-be/src/test/java/bo/pasorapa/hato/service/RazaServiceTest.java` — CRUD, uniqueness, soft-delete block
+- [x] 1.9 Write `hato-be/src/test/java/bo/pasorapa/hato/web/rest/RazaResourceTest.java` — REST endpoints for admin and active list
 
 ## Phase 2: Backend — Animal Contract + Sync (PR 2)
 

@@ -1,0 +1,174 @@
+databaseChangeLog:
+  - changeSet:
+      id: 018-animal-breed-catalog-v1
+      author: opencode
+      changes:
+        - createTable:
+            tableName: razas
+            columns:
+              - column:
+                  name: id
+                  type: BIGSERIAL
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: uuid
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: nombre
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: nombre_normalizado
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: descripcion
+                  type: VARCHAR(500)
+              - column:
+                  name: origen
+                  type: VARCHAR(120)
+              - column:
+                  name: tipo
+                  type: VARCHAR(30)
+                  defaultValue: UNCLASSIFIED
+                  constraints:
+                    nullable: false
+              - column:
+                  name: activo
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sort_order
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: razas
+            indexName: idx_razas_activo_sort
+            columns:
+              - column:
+                  name: activo
+              - column:
+                  name: sort_order
+              - column:
+                  name: nombre
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000001" }
+              - column: { name: nombre, value: "Criolla" }
+              - column: { name: nombre_normalizado, value: "criolla" }
+              - column: { name: origen, value: "Bolivia" }
+              - column: { name: tipo, value: "DUAL_PURPOSE" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 1 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000002" }
+              - column: { name: nombre, value: "Nelore" }
+              - column: { name: nombre_normalizado, value: "nelore" }
+              - column: { name: origen, value: "Brasil" }
+              - column: { name: tipo, value: "BEEF" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 2 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000003" }
+              - column: { name: nombre, value: "Brahman" }
+              - column: { name: nombre_normalizado, value: "brahman" }
+              - column: { name: tipo, value: "BEEF" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 3 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000004" }
+              - column: { name: nombre, value: "Gyr" }
+              - column: { name: nombre_normalizado, value: "gyr" }
+              - column: { name: tipo, value: "DUAL_PURPOSE" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 4 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000005" }
+              - column: { name: nombre, value: "Holstein" }
+              - column: { name: nombre_normalizado, value: "holstein" }
+              - column: { name: tipo, value: "DAIRY" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 5 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000006" }
+              - column: { name: nombre, value: "Brown Swiss" }
+              - column: { name: nombre_normalizado, value: "brown swiss" }
+              - column: { name: tipo, value: "DAIRY" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 6 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000007" }
+              - column: { name: nombre, value: "Brahman × Criolla" }
+              - column: { name: nombre_normalizado, value: "brahman × criolla" }
+              - column: { name: tipo, value: "DUAL_PURPOSE" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 7 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000008" }
+              - column: { name: nombre, value: "Charolais" }
+              - column: { name: nombre_normalizado, value: "charolais" }
+              - column: { name: tipo, value: "BEEF" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 8 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000009" }
+              - column: { name: nombre, value: "Limousin" }
+              - column: { name: nombre_normalizado, value: "limousin" }
+              - column: { name: tipo, value: "BEEF" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 9 }
+        - insert:
+            tableName: razas
+            columns:
+              - column: { name: uuid, value: "00000000-0000-4000-8000-000000000010" }
+              - column: { name: nombre, value: "Simmental" }
+              - column: { name: nombre_normalizado, value: "simmental" }
+              - column: { name: tipo, value: "DUAL_PURPOSE" }
+              - column: { name: activo, valueBoolean: true }
+              - column: { name: sort_order, valueNumeric: 10 }

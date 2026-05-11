@@ -519,6 +519,14 @@ export type FieldVetProtocolStatus = (typeof FIELD_VET_PROTOCOL_STATUSES)[number
 
 export interface FieldVetVisitBlock {
   visitId: string;
+  mode?: 'GLOBAL' | 'SPECIFIC';
+  status?: 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED';
+  veterinarian?: {
+    name: string;
+    license?: string;
+  };
+  targetAnimalCount?: number;
+  parentVisitId?: string;
 }
 
 export interface FieldVetChecklistItem extends Record<string, unknown> {

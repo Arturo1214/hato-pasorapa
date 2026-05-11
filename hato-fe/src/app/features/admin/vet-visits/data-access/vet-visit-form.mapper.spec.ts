@@ -30,4 +30,58 @@ describe('vet-visit-form.mapper', () => {
     expect(metadata.protocol.nextDueAt).toBe('2026-04-28T10:00:00.000Z');
     expect(metadata.checklist[1]).toEqual({ code: 'APPETITE', ok: false, note: 'Baja' });
   });
+
+  it('should map visit lifecycle metadata with veterinarian and target animal count', () => {
+    const input = mapVetVisitFormToCreateInput({
+      animalUuid: 'animal-2',
+      visitId: 'visit-global-1',
+      mode: 'GLOBAL',
+      status: 'PENDING',
+      occurredAt: '2026-05-10T08:00',
+      notes: ' Jornada de control ',
+      checklist: [],
+      clinicalNote: { reason: 'Campaña', findings: 'Sin novedades', plan: 'Control general' },
+      protocolStatus: 'STARTED',
+      veterinarianName: ' Dra. Luna ',
+      veterinarianLicense: ' MV-001 ',
+      targetAnimalCount: 10,
+      parentVisitId: ' parent-visit ',
+    });
+    const metadata = input.metadata as FieldVetVisitMetadata;
+
+    expect(metadata.visit).toEqual({
+      visitId: 'visit-global-1',
+      mode: 'GLOBAL',
+      status: 'PENDING',
+      veterinarian: { name: 'Dra. Luna', license: 'MV-001' },
+      targetAnimalCount: 10,
+      parentVisitId: 'parent-visit',
+    });
+  });
+
+  it('should omit nullable visit fields instead of sending empty veterinarian license or target count', () => {
+    const input = mapVetVisitFormToCreateInput({
+      animalUuid: 'animal-3',
+      visitId: 'visit-specific-1',
+      mode: 'SPECIFIC',
+      status: 'ATTENDED',
+      occurredAt: '2026-05-10T08:00',
+      notes: null,
+      checklist: [],
+      clinicalNote: { reason: 'Control', findings: 'Estable', plan: 'Alta' },
+      protocolStatus: 'CLOSED',
+      veterinarianName: 'Dr. Soliz',
+      veterinarianLicense: '   ',
+      targetAnimalCount: null,
+      parentVisitId: null,
+    });
+    const metadata = input.metadata as FieldVetVisitMetadata;
+
+    expect(metadata.visit).toEqual({
+      visitId: 'visit-specific-1',
+      mode: 'SPECIFIC',
+      status: 'ATTENDED',
+      veterinarian: { name: 'Dr. Soliz' },
+    });
+  });
 });

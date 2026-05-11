@@ -6,25 +6,36 @@ import type {
 import type { AnimalHealthEventCreateInput } from '../../animals/data-access/animals-health-events.service';
 
 export interface VetVisitFormValue {
-  animalUuid: string;
+  animalUuid: string | null;
   visitId: string;
+  mode?: 'GLOBAL' | 'SPECIFIC';
+  status?: 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED';
   occurredAt: string;
   notes?: string | null;
   checklist: FieldVetChecklistItem[];
   clinicalNote: FieldVetClinicalNote;
   protocolStatus: FieldVetProtocolStatus;
   nextDueAt?: string | null;
+  veterinarianName?: string | null;
+  veterinarianLicense?: string | null;
+  targetAnimalCount?: number | null;
+  parentVisitId?: string | null;
 }
 
 export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHealthEventCreateInput {
   return {
-    animalUuid: value.animalUuid.trim(),
+    animalUuid: value.animalUuid?.trim() ?? '',
     healthEventType: 'FIELD_VET_VISIT',
     occurredAt: normalizeOccurredAtValue(value.occurredAt),
     notes: normalizeOptionalText(value.notes),
     metadata: {
       visit: {
         visitId: value.visitId.trim(),
+        ...(value.mode ? { mode: value.mode } : {}),
+        ...(value.status ? { status: value.status } : {}),
+        ...(buildVeterinarian(value) ? { veterinarian: buildVeterinarian(value)! } : {}),
+        ...(typeof value.targetAnimalCount === 'number' ? { targetAnimalCount: value.targetAnimalCount } : {}),
+        ...(normalizeOptionalText(value.parentVisitId) ? { parentVisitId: normalizeOptionalText(value.parentVisitId)! } : {}),
       },
       checklist: value.checklist.map((item) => ({
         code: item.code,
@@ -47,6 +58,19 @@ export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHe
 function normalizeOptionalText(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function buildVeterinarian(value: VetVisitFormValue) {
+  const name = normalizeOptionalText(value.veterinarianName);
+  if (!name) {
+    return null;
+  }
+
+  const license = normalizeOptionalText(value.veterinarianLicense);
+  return {
+    name,
+    ...(license ? { license } : {}),
+  };
 }
 
 function normalizeOccurredAtValue(value: string) {

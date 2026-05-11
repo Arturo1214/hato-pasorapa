@@ -45,15 +45,15 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: Frontend — Service + Form Dialog + Mapper Extension
 
-- [ ] 3.1 Create `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.ts`: `VetVisitItem` interface, `listVetVisits(filter)` calling `GET /api/vet-visits`, returns `Observable<VetVisitItem[]>`
-- [ ] 3.2 RED: Write `vet-visits.service.spec.ts` — test `listVetVisits` with filters and pagination normalization
-- [ ] 3.3 GREEN: Implement `listVetVisits` in `vet-visits.service.ts`
-- [ ] 3.4 Extend `vet-visit-form.mapper.ts`: add `visit.mode`, `visit.status`, `visit.veterinarian`, `visit.targetAnimalCount`, `visit.parentVisitId` to metadata block in `mapVetVisitFormToCreateInput`
-- [ ] 3.5 RED: Write `vet-visit-form.mapper.spec.ts` — test extended metadata fields, null handling for `targetAnimalCount`
-- [ ] 3.6 GREEN: Implement extended mapper fields
-- [ ] 3.7 Create `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.ts`: Reactive Form with mode toggle (GLOBAL/ESPECIFICA), veterinarian fields, status selector (`PROGRAMADA|ATENDIDA|REPROGRAMADA|FINALIZADA|CANCELADA`), autocomplete animal (latest 10 + search by arete/marca/tatuaje), notes field
-- [ ] 3.8 RED: Write `vet-visit-form-dialog.component.spec.ts` — test mode toggle, validation, autocomplete trigger
-- [ ] 3.9 GREEN: Implement dialog component with form group and manual reactive form
+- [x] 3.1 Create `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.ts`: `VetVisitItem` interface, `listVetVisits(filter)` calling `GET /api/vet-visits`, returns `Observable<VetVisitItem[]>`
+- [x] 3.2 RED: Write `vet-visits.service.spec.ts` — test `listVetVisits` with filters and pagination normalization
+- [x] 3.3 GREEN: Implement `listVetVisits` in `vet-visits.service.ts`
+- [x] 3.4 Extend `vet-visit-form.mapper.ts`: add `visit.mode`, `visit.status`, `visit.veterinarian`, `visit.targetAnimalCount`, `visit.parentVisitId` to metadata block in `mapVetVisitFormToCreateInput`
+- [x] 3.5 RED: Write `vet-visit-form.mapper.spec.ts` — test extended metadata fields, null handling for `targetAnimalCount`
+- [x] 3.6 GREEN: Implement extended mapper fields
+- [x] 3.7 Create `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.ts`: Reactive Form with mode toggle (GLOBAL/ESPECIFICA), veterinarian fields, status selector (`PROGRAMADA|ATENDIDA|REPROGRAMADA|FINALIZADA|CANCELADA`), autocomplete animal (latest 10 + search by arete/marca/tatuaje), notes field
+- [x] 3.8 RED: Write `vet-visit-form-dialog.component.spec.ts` — test mode toggle, validation, autocomplete trigger
+- [x] 3.9 GREEN: Implement dialog component with form group and manual reactive form
 
 ## Phase 4: Frontend — Page Redesign + Calendar + Animal Timeline
 

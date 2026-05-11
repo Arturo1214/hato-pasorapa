@@ -168,6 +168,61 @@ describe('AnimalFormPageComponent', () => {
     }));
   });
 
+  it('should filter breed autocomplete options by nombre, origen and tipo', async () => {
+    const { component } = await configure({ uuid: null, role: 'GANADERO' });
+
+    expect(component.filteredBreedOptions().map((breed) => breed.nombre)).toEqual(['Criolla', 'Brangus']);
+
+    component.form.controls.breedSearch.setValue('pasorapa');
+
+    expect(component.filteredBreedOptions().map((breed) => breed.nombre)).toEqual(['Criolla']);
+
+    component.form.controls.breedSearch.setValue('dual');
+
+    expect(component.filteredBreedOptions().map((breed) => breed.nombre)).toEqual(['Brangus']);
+  });
+
+  it('should submit selected breed uuid and denormalized name from the searchable autocomplete', async () => {
+    const { component, animalsService } = await configure({ uuid: null, role: 'GANADERO' });
+
+    component.form.patchValue({
+      arete: 'CRIA-005',
+      category: ANIMAL_CATEGORY.TERNERA,
+      sex: ANIMAL_SEX.HEMBRA,
+      birthDate: '2026-01-01',
+      admissionDate: '2026-01-02',
+    });
+    component.selectBreed({ option: { value: 'raza-brangus-uuid' } } as never);
+    component.submit();
+
+    expect(component.form.controls.breedSearch.value).toBe('Brangus');
+    expect(animalsService.createAnimal).toHaveBeenCalledWith(expect.objectContaining({
+      breedUuid: 'raza-brangus-uuid',
+      breedName: 'Brangus',
+    }));
+  });
+
+  it('should clear the selected breed and submit no breed when choosing Sin raza asignada', async () => {
+    const { component, animalsService } = await configure({ uuid: null, role: 'GANADERO' });
+
+    component.form.patchValue({
+      arete: 'CRIA-006',
+      category: ANIMAL_CATEGORY.TERNERA,
+      sex: ANIMAL_SEX.HEMBRA,
+      birthDate: '2026-01-01',
+      admissionDate: '2026-01-02',
+    });
+    component.selectBreed({ option: { value: 'raza-criolla-uuid' } } as never);
+    component.selectBreed({ option: { value: null } } as never);
+    component.submit();
+
+    expect(component.form.controls.breedSearch.value).toBe('');
+    expect(animalsService.createAnimal).toHaveBeenCalledWith(expect.objectContaining({
+      breedUuid: null,
+      breedName: null,
+    }));
+  });
+
   it('should prefill existing animal characteristics and keep them on edit submit', async () => {
     const { component, animalsService } = await configure({ uuid: 'animal-uuid-1', animals: [
       createAnimal({ uuid: 'mother-uuid', arete: 'MADRE-001', category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }),
@@ -178,6 +233,7 @@ describe('AnimalFormPageComponent', () => {
     expect(component.form.controls.color.value).toBe('Colorado');
     expect(component.form.controls.description.value).toBe('Bueno para carne');
     expect(component.form.controls.breedUuid.value).toBe('raza-criolla-uuid');
+    expect(component.form.controls.breedSearch.value).toBe('Criolla');
 
     component.submit();
 

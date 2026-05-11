@@ -68,11 +68,15 @@ Chain strategy: feature-branch-chain
 ## Phase 4: Frontend — Animal Form Breed Selector + Offline (PR 4)
 
 - [x] 4.1 Update `hato-fe/src/app/features/admin/animals/animal-form-page.component.ts` — add `color` `FormControl<string>`, `description` `FormControl<string>`, `breedUuid` `FormControl<string|null>`
-- [x] 4.2 Add breed selector `<mat-select>` in animal form template — fetches `GET /api/razas/active`, displays `name`
+- [x] 4.2 Add searchable Material autocomplete breed selector in animal form template — fetches `GET /api/razas/active`, filters by `nombre`/`origen`/`tipo`, and keeps `Sin raza asignada`
 - [x] 4.3 Update `hato-fe/src/app/core/offline/offline-types.ts` — `AnimalMutationPayload` and `AnimalOfflineMutationPayload` add optional `color`, `description`, `breedUuid`, `breedName`
 - [x] 4.4 Update `hato-fe/src/app/features/admin/animals/data-access/animals.service.ts` — send `color`, `description`, `breedUuid` on create/update
 - [x] 4.5 Write `hato-fe/src/app/features/admin/animals/animal-form-page.component.spec.ts` — breed selector renders active breeds, form includes color/description
 - [x] 4.6 Write `hato-fe/src/app/core/offline/offline-types.spec.ts` — verify payload preserves breed fields
+
+### Phase 4 follow-up
+
+- [x] 4.7 Upgrade animal breed selector from long `mat-select` to searchable autocomplete while preserving `breedUuid`/`breedName`, clear/no-breed, and edit prefill behavior.
 
 ## Phase 5: Integration Verification
 

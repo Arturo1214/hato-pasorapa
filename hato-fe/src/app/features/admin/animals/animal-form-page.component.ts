@@ -108,12 +108,13 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
 
             <mat-form-field appearance="outline">
               <mat-label>Raza</mat-label>
-              <mat-select formControlName="breedUuid">
+              <input matInput formControlName="breedSearch" [matAutocomplete]="breedAutocomplete" placeholder="Buscar raza por nombre, origen o tipo" />
+              <mat-autocomplete #breedAutocomplete="matAutocomplete" (optionSelected)="selectBreed($event)">
                 <mat-option [value]="null">Sin raza asignada</mat-option>
-                @for (breed of breedOptions(); track breed.uuid) {
-                  <mat-option [value]="breed.uuid">{{ breed.nombre }}</mat-option>
+                @for (breed of filteredBreedOptions(); track breed.uuid) {
+                  <mat-option [value]="breed.uuid">{{ breedOptionLabel(breed) }}</mat-option>
                 }
-              </mat-select>
+              </mat-autocomplete>
             </mat-form-field>
 
             <mat-form-field appearance="outline"><mat-label>Color</mat-label><input matInput formControlName="color" placeholder="Ej. Colorado" /></mat-form-field>
@@ -253,6 +254,7 @@ export class AnimalFormPageComponent {
       color: [''],
       description: [''],
       breedUuid: [null as string | null],
+      breedSearch: [''],
       category: [ANIMAL_CATEGORY.VACA as AnimalCategory | null, [Validators.required]],
       sex: [ANIMAL_SEX.HEMBRA as AnimalSex, [Validators.required]],
       birthDate: [null as Date | string | null],
@@ -272,6 +274,7 @@ export class AnimalFormPageComponent {
 
   constructor() {
     this.form.controls.sex.valueChanges.subscribe((sex) => this.resetCategoryIfInvalid(sex));
+    this.form.controls.breedSearch.valueChanges.subscribe((search) => this.clearSelectedBreedIfSearchChanged(search));
     void this.load();
   }
 
@@ -284,6 +287,15 @@ export class AnimalFormPageComponent {
   motherOptions() { return this.filterParentOptions(ANIMAL_SEX.HEMBRA, this.form.controls.motherSearch.value); }
 
   fatherOptions() { return this.filterParentOptions(ANIMAL_SEX.MACHO, this.form.controls.fatherSearch.value); }
+
+  filteredBreedOptions() {
+    const normalizedSearch = normalizeOptionalText(this.form.controls.breedSearch.value)?.toLocaleLowerCase('es') ?? '';
+    return this.breedOptions().filter((breed) => !normalizedSearch || breedSearchText(breed).includes(normalizedSearch));
+  }
+
+  breedOptionLabel(breed: RazaOption) {
+    return [breed.nombre, breed.origen].filter((value): value is string => Boolean(value)).join(' · ');
+  }
 
   parentOptionsLabel() {
     const labels = [...this.motherOptions(), ...this.fatherOptions()].map((animal) => this.parentLabel(animal));
@@ -307,6 +319,20 @@ export class AnimalFormPageComponent {
     const selectedParent = options.find((animal) => animal.uuid === selectedUuid) ?? null;
     uuidControl.setValue(selectedParent?.uuid ?? null);
     searchControl.setValue(selectedParent ? this.parentLabel(selectedParent) : '');
+  }
+
+  selectBreed(event: MatAutocompleteSelectedEvent) {
+    const selectedUuid = event.option.value as string | null;
+
+    if (!selectedUuid) {
+      this.form.controls.breedUuid.setValue(null);
+      this.form.controls.breedSearch.setValue('');
+      return;
+    }
+
+    const selectedBreed = this.breedOptions().find((breed) => breed.uuid === selectedUuid) ?? null;
+    this.form.controls.breedUuid.setValue(selectedBreed?.uuid ?? null);
+    this.form.controls.breedSearch.setValue(selectedBreed?.nombre ?? '');
   }
 
   showVisibleIdentifiersError() { return this.form.hasError('visibleIdentifierRequired') && (this.form.touched || this.form.dirty); }
@@ -359,6 +385,7 @@ export class AnimalFormPageComponent {
           color: animal.color ?? '',
           description: animal.description ?? '',
           breedUuid: animal.breedUuid ?? null,
+          breedSearch: this.breedSearchLabel(animal),
           category: animal.category,
           sex: animal.sex ?? inferAnimalSexFromCategory(animal.category),
           birthDate: dateFromIsoDate(animal.birthDate),
@@ -394,7 +421,7 @@ export class AnimalFormPageComponent {
       color: normalizeOptionalText(value.color),
       description: normalizeOptionalText(value.description),
       breedUuid: normalizeOptionalText(value.breedUuid),
-      breedName: this.breedOptions().find((breed) => breed.uuid === value.breedUuid)?.nombre ?? null,
+      breedName: this.selectedBreedName(value.breedUuid),
       category: value.category ?? ANIMAL_CATEGORY.VACA,
       sex: value.sex ?? inferAnimalSexFromCategory(value.category ?? ANIMAL_CATEGORY.VACA),
       active: this.animal()?.active ?? true,
@@ -422,6 +449,27 @@ export class AnimalFormPageComponent {
   private parentSearchLabel(uuid: string | null | undefined) {
     const parent = this.parentCandidates().find((animal) => animal.uuid === uuid);
     return parent ? this.parentLabel(parent) : '';
+  }
+
+  private breedSearchLabel(animal: AnimalItem) {
+    const activeBreed = this.breedOptions().find((breed) => breed.uuid === animal.breedUuid);
+    return activeBreed?.nombre ?? animal.breedName ?? '';
+  }
+
+  private selectedBreedName(uuid: string | null | undefined) {
+    const normalizedUuid = normalizeOptionalText(uuid);
+    if (!normalizedUuid) return null;
+    return this.breedOptions().find((breed) => breed.uuid === normalizedUuid)?.nombre
+      ?? (this.animal()?.breedUuid === normalizedUuid ? this.animal()?.breedName ?? null : null);
+  }
+
+  private clearSelectedBreedIfSearchChanged(search: string | null) {
+    const selectedUuid = this.form.controls.breedUuid.value;
+    if (!selectedUuid) return;
+    const selectedLabel = this.selectedBreedName(selectedUuid);
+    if (normalizeOptionalText(search) !== selectedLabel) {
+      this.form.controls.breedUuid.setValue(null);
+    }
   }
 
   private parentCandidatesForSelectedOwner() {
@@ -472,6 +520,13 @@ function categoryOptionsForSex(sex: AnimalSex | null) {
 
 function parentSearchText(animal: AnimalItem) {
   return [animal.arete, animal.marca, animal.tatuaje]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLocaleLowerCase('es');
+}
+
+function breedSearchText(breed: RazaOption) {
+  return [breed.nombre, breed.origen, breed.tipo]
     .filter((value): value is string => Boolean(value))
     .join(' ')
     .toLocaleLowerCase('es');

@@ -245,6 +245,25 @@ describe('AnimalsPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Evento de castración encolado. Se disparó la sincronización automática.');
   });
 
+  it('should show castration row actions only for male calves and bulls', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([
+      createAnimal({ uuid: 'bull-1', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }),
+      createAnimal({ uuid: 'calf-1', category: ANIMAL_CATEGORY.TERNERO, sex: ANIMAL_SEX.MACHO }),
+      createAnimal({ uuid: 'ox-1', category: ANIMAL_CATEGORY.BUEY, sex: ANIMAL_SEX.MACHO }),
+      createAnimal({ uuid: 'cow-1', category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }),
+    ]));
+    const { component } = await configure(animalsServiceMock);
+    const castrationAction = component.actions.find((action) => action.label === 'Castración');
+    const operativeAction = component.actions.find((action) => action.label === 'Evento operativo');
+
+    expect(castrationAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }))).toBe(true);
+    expect(castrationAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.TERNERO, sex: ANIMAL_SEX.MACHO }))).toBe(true);
+    expect(castrationAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.BUEY, sex: ANIMAL_SEX.MACHO }))).toBe(false);
+    expect(castrationAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }))).toBe(false);
+    expect(operativeAction?.visible).toBeUndefined();
+  });
+
   it('should enqueue a reproduction event from the row action dialog', async () => {
     const animalsServiceMock = createAnimalsServiceMock();
     const reproductionEventsServiceMock = createReproductionEventsServiceMock();
@@ -275,6 +294,16 @@ describe('AnimalsPageComponent', () => {
       }),
     );
     expect(fixture.nativeElement.textContent).toContain('Evento reproductivo encolado. Se disparó la sincronización automática.');
+  });
+
+  it('should show reproductive row actions only for cows and heifers', async () => {
+    const { component } = await configure();
+    const reproductionAction = component.actions.find((action) => action.label === 'Evento reproductivo');
+
+    expect(reproductionAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }))).toBe(true);
+    expect(reproductionAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.VAQUILLONA, sex: ANIMAL_SEX.HEMBRA }))).toBe(true);
+    expect(reproductionAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.TERNERA, sex: ANIMAL_SEX.HEMBRA }))).toBe(false);
+    expect(reproductionAction?.visible?.(createAnimal({ category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }))).toBe(false);
   });
 
   it('should not offer birth registration from the legacy row reproduction event dialog', async () => {

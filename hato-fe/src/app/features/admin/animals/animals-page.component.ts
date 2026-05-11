@@ -28,6 +28,7 @@ import {
   type AnimalReproductionEventItem,
 } from './data-access/animals-reproduction-events.service';
 import {
+  ANIMAL_CATEGORY,
   ANIMAL_CATEGORY_OPTIONS,
   ANIMAL_SEX,
   ANIMAL_SEX_OPTIONS,
@@ -292,8 +293,8 @@ export class AnimalsPageComponent {
   ]);
   readonly actions: DataTableAction[] = [
     { id: ANIMAL_TABLE_ACTION.OPERATIVE_EVENT, label: 'Evento operativo', icon: 'event' },
-    { id: ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT, label: 'Evento reproductivo', icon: 'child_friendly' },
-    { id: ANIMAL_TABLE_ACTION.CASTRATION, label: 'Castración', icon: 'content_cut' },
+    { id: ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT, label: 'Evento reproductivo', icon: 'child_friendly', visible: (row) => isReproductionEligibleAnimal(this.animalFromRow(row)) },
+    { id: ANIMAL_TABLE_ACTION.CASTRATION, label: 'Castración', icon: 'content_cut', visible: (row) => isCastrationEligibleAnimal(this.animalFromRow(row)) },
     { id: ANIMAL_TABLE_ACTION.IMAGES, label: 'Imágenes', icon: 'photo_library' },
     { id: ANIMAL_TABLE_ACTION.VIEW_DETAIL, label: 'Ver ficha', icon: 'visibility' },
     { id: ANIMAL_TABLE_ACTION.VIEW_EDIT, label: 'Editar ficha', icon: 'edit' },
@@ -342,9 +343,15 @@ export class AnimalsPageComponent {
         this.openOperativeEventDialog(animal);
         return;
       case ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT:
+        if (!isReproductionEligibleAnimal(animal)) {
+          return;
+        }
         this.openReproductionEventDialog(animal);
         return;
       case ANIMAL_TABLE_ACTION.CASTRATION:
+        if (!isCastrationEligibleAnimal(animal)) {
+          return;
+        }
         this.openOperativeEventDialog(animal, 'CASTRATION');
         return;
       case ANIMAL_TABLE_ACTION.IMAGES:
@@ -610,7 +617,7 @@ interface OperativeEventDialogResult {
         <mat-form-field appearance="outline">
           <mat-label>Tipo</mat-label>
           <mat-select formControlName="type" [disabled]="typeLocked()">
-            @for (option of eventTypeOptions; track option.value) {
+            @for (option of eventTypeOptions(); track option.value) {
               <mat-option [value]="option.value">{{ option.label }}</mat-option>
             }
           </mat-select>
@@ -666,14 +673,14 @@ class AnimalOperativeEventDialogComponent {
   readonly dialogRef = inject(MatDialogRef<AnimalOperativeEventDialogComponent, OperativeEventDialogResult | undefined>);
   private readonly formBuilder = inject(FormBuilder);
 
-  readonly eventTypeOptions = [
+  readonly eventTypeOptions = computed(() => [
     { value: 'OBSERVATION', label: 'Observación' },
     { value: 'TRANSFERRED', label: 'Transferido' },
     { value: 'SOLD', label: 'Vendido' },
     { value: 'DECEASED', label: 'Fallecido' },
     { value: 'LOST', label: 'Perdido' },
-    { value: 'CASTRATION', label: 'Castración' },
-  ] as const;
+    ...(isCastrationEligibleAnimal(this.data.animal) ? [{ value: 'CASTRATION', label: 'Castración' } as const] : []),
+  ] as const);
   readonly typeLocked = computed(() => this.data.lockedType === 'CASTRATION');
   readonly title = computed(() => (this.data.lockedType === 'CASTRATION' ? 'Registrar castración' : 'Registrar evento operativo'));
   readonly form = this.formBuilder.group(
@@ -913,6 +920,16 @@ function animalCategoryLabel(value: unknown) {
 
 function animalSexLabel(value: unknown) {
   return ANIMAL_SEX_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—');
+}
+
+function isCastrationEligibleAnimal(animal: AnimalItem) {
+  return animal.sex === ANIMAL_SEX.MACHO
+    && (animal.category === ANIMAL_CATEGORY.TORO || animal.category === ANIMAL_CATEGORY.TERNERO);
+}
+
+function isReproductionEligibleAnimal(animal: AnimalItem) {
+  return animal.sex === ANIMAL_SEX.HEMBRA
+    && (animal.category === ANIMAL_CATEGORY.VACA || animal.category === ANIMAL_CATEGORY.VAQUILLONA);
 }
 
 function formatWeightAndAge(animal: AnimalItem) {

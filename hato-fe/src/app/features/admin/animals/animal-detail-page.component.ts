@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormArray, FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatAutocompleteModule, type MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -44,7 +45,7 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
           <mat-icon>edit</mat-icon>
           Editar
         </button>
-        @if (canRegisterBirth()) {
+        @if (canUseReproductiveActions()) {
           <button mat-flat-button color="primary" type="button" (click)="openServiceRegistration()">
             <mat-icon>favorite</mat-icon>
             Registrar servicio
@@ -117,7 +118,7 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
 
           <mat-tab label="Reproducción">
             <mat-card appearance="outlined" class="detail-card">
-              @if (activeGestation(); as gestation) {
+              @if (canUseReproductiveActions() && activeGestation(); as gestation) {
                 <section class="active-gestation" aria-label="Gestación activa">
                   <h3>Gestación activa</h3>
                   <dl>
@@ -294,7 +295,10 @@ export class AnimalDetailPageComponent {
   readonly loading = signal(true);
   readonly errorMessage = signal<string | null>(null);
   readonly listRoute = computed(() => this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/animales' : '/admin/animales');
-  readonly canRegisterBirth = computed(() => this.animal()?.sex === ANIMAL_SEX.HEMBRA);
+  readonly canUseReproductiveActions = computed(() => {
+    const animal = this.animal();
+    return Boolean(animal && isReproductionEligibleAnimal(animal));
+  });
   readonly serviceEventOptions = computed(() => this.reproductionEvents()
     .filter((event) => event.reproductionEventType === 'SERVICE')
     .slice(0, 10)
@@ -311,7 +315,7 @@ export class AnimalDetailPageComponent {
 
   openBirthRegistration() {
     const mother = this.animal();
-    if (!mother) return;
+    if (!mother || !isReproductionEligibleAnimal(mother)) return;
 
     this.dialog.open(AnimalBirthRegistrationDialogComponent, {
       width: 'min(44rem, 96vw)',
@@ -328,7 +332,7 @@ export class AnimalDetailPageComponent {
 
   openServiceRegistration() {
     const female = this.animal();
-    if (!female) return;
+    if (!female || !isReproductionEligibleAnimal(female)) return;
 
     this.dialog.open(AnimalServiceRegistrationDialogComponent, {
       width: 'min(42rem, 96vw)',
@@ -345,7 +349,7 @@ export class AnimalDetailPageComponent {
 
   openPregnancyDiagnosisRegistration() {
     const female = this.animal();
-    if (!female) return;
+    if (!female || !isReproductionEligibleAnimal(female)) return;
 
     this.dialog.open(AnimalPregnancyDiagnosisDialogComponent, {
       width: 'min(42rem, 96vw)',
@@ -402,6 +406,9 @@ export class AnimalDetailPageComponent {
   }
 
   pregnancyExpectedBirthDateLabel(event: AnimalReproductionEventItem) {
+    if (!this.canUseReproductiveActions()) {
+      return null;
+    }
     if (event.reproductionEventType !== 'PREGNANCY_DIAGNOSIS') {
       return null;
     }
@@ -576,7 +583,7 @@ export class AnimalPregnancyDiagnosisDialogComponent {
 @Component({
   selector: 'app-animal-service-registration-dialog',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatButtonModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [CommonModule, ReactiveFormsModule, MatAutocompleteModule, MatButtonModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <h2 mat-dialog-title>Registrar servicio reproductivo</h2>
     <form [formGroup]="form" (ngSubmit)="submit()" mat-dialog-content class="service-form">
@@ -596,11 +603,12 @@ export class AnimalPregnancyDiagnosisDialogComponent {
       @if (form.controls.serviceMethod.value === serviceMethods.MONTA_NATURAL) {
         <mat-form-field appearance="outline">
           <mat-label>Toro / padre</mat-label>
-          <mat-select formControlName="fatherAnimalUuid">
+          <input matInput formControlName="fatherSearch" [matAutocomplete]="sireAutocomplete" placeholder="Buscar por arete, marca o tatuaje" />
+          <mat-autocomplete #sireAutocomplete="matAutocomplete" (optionSelected)="selectSire($event)">
             @for (sire of sireOptions(); track sire.uuid) {
-              <mat-option [value]="sire.uuid">{{ animalName(sire) }}</mat-option>
+              <mat-option [value]="sire.uuid">{{ sireLabel(sire) }}</mat-option>
             }
-          </mat-select>
+          </mat-autocomplete>
         </mat-form-field>
       } @else {
         <mat-form-field appearance="outline">
@@ -640,7 +648,7 @@ export class AnimalServiceRegistrationDialogComponent {
   private readonly reproductionEventsService = inject(AnimalsReproductionEventsService);
 
   readonly serviceMethods = REPRODUCTIVE_SERVICE_METHOD;
-  readonly sireOptions = signal<AnimalItem[]>([]);
+  private readonly sireCandidates = signal<AnimalItem[]>([]);
   readonly saving = signal(false);
   readonly errorMessage = signal<string | null>(null);
 
@@ -648,6 +656,7 @@ export class AnimalServiceRegistrationDialogComponent {
     serviceDate: [new Date().toISOString().slice(0, 10), Validators.required],
     serviceMethod: [REPRODUCTIVE_SERVICE_METHOD.MONTA_NATURAL as ReproductiveServiceMethod, Validators.required],
     fatherAnimalUuid: this.fb.control<string | null>(null),
+    fatherSearch: [''],
     semenReference: [''],
     bullReference: [''],
     notes: [''],
@@ -655,12 +664,35 @@ export class AnimalServiceRegistrationDialogComponent {
 
   constructor() {
     this.animalsService.listAnimals({ ownerGanaderoId: this.data.ownerGanaderoId, active: true }).subscribe({
-      next: (animals) => this.sireOptions.set(animals.filter((animal) => animal.sex === ANIMAL_SEX.MACHO && animal.uuid !== this.data.animalUuid)),
-      error: () => this.sireOptions.set([]),
+      next: (animals) => this.sireCandidates.set(
+        animals
+          .filter((animal) => animal.sex === ANIMAL_SEX.MACHO && animal.uuid !== this.data.animalUuid)
+          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+      ),
+      error: () => this.sireCandidates.set([]),
+    });
+
+    this.form.controls.fatherSearch.valueChanges.subscribe((search) => {
+      const selectedSire = this.sireCandidates().find((animal) => animal.uuid === this.form.controls.fatherAnimalUuid.value) ?? null;
+      if (selectedSire && search !== sireLabel(selectedSire)) {
+        this.form.controls.fatherAnimalUuid.setValue(null);
+      }
     });
   }
 
   animalName(animal: AnimalItem) { return animalName(animal); }
+
+  sireLabel(animal: AnimalItem) { return sireLabel(animal); }
+
+  sireOptions() { return filterSireCandidates(this.sireCandidates(), this.form.controls.fatherSearch.value); }
+
+  selectSire(event: MatAutocompleteSelectedEvent) {
+    const selectedUuid = event.option.value as string;
+    const selectedSire = this.sireCandidates().find((animal) => animal.uuid === selectedUuid) ?? null;
+
+    this.form.controls.fatherAnimalUuid.setValue(selectedSire?.uuid ?? null);
+    this.form.controls.fatherSearch.setValue(selectedSire ? sireLabel(selectedSire) : '');
+  }
 
   submit() {
     if (this.form.invalid || this.saving()) return;
@@ -874,6 +906,33 @@ export class AnimalBirthRegistrationDialogComponent {
 
 function animalName(animal: AnimalItem | null | undefined) {
   return animal?.arete || animal?.marca || animal?.tatuaje || 'animal sin identificador';
+}
+
+function sireLabel(animal: AnimalItem) {
+  return [animal.arete, animal.marca, animal.tatuaje].filter((value): value is string => Boolean(value)).join(' · ') || 'animal sin identificador';
+}
+
+function isReproductionEligibleAnimal(animal: AnimalItem) {
+  return animal.sex === ANIMAL_SEX.HEMBRA
+    && (animal.category === ANIMAL_CATEGORY.VACA || animal.category === ANIMAL_CATEGORY.VAQUILLONA);
+}
+
+function filterSireCandidates(candidates: AnimalItem[], search: string | null | undefined) {
+  const normalizedSearch = normalizeSearchText(search);
+  return candidates
+    .filter((candidate) => !normalizedSearch || sireSearchText(candidate).includes(normalizedSearch))
+    .slice(0, 10);
+}
+
+function sireSearchText(animal: AnimalItem) {
+  return [animal.arete, animal.marca, animal.tatuaje, sireLabel(animal)]
+    .filter((value): value is string => Boolean(value))
+    .join(' ')
+    .toLocaleLowerCase('es');
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return value?.trim().toLocaleLowerCase('es') ?? '';
 }
 
 function serviceEventOptionLabel(event: AnimalReproductionEventItem) {

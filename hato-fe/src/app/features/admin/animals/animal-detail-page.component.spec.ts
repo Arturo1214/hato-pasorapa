@@ -8,7 +8,7 @@ import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dial
 import { of, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent } from './animal-detail-page.component';
+import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent, AnimalServiceRegistrationDialogComponent } from './animal-detail-page.component';
 import { AnimalsEventsService } from './data-access/animals-events.service';
 import { AnimalsHealthEventsService } from './data-access/animals-health-events.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
@@ -292,6 +292,25 @@ describe('AnimalDetailPageComponent', () => {
     expect(animalsService.getAnimal).toHaveBeenCalledTimes(2);
   });
 
+  it('should expose detail reproductive actions only for cows and heifers', async () => {
+    const eligibleCow = await configure({ animal: createAnimal({ category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }) });
+    expect(eligibleCow.fixture.nativeElement.textContent).toContain('Registrar servicio');
+    expect(eligibleCow.fixture.nativeElement.textContent).toContain('Registrar diagnóstico de preñez');
+    expect(eligibleCow.fixture.nativeElement.textContent).toContain('Registrar nacimiento');
+    TestBed.resetTestingModule();
+
+    const eligibleHeifer = await configure({ animal: createAnimal({ category: ANIMAL_CATEGORY.VAQUILLONA, sex: ANIMAL_SEX.HEMBRA }) });
+    expect(eligibleHeifer.fixture.nativeElement.textContent).toContain('Registrar servicio');
+    expect(eligibleHeifer.fixture.nativeElement.textContent).toContain('Registrar diagnóstico de preñez');
+    expect(eligibleHeifer.fixture.nativeElement.textContent).toContain('Registrar nacimiento');
+    TestBed.resetTestingModule();
+
+    const ineligibleCalf = await configure({ animal: createAnimal({ category: ANIMAL_CATEGORY.TERNERA, sex: ANIMAL_SEX.HEMBRA }) });
+    expect(ineligibleCalf.fixture.nativeElement.textContent).not.toContain('Registrar servicio');
+    expect(ineligibleCalf.fixture.nativeElement.textContent).not.toContain('Registrar diagnóstico de preñez');
+    expect(ineligibleCalf.fixture.nativeElement.textContent).not.toContain('Registrar nacimiento');
+  });
+
   it('should show expected birth date for positive pregnancy diagnosis events', async () => {
     const { fixture } = await configure({
       reproductionEvents: [
@@ -375,12 +394,126 @@ describe('AnimalDetailPageComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Registrar diagnóstico de preñez');
   });
 
+  it('should hide active gestation date summary for ineligible categories', async () => {
+    const { fixture } = await configure({
+      animal: createAnimal({ category: ANIMAL_CATEGORY.TERNERA, sex: ANIMAL_SEX.HEMBRA }),
+      reproductionEvents: [
+        createReproductionEvent({
+          id: 'pregnancy-diagnosis-1',
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          occurredAt: '2026-05-10T09:00:00.000Z',
+          metadata: { result: 'PRENADA', expectedBirthDate: '2026-06-20T00:00:00.000Z' },
+        }),
+      ],
+    });
+
+    await selectTab(fixture, 'Reproducción');
+
+    expect(fixture.nativeElement.textContent).not.toContain('Gestación activa');
+    expect(fixture.nativeElement.textContent).not.toContain('Fecha probable de parto: 2026-06-20');
+  });
+
   it('should show a forbidden-friendly error state when detail loading is rejected', async () => {
     const { fixture } = await configure({
       animalsService: { getAnimal: vi.fn(() => throwError(() => new Error('forbidden'))) },
     });
 
     expect(fixture.nativeElement.textContent).toContain('No pudimos cargar la ficha animal');
+  });
+});
+
+describe('AnimalServiceRegistrationDialogComponent', () => {
+  const createAnimal = (overrides: Partial<AnimalItem> = {}): AnimalItem => ({
+    uuid: 'animal-uuid-1',
+    ownerGanaderoId: 'ganadero-uuid-1',
+    arete: 'AR-100',
+    marca: 'Marca Sur',
+    tatuaje: 'TS-10',
+    category: ANIMAL_CATEGORY.TORO,
+    sex: ANIMAL_SEX.MACHO,
+    active: true,
+    birthDate: '2024-04-26',
+    admissionDate: '2026-04-26',
+    weightKg: 420,
+    createdAt: '2026-04-26T10:00:00.000Z',
+    version: 1,
+    updatedAt: '2026-04-26T10:00:00.000Z',
+    lastSyncedAt: '2026-04-26T10:05:00.000Z',
+    motherAnimalUuid: null,
+    fatherAnimalUuid: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
+    ...overrides,
+  });
+
+  const createBullCandidates = () => Array.from({ length: 12 }, (_value, index) => createAnimal({
+    uuid: `bull-${index + 1}`,
+    arete: `TORO-${String(index + 1).padStart(2, '0')}`,
+    marca: index === 10 ? 'Especial Norte' : `Marca ${index + 1}`,
+    tatuaje: `T-${index + 1}`,
+    updatedAt: `2026-05-${String(12 - index).padStart(2, '0')}T10:00:00.000Z`,
+  }));
+
+  const configureDialog = async (animals: AnimalItem[] = createBullCandidates()) => {
+    const animalsService = { listAnimals: vi.fn(() => of(animals)) };
+    const reproductionEventsService = { createEvent: vi.fn(() => of({ outcome: 'queued', message: 'Servicio encolado.' })) };
+    const dialogRef = { close: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [AnimalServiceRegistrationDialogComponent],
+      providers: [
+        provideNoopAnimations(),
+        { provide: AnimalsService, useValue: animalsService },
+        { provide: AnimalsReproductionEventsService, useValue: reproductionEventsService },
+        { provide: MAT_DIALOG_DATA, useValue: { animalUuid: 'animal-uuid-1', ownerGanaderoId: 'ganadero-uuid-1' } },
+        { provide: MatDialogRef, useValue: dialogRef },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(AnimalServiceRegistrationDialogComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return { fixture, component: fixture.componentInstance, animalsService, reproductionEventsService, dialogRef };
+  };
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('should default the bull autocomplete to the latest 10 male candidates and exclude the current animal', async () => {
+    const { component } = await configureDialog([
+      createAnimal({ uuid: 'animal-uuid-1', arete: 'CURRENT' }),
+      ...createBullCandidates(),
+      createAnimal({ uuid: 'cow-1', arete: 'VACA-001', category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }),
+    ]);
+
+    expect(component.sireOptions()).toHaveLength(10);
+    expect(component.sireOptions().map((sire) => sire.uuid)).toEqual(['bull-1', 'bull-2', 'bull-3', 'bull-4', 'bull-5', 'bull-6', 'bull-7', 'bull-8', 'bull-9', 'bull-10']);
+  });
+
+  it('should filter bull autocomplete options by visible identifiers and preserve a 10 item limit', async () => {
+    const { component } = await configureDialog();
+
+    component.form.controls.fatherSearch.setValue('Especial');
+
+    expect(component.sireOptions().map((sire) => sire.uuid)).toEqual(['bull-11']);
+    expect(component.sireOptions()).toHaveLength(1);
+  });
+
+  it('should select the father from the bull autocomplete and submit the existing service payload semantics', async () => {
+    const { component, reproductionEventsService, dialogRef } = await configureDialog();
+
+    component.selectSire({ option: { value: 'bull-2' } } as never);
+    component.submit();
+
+    expect(component.form.controls.fatherAnimalUuid.value).toBe('bull-2');
+    expect(component.form.controls.fatherSearch.value).toBe('TORO-02 · Marca 2 · T-2');
+    expect(reproductionEventsService.createEvent).toHaveBeenCalledWith(expect.objectContaining({
+      animalUuid: 'animal-uuid-1',
+      reproductionEventType: 'SERVICE',
+      metadata: expect.objectContaining({ fatherAnimalUuid: 'bull-2' }),
+    }));
+    expect(dialogRef.close).toHaveBeenCalledWith(true);
   });
 });
 

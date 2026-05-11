@@ -44,6 +44,7 @@ export interface AnimalHealthEventItem {
   syncMessage?: string | null;
   treatmentStatus?: 'active' | 'closed';
   visitId?: string | null;
+  parentVisitId?: string | null;
   nextDueAt?: string | null;
   visitMode?: 'GLOBAL' | 'SPECIFIC';
   visitStatus?: string;

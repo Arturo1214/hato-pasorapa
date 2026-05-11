@@ -224,6 +224,68 @@ describe('AnimalDetailPageComponent', () => {
     }));
   });
 
+  it('should render linked veterinary visit chains with notes, cost and treatment plan over time', async () => {
+    const parentVisit = createHealthEvent({
+      id: 'health-event-parent',
+      occurredAt: '2026-05-13T00:00:00.000Z',
+      notes: 'Atención inicial con fiebre',
+      metadata: {
+        visit: {
+          visitId: 'VISIT-A',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dra. Luna', license: 'MV-001' },
+        },
+        checklist: [],
+        clinicalNote: { reason: 'Control respiratorio', findings: 'Fiebre leve', plan: ['Antibiótico por 3 días', 'Reposo'] },
+        cost: { amount: 150, currency: 'BOB' },
+        protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-20T00:00:00.000Z' },
+      },
+      visitId: 'VISIT-A',
+      parentVisitId: null,
+      visitStatus: 'ATTENDED',
+      veterinarianName: 'Dra. Luna',
+    });
+    const followUpVisit = createHealthEvent({
+      id: 'health-event-follow-up',
+      occurredAt: '2026-05-20T00:00:00.000Z',
+      notes: 'Control de seguimiento estable',
+      metadata: {
+        visit: {
+          visitId: 'VISIT-B',
+          parentVisitId: 'VISIT-A',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dr. Río', license: 'MV-002' },
+        },
+        checklist: [],
+        clinicalNote: { reason: 'Seguimiento', findings: 'Sin fiebre', plan: ['Alta clínica'] },
+        cost: { amount: 80, currency: 'BOB' },
+        protocol: { status: 'CLOSED' },
+      },
+      visitId: 'VISIT-B',
+      parentVisitId: 'VISIT-A',
+      visitStatus: 'ATTENDED',
+      veterinarianName: 'Dr. Río',
+    });
+    const { fixture } = await configure({ healthEvents: [followUpVisit, parentVisit] });
+
+    await selectTab(fixture, 'Salud');
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Cadena de visitas vinculadas');
+    expect(text).toContain('VISIT-A');
+    expect(text).toContain('VISIT-B');
+    expect(text.indexOf('13-05-2026 · Dra. Luna')).toBeLessThan(text.indexOf('20-05-2026 · Dr. Río'));
+    expect(text).toContain('Atención inicial con fiebre');
+    expect(text).toContain('Control de seguimiento estable');
+    expect(text).toContain('Costo: 150 BOB');
+    expect(text).toContain('Costo: 80 BOB');
+    expect(text).toContain('Plan de tratamiento: Antibiótico por 3 días · Reposo');
+    expect(text).toContain('Plan de tratamiento: Alta clínica');
+    expect(text).toContain('Seguimiento de VISIT-A');
+  });
+
   it('should render genealogy as a visual parent-current-offspring tree', async () => {
     const { fixture } = await configure();
 

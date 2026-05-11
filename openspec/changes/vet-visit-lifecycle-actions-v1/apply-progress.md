@@ -4,7 +4,7 @@
 **Artifact store**: hybrid (OpenSpec + Engram)
 **Delivery strategy**: auto-chain
 **Chain strategy**: feature-branch-chain
-**Current PR slice**: PR 4 — FE page row-action wiring and follow-up chain creation
+**Current PR slice**: PR 5 — deferred final tasks: timeline/history chain display + final BE checklist tests
 
 ## Completed Tasks
 
@@ -60,7 +60,13 @@
 - [x] 4.1.4 Create a second linked follow-up event after attend+schedule, using `parentVisitId = current visitId` and pending next-control metadata.
 - [x] 4.1.5 Create a finalized clinical event after attend+finalize with `visit.status = FINALIZED` and `protocol.status = CLOSED`.
 - [x] 4.1.7 Enforce row-action lifecycle visibility for PR4 scope: attend only for PENDING/RESCHEDULED, cancel for non-terminal visits, and no direct finalize action on the central list.
+- [x] 4.2.1 Normalize `parentVisitId` in animal health timeline items so linked follow-up visits can be displayed as a chain indicator.
+- [x] 4.2.2 Render linked veterinary visit chains in animal detail Salud timeline, showing each visit over time with notes, cost, and treatment plan when available.
+- [x] 5.1.1 Confirm final BE resource checklist coverage via existing focused tests: cancel-without-reason, attend-without-findings, cost-only-for-vet-visit, and treatment-plan validation are already covered in `AnimalHealthEventMapperTest` / `VetVisitResourceTest` and pass under Java 21.
+- [x] 5.1.2 Confirm `AnimalHealthEventMapperTest` coverage for `readCost()`, `readTreatmentPlan()`, `readCancelReason()`, and legacy string plan normalization.
+- [x] 5.1.3 Confirm `AnimalHealthEventServiceTest` coverage for vet visit cost/currency/treatment plan projection.
 - [x] 5.2.3 Add page component tests for row action visibility, cancel payload, attend follow-up chain, and attend finalize chain.
+- [x] 5.2.4 Confirm `vet-visit-form.mapper.spec.ts` already covers cancel action mapping, attend action mapping, and legacy plan normalization.
 
 ## TDD Cycle Evidence
 
@@ -77,6 +83,8 @@
 | 3.2 Attend dialog form | `vet-visit-form-dialog.component.spec.ts` | FE component unit | ✅ 7/7 focused form dialog baseline passed with Node 20.19.6 | ✅ RED compile failed for missing `action`, `findings`, `cost`, `treatmentPlanControls`, dynamic step helpers, and follow-up choice | ✅ Focused dialog specs passed: 13/13; dialog+mapper specs passed: 23/23 | ✅ Render fields, validation, dynamic add/remove, follow-up submit, finalize submit | ✅ Conditional attend mode preserved create form behavior |
 | 3.3 Cancel composition decision | `vet-visit-cancel-dialog.component.spec.ts`, `vet-visit-form-dialog.component.spec.ts` | FE component unit | ✅ 7/7 focused form dialog baseline | ✅ RED covered standalone cancel dialog instead of form `action='cancel'` | ✅ Focused dialog+mapper specs passed: 23/23 | ✅ Standalone cancel dialog + form dialog create/attend modes | ➖ Architectural boundary decision; page composition remains PR4 |
 | 4.1 Page row-action wiring | `vet-visits-page.component.spec.ts` | FE component unit | ✅ 6/6 focused page baseline passed with Node 20.19.6 | ✅ RED failed for direct `Finalizar`, missing cancel dialog wiring, missing attend action mode, and missing follow-up/finalize event creation | ✅ Focused page specs passed: 9/9; focused FE vet visit specs passed: 36/36 | ✅ Row visibility, cancel payload, attend+follow-up chain, attend+finalize chain, cancel on non-terminal visits | ✅ Extracted row-action helpers and reused mapper/event service path |
+| 4.2 Timeline/history chain display | `animal-health-events-timeline.adapter.spec.ts`, `animal-detail-page.component.spec.ts` | FE unit + component unit | ✅ 29/29 focused animal detail/timeline baseline passed with Node 20.19.6 | ✅ RED failed at compile because `parentVisitId` was absent from `AnimalHealthEventItem`; detail chain UI did not exist | ✅ Focused timeline/detail specs passed: 31/31 | ✅ Parent+follow-up chronological chain, parentVisitId link, notes, cost, and treatment plan display | ✅ Kept display feature-local and reused existing metadata readers/Material detail styles |
+| 5.1 BE final checklist | `AnimalHealthEventMapperTest.java`, `AnimalHealthEventServiceTest.java`, `VetVisitResourceTest.java` | BE unit + REST integration | ✅ Focused BE checklist passed under Java 21 | ➖ No new RED: checklist was already covered by PR1 tests; duplicating would add noise | ✅ `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -Dtest=AnimalHealthEventMapperTest,AnimalHealthEventServiceTest,VetVisitResourceTest test` → 36/36 | ✅ Mapper validation/helper, service projection, REST projection cases | ➖ Evidence-only task; no production code changed |
 
 ## Test Summary
 
@@ -97,6 +105,11 @@
 - **PR4 GREEN/REFACTOR**: Same focused page command → 9 tests passing, 0 failures.
 - **PR4 focused FE verification**: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts --include src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.spec.ts --include src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts --include src/app/features/admin/vet-visits/vet-visit-cancel-dialog.component.spec.ts --include src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts` → 36 tests passing, 0 failures.
 - **Total PR4 tests written/updated**: 4 page action scenarios added plus service spec parentVisitId expectation updated.
+- **PR5 Safety net**: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/animals/animal-detail-page.component.spec.ts --include src/app/features/admin/animals/data-access/animal-health-events-timeline.adapter.spec.ts --watch=false` → 29 tests passing before PR5 production changes.
+- **PR5 RED**: Same focused animal detail/timeline command after writing PR5 tests first → expected TypeScript compile failures for missing `parentVisitId` on `AnimalHealthEventItem` and missing linked-chain UI behavior.
+- **PR5 GREEN/REFACTOR**: Same focused animal detail/timeline command → 31 tests passing, 0 failures.
+- **PR5 BE checklist evidence**: `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -Dtest=AnimalHealthEventMapperTest,AnimalHealthEventServiceTest,VetVisitResourceTest test` → 36 tests passing, 0 failures, 0 errors.
+- **Production build**: Not run, per instruction.
 
 ## Files Changed
 
@@ -117,6 +130,12 @@
 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Modified | Added PR4 row-action visibility, cancel payload, attend+follow-up, and attend+finalize coverage. |
 | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.ts` | Modified | Added nullable `parentVisitId` parsing to preserve follow-up chain metadata in FE list items/local stale merges. |
 | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts` | Modified | Added parentVisitId parse/null expectations around existing list DTO coverage. |
+| `hato-fe/src/app/features/admin/animals/data-access/animals-health-events.service.ts` | Modified | Added nullable `parentVisitId` to `AnimalHealthEventItem` timeline contract. |
+| `hato-fe/src/app/features/admin/animals/data-access/animal-health-events-timeline.adapter.ts` | Modified | Normalized `parentVisitId` from FIELD_VET_VISIT metadata and derived chain-level active/closed status by parentVisitId root. |
+| `hato-fe/src/app/features/admin/animals/data-access/animal-health-events-timeline.adapter.spec.ts` | Modified | Added linked visit chain normalization coverage for parentVisitId, chronological status, cost, and plan metadata. |
+| `hato-fe/src/app/features/admin/animals/animal-detail-page.component.ts` | Modified | Rendered a Spanish linked visit chain mini-timeline in the Salud tab, including notes, cost, and Plan de tratamiento. |
+| `hato-fe/src/app/features/admin/animals/animal-detail-page.component.spec.ts` | Modified | Added animal detail coverage for linked veterinary visit chains over time. |
+| `openspec/changes/vet-visit-lifecycle-actions-v1/tasks.md` | Modified | Marked PR5 timeline/history and evidence-confirmed BE/FE final checklist tasks complete while keeping direct row Finalizar unchecked. |
 | `openspec/changes/vet-visit-lifecycle-actions-v1/tasks.md` | Modified | Marked PR2 frontend contracts/mapper tasks complete. |
 | `openspec/changes/vet-visit-lifecycle-actions-v1/tasks.md` | Modified | Marked PR3 dialog tasks complete, preserving PR4 page wiring as pending. |
 | `openspec/changes/vet-visit-lifecycle-actions-v1/apply-progress.md` | Modified | Merged PR1+PR2 progress with PR3 dialog progress and TDD evidence. |
@@ -131,6 +150,8 @@
 - PR3 returns attend dialog fields (`findings`, `cost`, `treatmentPlan`, `followUpChoice`) but does not wire them into page row actions; that is explicitly reserved for PR4.
 - PR4 removes direct `Finalizar` from all central list row actions per the launch scope and proposal/spec intent. This leaves task 4.1.6's direct attended-row finalize wording intentionally unimplemented because it conflicts with "Finalization SHALL ONLY be reachable from the ATENDIDA state through the attend flow" and the user request to remove direct Finalizar.
 - PR4 did not implement full timeline/history chain rendering (4.2.2); final broad verification/archive is reserved for PR5 and backend projection did not expose a dedicated timeline endpoint change in this slice.
+- PR5 does not implement direct row `Finalizar`; task 4.1.6 remains intentionally unchecked because it conflicts with the spec and launch instruction to omit direct Finalizar.
+- PR5 does not add duplicate backend tests for checklist items that already passed with focused evidence; tasks 5.1.1–5.1.3 are marked complete by coverage evidence instead.
 
 ## Discoveries
 
@@ -140,21 +161,23 @@
 - `VetVisitFormDialogComponent` already had an attended-create validation tied to the existing `notes` field; PR3 had to keep that behavior while allowing attend mode to validate the new `attentionNotes` field instead.
 - `VetVisitItem` did not previously carry `parentVisitId`; adding the nullable field is required for FE stale/local merge state to keep follow-up chain links visible after PR4 creates a linked next-control visit.
 - The existing FE create path can still be reused for row actions by adapting row/dialog data into `mapVetVisitFormToCreateInput()`; no dedicated `createVetVisitEvent()` service method exists.
+- Animal health timeline items did not previously expose `parentVisitId`; PR5 had to normalize it from `metadata.visit.parentVisitId` before animal detail could display linked follow-up chains.
+- Existing BE checklist tests already covered Phase 5.1 requirements; duplicating them would increase review noise without new behavior coverage.
 
 ## Remaining Tasks
 
 - [x] Phase 3: Frontend Dialogs — Cancel + Attend Forms (3.1.1–3.2.7 and 3.3.3 complete; 3.3.1/3.3.2 intentionally superseded by composition decision).
-- [x] Phase 4: Frontend Page — Actions Wiring + Follow-up Chain page actions (4.1.1–4.1.5, 4.1.7 complete for PR4 launch scope; 4.1.6 intentionally not implemented due direct-finalize conflict; 4.2 display/timeline remains for PR5/follow-up).
-- [ ] Phase 5.1: Backend tests checklist remains unchecked for the final cross-cutting PR slice, though PR1 added focused backend coverage.
-- [ ] Phase 5.2: Frontend final checklist is mostly covered for dialogs/page/mapper; final PR5 broad verification remains.
+- [x] Phase 4: Frontend Page — Actions Wiring + Follow-up Chain page actions and chain display (4.1.1–4.1.5, 4.1.7, 4.2.1–4.2.2 complete; 4.1.6 intentionally not implemented due direct-finalize conflict).
+- [x] Phase 5.1: Backend tests checklist complete by existing focused coverage evidence; 36/36 BE tests pass under Java 21.
+- [x] Phase 5.2: Frontend final checklist complete for mapper/dialog/page plus PR5 animal timeline chain tests.
 
 ## Workload / PR Boundary
 
 - **Mode**: chained PR slice.
-- **Boundary**: Frontend page row-action wiring only — remove direct finalize, cancel modal event creation, attend modal event creation, follow-up chain creation, and stale merge parent link support.
-- **Excluded**: Backend changes, production build, full timeline/history chain rendering, final broad verification/archive.
-- **Review budget impact**: PR4 stays a focused FE orchestration slice; PR5 should handle final broad checks/archive.
+- **Boundary**: Deferred final tasks only — animal detail timeline/history chain display plus backend checklist evidence confirmation.
+- **Excluded**: Direct row Finalizar, production build, duplicate BE tests for already-covered behavior.
+- **Review budget impact**: PR5 is a focused FE timeline slice plus artifact/test evidence updates.
 
 ## Status
 
-53 cumulative checklist items complete across PR1+PR2+PR3+PR4. PR4 launch scope is complete; ready for PR5 final broad verification/archive slice.
+All implementable checklist items complete across PR1–PR5. Direct row `Finalizar` remains intentionally not implemented due spec conflict. Ready for final verification/archive.

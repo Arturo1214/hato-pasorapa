@@ -7,6 +7,7 @@ import type { AnimalHealthEventItem, AnimalHealthEventListFilters } from './anim
 export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): AnimalHealthEventItem {
   const metadata = (raw['metadata'] as AnimalHealthEventOfflineMetadata | undefined) ?? {};
   const visitId = typeof raw['visitId'] === 'string' ? raw['visitId'] : readVisitIdFromMetadata(metadata);
+  const parentVisitId = typeof raw['parentVisitId'] === 'string' ? raw['parentVisitId'] : readParentVisitIdFromMetadata(metadata);
   const nextDueAt = typeof raw['nextDueAt'] === 'string' ? raw['nextDueAt'] : readNextDueAt(metadata);
   const followUpStatus = typeof raw['followUpStatus'] === 'string' ? raw['followUpStatus'] : undefined;
   const visitMode = readVisitMode(metadata);
@@ -27,6 +28,7 @@ export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): An
     createdAt: String(raw['createdAt'] ?? raw['occurredAt'] ?? ''),
     updatedAt: String(raw['updatedAt'] ?? raw['createdAt'] ?? raw['occurredAt'] ?? ''),
     visitId,
+    parentVisitId,
     nextDueAt,
     treatmentStatus: normalizeFollowUpStatus(followUpStatus),
     ...(visitMode ? { visitMode, visitProjection: visitMode === 'GLOBAL' ? 'CAMPAIGN' : 'SPECIFIC' } : {}),
@@ -72,7 +74,8 @@ export function compareAnimalHealthEventTimeline(left: AnimalHealthEventItem, ri
 export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], outbox: OfflineOperationEnvelope[]): AnimalHealthEventItem[] {
   const sorted = [...items].sort(compareAnimalHealthEventTimeline);
   const latestByTreatmentCase = new Map<string, AnimalHealthEventItem['healthEventType']>();
-  const latestByVisitId = new Map<string, { status: AnimalHealthEventItem['treatmentStatus']; nextDueAt: string | null }>();
+  const parentByVisitId = new Map<string, string>();
+  const latestByChainRoot = new Map<string, { status: AnimalHealthEventItem['treatmentStatus']; nextDueAt: string | null }>();
 
   sorted.forEach((item) => {
     const treatmentCaseId = readTreatmentCaseId(item);
@@ -81,8 +84,16 @@ export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], out
     }
 
     const visitId = readVisitId(item);
+    const parentVisitId = item.parentVisitId ?? readParentVisitIdFromMetadata(item.metadata);
+    if (visitId && parentVisitId) {
+      parentByVisitId.set(visitId, parentVisitId);
+    }
+  });
+
+  sorted.forEach((item) => {
+    const visitId = readVisitId(item);
     if (visitId) {
-      latestByVisitId.set(visitId, {
+      latestByChainRoot.set(resolveVisitChainRoot(visitId, parentByVisitId), {
         status: readProtocolStatus(item) === 'CLOSED' ? 'closed' : 'active',
         nextDueAt: readNextDueAt(item.metadata) ?? null,
       });
@@ -100,7 +111,7 @@ export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], out
 
     const treatmentCaseId = readTreatmentCaseId(item);
     const latestType = treatmentCaseId ? latestByTreatmentCase.get(treatmentCaseId) : undefined;
-    const visitProjection = item.visitId ? latestByVisitId.get(item.visitId) : undefined;
+    const visitProjection = item.visitId ? latestByChainRoot.get(resolveVisitChainRoot(item.visitId, parentByVisitId)) : undefined;
     const treatmentStatus = visitProjection?.status ?? (treatmentCaseId ? (latestType === 'TREATMENT_CLOSED' ? 'closed' : 'active') : item.treatmentStatus);
     const nextDueAt = visitProjection?.nextDueAt ?? item.nextDueAt ?? null;
 
@@ -149,6 +160,22 @@ function readVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {
   }
   const visitId = (metadata.visit as Record<string, unknown>)['visitId'];
   return typeof visitId === 'string' && visitId.trim() ? visitId.trim() : null;
+}
+
+function readParentVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {
+  const visit = readVisitBlock(metadata);
+  const parentVisitId = visit?.['parentVisitId'];
+  return typeof parentVisitId === 'string' && parentVisitId.trim() ? parentVisitId.trim() : null;
+}
+
+function resolveVisitChainRoot(visitId: string, parentByVisitId: Map<string, string>) {
+  let current = visitId;
+  const seen = new Set<string>();
+  while (parentByVisitId.has(current) && !seen.has(current)) {
+    seen.add(current);
+    current = parentByVisitId.get(current)!;
+  }
+  return current;
 }
 
 function readVisitMode(metadata: AnimalHealthEventOfflineMetadata) {

@@ -88,6 +88,43 @@ describe('animal-health-events-timeline.adapter', () => {
     expect(timeline[1].treatmentStatus).toBe('active');
   });
 
+  it('should normalize linked vet visit chains with parentVisitId, cost and treatment plan', () => {
+    const parent = normalizeAnimalHealthEventItem({
+      id: 'visit-parent-event',
+      animalUuid: 'animal-1',
+      healthEventType: 'FIELD_VET_VISIT',
+      occurredAt: '2026-05-10T10:00:00.000Z',
+      operationId: 'visit-parent-event',
+      metadata: {
+        visit: { visitId: 'VISIT-A', mode: 'SPECIFIC', status: 'ATTENDED', veterinarian: { name: 'Dra. Luna' } },
+        clinicalNote: { reason: 'Control', findings: 'Fiebre leve', plan: ['Antibiótico', 'Reposo'] },
+        cost: { amount: 150, currency: 'BOB' },
+        protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-17T10:00:00.000Z' },
+      },
+    });
+    const followUp = normalizeAnimalHealthEventItem({
+      id: 'visit-follow-up-event',
+      animalUuid: 'animal-1',
+      healthEventType: 'FIELD_VET_VISIT',
+      occurredAt: '2026-05-17T10:00:00.000Z',
+      operationId: 'visit-follow-up-event',
+      metadata: {
+        visit: { visitId: 'VISIT-B', parentVisitId: 'VISIT-A', mode: 'SPECIFIC', status: 'ATTENDED', veterinarian: { name: 'Dr. Río' } },
+        clinicalNote: { reason: 'Seguimiento', findings: 'Sin fiebre', plan: ['Alta'] },
+        cost: { amount: 80, currency: 'BOB' },
+        protocol: { status: 'CLOSED' },
+      },
+    });
+
+    const timeline = decorateAnimalHealthTimeline([followUp, parent], []);
+
+    expect(timeline.map((item) => item.visitId)).toEqual(['VISIT-A', 'VISIT-B']);
+    expect(timeline.map((item) => item.parentVisitId)).toEqual([null, 'VISIT-A']);
+    expect(timeline.map((item) => item.treatmentStatus)).toEqual(['closed', 'closed']);
+    expect(timeline[0].metadata).toEqual(expect.objectContaining({ cost: { amount: 150, currency: 'BOB' } }));
+    expect(timeline[1].metadata).toEqual(expect.objectContaining({ cost: { amount: 80, currency: 'BOB' } }));
+  });
+
   it('should project global field vet visits as campaign entries with veterinarian names', () => {
     const globalVisit = normalizeAnimalHealthEventItem({
       id: 'global-visit-1',

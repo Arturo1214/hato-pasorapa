@@ -124,6 +124,22 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
                           <mat-icon>medical_information</mat-icon>
                           Detalles
                         </button>
+                        @if (linkedVetVisitTimeline(event).length > 1) {
+                          <section class="vet-visit-chain" aria-label="Cadena de visitas vinculadas">
+                            <h3>Cadena de visitas vinculadas</h3>
+                            <ol>
+                              @for (linkedVisit of linkedVetVisitTimeline(event); track linkedVisit.id) {
+                                <li>
+                                  <strong>{{ formatTimelineDate(linkedVisit.occurredAt) }} · {{ vetVisitChainTitle(linkedVisit) }}</strong>
+                                  @if (vetVisitChainLinkLabel(linkedVisit)) { <span class="event-metadata">{{ vetVisitChainLinkLabel(linkedVisit) }}</span> }
+                                  @if (vetVisitChainNotes(linkedVisit)) { <span class="event-metadata">Notas: {{ vetVisitChainNotes(linkedVisit) }}</span> }
+                                  @if (vetVisitChainCost(linkedVisit)) { <span class="event-metadata">Costo: {{ vetVisitChainCost(linkedVisit) }}</span> }
+                                  @if (vetVisitChainPlan(linkedVisit)) { <span class="event-metadata">Plan de tratamiento: {{ vetVisitChainPlan(linkedVisit) }}</span> }
+                                </li>
+                              }
+                            </ol>
+                          </section>
+                        }
                       }
                     </li>
                   }
@@ -281,6 +297,10 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .event-context dt { font-size: .75rem; }
     .event-context dd { font-weight: 500; overflow-wrap: anywhere; }
     .event-metadata { display: block; margin-top: .25rem; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
+    .vet-visit-chain { margin-top: .75rem; padding: .75rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: .75rem; background: var(--mat-sys-surface-container-low); }
+    .vet-visit-chain h3 { margin: 0 0 .5rem; font-size: .95rem; }
+    .vet-visit-chain ol { margin: 0; padding-left: 1.25rem; }
+    .vet-visit-chain li + li { margin-top: .5rem; }
     .active-gestation { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--mat-sys-primary); border-radius: 1rem; background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); }
     .active-gestation h3 { margin: 0 0 .75rem; }
     .active-gestation dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .75rem; margin: 0; }
@@ -425,6 +445,18 @@ export class AnimalDetailPageComponent {
 
   healthEventContextRows(event: AnimalHealthEventItem) { return healthEventContextRows(event); }
 
+  linkedVetVisitTimeline(event: AnimalHealthEventItem) { return linkedVetVisitTimeline(event, this.healthEvents()); }
+
+  vetVisitChainTitle(event: AnimalHealthEventItem) { return vetVisitChainTitle(event); }
+
+  vetVisitChainLinkLabel(event: AnimalHealthEventItem) { return vetVisitChainLinkLabel(event); }
+
+  vetVisitChainNotes(event: AnimalHealthEventItem) { return readAttentionNotes(event); }
+
+  vetVisitChainCost(event: AnimalHealthEventItem) { return readCostLabel(event); }
+
+  vetVisitChainPlan(event: AnimalHealthEventItem) { return readPlanLabel(event); }
+
   openVetVisitDetails(event: AnimalHealthEventItem) {
     this.dialog.open(AnimalVetVisitDetailDialogComponent, {
       width: 'min(42rem, 96vw)',
@@ -494,7 +526,7 @@ export class AnimalDetailPageComponent {
         <div><dt>Matrícula</dt><dd>{{ veterinarianLicense(data) }}</dd></div>
         <div><dt>Notas de atención</dt><dd>{{ attentionNotes(data) }}</dd></div>
         <div><dt>Descripción / hallazgos</dt><dd>{{ findings(data) }}</dd></div>
-        <div><dt>Plan</dt><dd>{{ plan(data) }}</dd></div>
+        <div><dt>Plan de tratamiento</dt><dd>{{ plan(data) }}</dd></div>
         <div><dt>Próximo control</dt><dd>{{ nextControlDate(data) }}</dd></div>
         <div><dt>Costo</dt><dd>{{ cost(data) }}</dd></div>
       </dl>
@@ -520,7 +552,7 @@ export class AnimalVetVisitDetailDialogComponent {
   veterinarianLicense(event: AnimalHealthEventItem) { return readVeterinarianLicense(event) ?? 'No informada'; }
   attentionNotes(event: AnimalHealthEventItem) { return readAttentionNotes(event) ?? 'No informadas'; }
   findings(event: AnimalHealthEventItem) { return readClinicalNoteText(event, 'findings') ?? 'No informado'; }
-  plan(event: AnimalHealthEventItem) { return readClinicalNoteText(event, 'plan') ?? 'No informado'; }
+  plan(event: AnimalHealthEventItem) { return readPlanLabel(event) ?? 'No informado'; }
   nextControlDate(event: AnimalHealthEventItem) { return event.nextDueAt ? formatDateOnly(event.nextDueAt) : 'No programado'; }
   cost(event: AnimalHealthEventItem) { return readCostLabel(event) ?? 'No informado'; }
 }
@@ -1113,6 +1145,55 @@ function healthEventContextRows(event: AnimalHealthEventItem) {
   ].filter((row): row is { label: string; value: string } => Boolean(row.value));
 }
 
+function linkedVetVisitTimeline(event: AnimalHealthEventItem, events: AnimalHealthEventItem[]) {
+  const currentVisitId = readVisitId(event);
+  if (!currentVisitId) {
+    return [];
+  }
+
+  const fieldVisits = events.filter(isFieldVetVisit).filter((candidate) => Boolean(readVisitId(candidate)));
+  const parentByVisitId = new Map<string, string>();
+  for (const visit of fieldVisits) {
+    const visitId = readVisitId(visit);
+    const parentVisitId = readParentVisitId(visit);
+    if (visitId && parentVisitId) {
+      parentByVisitId.set(visitId, parentVisitId);
+    }
+  }
+
+  const rootVisitId = resolveVisitChainRoot(currentVisitId, parentByVisitId);
+  return fieldVisits
+    .filter((candidate) => resolveVisitChainRoot(readVisitId(candidate)!, parentByVisitId) === rootVisitId)
+    .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt) || left.id.localeCompare(right.id));
+}
+
+function vetVisitChainTitle(event: AnimalHealthEventItem) {
+  return [readVeterinarianName(event), readVisitId(event)].filter((value): value is string => Boolean(value)).join(' · ') || 'Visita veterinaria';
+}
+
+function vetVisitChainLinkLabel(event: AnimalHealthEventItem) {
+  const parentVisitId = readParentVisitId(event);
+  return parentVisitId ? `Seguimiento de ${parentVisitId}` : null;
+}
+
+function readVisitId(event: AnimalHealthEventItem) {
+  return firstText(event.visitId, readVisitBlock(event)?.['visitId']);
+}
+
+function readParentVisitId(event: AnimalHealthEventItem) {
+  return firstText(event.parentVisitId, readVisitBlock(event)?.['parentVisitId']);
+}
+
+function resolveVisitChainRoot(visitId: string, parentByVisitId: Map<string, string>) {
+  let current = visitId;
+  const seen = new Set<string>();
+  while (parentByVisitId.has(current) && !seen.has(current)) {
+    seen.add(current);
+    current = parentByVisitId.get(current)!;
+  }
+  return current;
+}
+
 function formatDateOnly(value: string | null | undefined) {
   const raw = firstText(value);
   if (!raw) {
@@ -1167,6 +1248,15 @@ function readClinicalNoteBlock(event: AnimalHealthEventItem) {
 
 function readClinicalNoteText(event: AnimalHealthEventItem, field: 'reason' | 'findings' | 'plan') {
   return firstText(readClinicalNoteBlock(event)?.[field]);
+}
+
+function readPlanLabel(event: AnimalHealthEventItem) {
+  const plan = readClinicalNoteBlock(event)?.['plan'];
+  if (Array.isArray(plan)) {
+    const steps = plan.map((step) => firstText(step)).filter((step): step is string => Boolean(step));
+    return steps.length ? steps.join(' · ') : null;
+  }
+  return firstText(plan);
 }
 
 function readVeterinarianName(event: AnimalHealthEventItem) {

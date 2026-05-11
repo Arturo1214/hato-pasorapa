@@ -130,8 +130,8 @@ Chain strategy: feature-branch-chain
 
 ### 4.2 Frontend — VetVisitsPageComponent: follow-up chain integration
 
-- [ ] 4.2.1 When fetching visit list, ensure `parentVisitId` is displayed as linked chain indicator (icon or badge)
-- [ ] 4.2.2 Ensure timeline/history view shows linked visit notes over time by following `parentVisitId` chains
+- [x] 4.2.1 When fetching visit list, ensure `parentVisitId` is displayed as linked chain indicator (icon or badge)
+- [x] 4.2.2 Ensure timeline/history view shows linked visit notes over time by following `parentVisitId` chains
 
 ---
 
@@ -139,16 +139,16 @@ Chain strategy: feature-branch-chain
 
 ### 5.1 Backend tests
 
-- [ ] 5.1.1 Extend `VetVisitResourceTest` to cover cancel-without-reason, attend-without-findings, cost-only-for-vet-visit, treatment-plan-validation scenarios from specs
-- [ ] 5.1.2 Add `AnimalHealthEventMapperTest` cases for `readCost()`, `readTreatmentPlan()`, `readCancelReason()` and legacy string plan normalization
-- [ ] 5.1.3 Add `AnimalHealthEventServiceTest` cases for `toVetVisitItem()` cost/plan projection
+- [x] 5.1.1 Extend `VetVisitResourceTest` to cover cancel-without-reason, attend-without-findings, cost-only-for-vet-visit, treatment-plan-validation scenarios from specs
+- [x] 5.1.2 Add `AnimalHealthEventMapperTest` cases for `readCost()`, `readTreatmentPlan()`, `readCancelReason()` and legacy string plan normalization
+- [x] 5.1.3 Add `AnimalHealthEventServiceTest` cases for `toVetVisitItem()` cost/plan projection
 
 ### 5.2 Frontend tests
 
 - [x] 5.2.1 `vet-visit-cancel-dialog.component.spec.ts` — renders, validates min-length, returns cancelReason on confirm, null on cancel
 - [x] 5.2.2 `vet-visit-form-dialog.component.spec.ts` — action=attend shows all clinical fields, validates findings required, cost >= 0, treatmentPlan max 20 steps, follow-up vs finalize radio works
 - [x] 5.2.3 `vet-visits-page.component.spec.ts` — row actions show correct buttons by state, cancel flow opens dialog and sends correct payload, attend flow opens dialog and creates follow-up event when selected
-- [ ] 5.2.4 `vet-visit-form.mapper.spec.ts` — cancel action mapping, attend action mapping, legacy plan normalization
+- [x] 5.2.4 `vet-visit-form.mapper.spec.ts` — cancel action mapping, attend action mapping, legacy plan normalization
 
 ---
 

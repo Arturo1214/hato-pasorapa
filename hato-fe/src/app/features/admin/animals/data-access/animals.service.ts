@@ -196,6 +196,7 @@ export class AnimalsService {
   private metricsStore = inject(SyncMetricsStore);
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
+  private readonly recentlyMutatedAnimalUuids = new Set<string>();
 
   readonly syncState = computed<AnimalsSyncState>(() => ({
     pending: this.metricsStore.metrics().pending,
@@ -258,12 +259,13 @@ export class AnimalsService {
     const animals = (response.content ?? []).map(normalizeAnimalItem);
     await Promise.all(animals.map((animal) => this.saveAnimalSnapshot(animal)));
     await this.refreshPendingState();
-    return animals.map(
+    const mergedAnimals = await this.mergeRecentlyMutatedSnapshots(animals, effectiveFilters);
+    return mergedAnimals.map(
       (animal) =>
         ({
           ...animal,
-          syncStatus: 'synced',
-          syncMessage: null,
+          syncStatus: animal.syncStatus ?? 'synced',
+          syncMessage: animal.syncMessage ?? null,
         }) satisfies AnimalItem
     );
   }
@@ -333,6 +335,7 @@ export class AnimalsService {
       clientUpdatedAt: now,
     });
     await this.saveAnimalSnapshot(createOptimisticAnimalSnapshot(animalUuid, sanitizedPayload, now));
+    this.recentlyMutatedAnimalUuids.add(animalUuid);
     await this.refreshPendingState({
       lastMessage: this.offlineStatus.isOnline()
         ? 'Alta de animal encolada. Se disparó la sincronización automática.'
@@ -372,6 +375,7 @@ export class AnimalsService {
     await this.saveAnimalSnapshot(
       applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now)
     );
+    this.recentlyMutatedAnimalUuids.add(uuid);
     await this.refreshPendingState({
       lastMessage: this.offlineStatus.isOnline()
         ? 'Actualización de animal encolada. Se disparó la sincronización automática.'
@@ -401,6 +405,7 @@ export class AnimalsService {
 
     const createdOffspring = response.offspring.map(normalizeAnimalItem);
     await Promise.all(createdOffspring.map((animal) => this.saveAnimalSnapshot(animal)));
+    createdOffspring.forEach((animal) => this.recentlyMutatedAnimalUuids.add(animal.uuid));
     return {
       ...response,
       offspring: createdOffspring,
@@ -416,6 +421,36 @@ export class AnimalsService {
       .map((animal) => decorateAnimalSnapshot(animal, outbox))
       .filter((animal) => matchesAnimalFilters(animal, filters))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  private async mergeRecentlyMutatedSnapshots(animals: AnimalItem[], filters: AnimalListFilters) {
+    const remoteAnimalUuids = new Set(animals.map((animal) => animal.uuid));
+    for (const uuid of [...this.recentlyMutatedAnimalUuids]) {
+      if (remoteAnimalUuids.has(uuid)) {
+        this.recentlyMutatedAnimalUuids.delete(uuid);
+      }
+    }
+
+    if (!this.recentlyMutatedAnimalUuids.size) {
+      return animals;
+    }
+
+    const snapshots = await this.store.listSnapshots('ANIMAL');
+    const outbox = await this.store.listOutbox();
+    const missingRecentlyMutatedAnimals = snapshots
+      .filter((snapshot) => this.recentlyMutatedAnimalUuids.has(snapshot.entityId))
+      .map((snapshot) => normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem))
+      .map((animal) => decorateAnimalSnapshot(animal, outbox))
+      .filter((animal) => !remoteAnimalUuids.has(animal.uuid))
+      .filter((animal) => matchesAnimalFilters(animal, filters));
+
+    if (!missingRecentlyMutatedAnimals.length) {
+      return animals;
+    }
+
+    return [...missingRecentlyMutatedAnimals, ...animals].sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt)
+    );
   }
 
   private async hasLocalAnimalOperations() {

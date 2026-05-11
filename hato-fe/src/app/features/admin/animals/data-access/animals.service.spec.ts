@@ -472,6 +472,61 @@ describe('AnimalsService', () => {
     expect(service.syncState().pending).toBe(1);
   });
 
+  it('should keep a freshly created animal visible when the next online list response is still stale', async () => {
+    const remoteAnimal = createAnimal({ uuid: 'remote-animal-1', arete: 'AR-100' });
+    const get = vi.fn(() => of({ content: [remoteAnimal] }));
+    const { service, store } = setup({ online: true, http: { get: get as never } });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('44444444-5555-4666-8777-888888888888');
+
+    await firstValueFrom(
+      service.createAnimal({
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-NEW',
+        category: ANIMAL_CATEGORY.VACA,
+        sex: ANIMAL_SEX.HEMBRA,
+        active: true,
+        admissionDate: '2026-05-11',
+      })
+    );
+    const [createOperation] = await store.listOutbox();
+    await store.markAcked(createOperation.operationId);
+
+    await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([
+      expect.objectContaining({
+        uuid: '44444444-5555-4666-8777-888888888888',
+        arete: 'AR-NEW',
+        syncStatus: 'synced',
+      }),
+      expect.objectContaining({ uuid: 'remote-animal-1', arete: 'AR-100', syncStatus: 'synced' }),
+    ]);
+    expect(get).toHaveBeenCalledWith('/api/animals?page=0&size=20&sort=updatedAt,desc', {
+      headers: expect.any(HttpHeaders),
+    });
+  });
+
+  it('should apply current list filters before merging freshly created snapshots into a stale online response', async () => {
+    const get = vi.fn(() => of({ content: [] }));
+    const { service, store } = setup({ online: true, http: { get: get as never } });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('55555555-6666-4777-8888-999999999999');
+
+    await firstValueFrom(
+      service.createAnimal({
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-FILTERED',
+        category: ANIMAL_CATEGORY.VACA,
+        sex: ANIMAL_SEX.HEMBRA,
+        active: true,
+        admissionDate: '2026-05-11',
+      })
+    );
+    const [createOperation] = await store.listOutbox();
+    await store.markAcked(createOperation.operationId);
+
+    await expect(
+      firstValueFrom(service.listAnimals({ ownerGanaderoId: 'other-ganadero' }))
+    ).resolves.toEqual([]);
+  });
+
   it('should allow ganadero payloads without owner uuid and keep a local pending placeholder', async () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({

@@ -119,14 +119,15 @@ export class VetVisitsPageComponent {
     this.loadVisits();
   }
 
-  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }) {
+  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem) {
     this.loading.set(true);
     this.vetVisitsService
       .listVetVisits(filter)
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe((items) => {
-        this.visits.set(items);
-        this.visitRows.set(items.map(toVetVisitRow));
+        const visibleItems = mergeRecentlySavedVisit(items, recentlySavedVisit, filter);
+        this.visits.set(visibleItems);
+        this.visitRows.set(visibleItems.map(toVetVisitRow));
       });
   }
 
@@ -164,7 +165,8 @@ export class VetVisitsPageComponent {
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
-        this.loadVisits(toBackendFilter(this.visitFilters()));
+        const currentFilter = toBackendFilter(this.visitFilters());
+        this.loadVisits(currentFilter, toVetVisitItem(result));
       });
   }
 }
@@ -202,6 +204,72 @@ function toBackendFilter(filters: Record<string, string>): VetVisitFilter {
     ...(status ? { status } : {}),
     ...(veterinarian?.trim() ? { veterinarian: veterinarian.trim() } : {}),
   };
+}
+
+function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
+  return {
+    visitId: result.visitId,
+    mode: result.mode,
+    status: result.status,
+    veterinarian: {
+      name: result.veterinarianName,
+      ...(result.veterinarianLicense ? { license: result.veterinarianLicense } : {}),
+    },
+    occurredAt: result.occurredAt,
+    nextControlAt: result.nextDueAt,
+    animalUuid: result.animalUuid,
+    targetAnimalCount: result.targetAnimalCount,
+    atencionNotas: result.notes,
+  };
+}
+
+function mergeRecentlySavedVisit(
+  items: VetVisitItem[],
+  recentlySavedVisit: VetVisitItem | undefined,
+  filter: VetVisitFilter
+): VetVisitItem[] {
+  if (!recentlySavedVisit || items.some((item) => item.visitId === recentlySavedVisit.visitId)) {
+    return items;
+  }
+
+  if (!matchesVetVisitFilter(recentlySavedVisit, filter)) {
+    return items;
+  }
+
+  return [recentlySavedVisit, ...items];
+}
+
+function matchesVetVisitFilter(item: VetVisitItem, filter: VetVisitFilter) {
+  return (
+    matchesNullableFilter(item.mode, filter.mode) &&
+    matchesNullableFilter(item.status, filter.status) &&
+    matchesNullableFilter(item.animalUuid, filter.animalUuid) &&
+    matchesNullableFilter(item.visitId, filter.visitId) &&
+    matchesVeterinarianFilter(item, filter.veterinarian) &&
+    matchesOccurredAtRange(item, filter)
+  );
+}
+
+function matchesNullableFilter<T extends string>(value: T | null, filterValue: T | '' | null | undefined) {
+  return !filterValue || value === filterValue;
+}
+
+function matchesVeterinarianFilter(item: VetVisitItem, veterinarianFilter: string | null | undefined) {
+  const normalizedFilter = veterinarianFilter?.trim().toLowerCase();
+  if (!normalizedFilter) {
+    return true;
+  }
+  return item.veterinarian?.name.toLowerCase().includes(normalizedFilter) ?? false;
+}
+
+function matchesOccurredAtRange(item: VetVisitItem, filter: VetVisitFilter) {
+  if (filter.occurredFrom && item.occurredAt < filter.occurredFrom) {
+    return false;
+  }
+  if (filter.occurredTo && item.occurredAt > filter.occurredTo) {
+    return false;
+  }
+  return true;
 }
 
 function modeFromLabel(value: string | undefined): VetVisitMode | undefined {

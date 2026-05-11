@@ -32,12 +32,27 @@ describe('VetVisitsPageComponent', () => {
     },
   ];
 
-  const configure = async () => {
+  const newVisitResult = {
+    mode: 'GLOBAL' as const,
+    animalUuid: null,
+    visitId: 'VISIT-NEW',
+    status: 'PENDING' as const,
+    occurredAt: '2026-05-03T12:00:00.000Z',
+    nextDueAt: '2026-05-10T12:00:00.000Z',
+    notes: 'Control preventivo',
+    reason: 'Control preventivo',
+    veterinarianName: 'Dra. Nueva',
+    veterinarianLicense: 'MV-NEW',
+    targetAnimalCount: 4,
+    parentVisitId: null,
+  };
+
+  const configure = async (options: { dialogResult?: typeof newVisitResult } = {}) => {
     const vetVisitsService = {
       listVetVisits: vi.fn(() => of(visits)),
     };
     const dialog = {
-      open: vi.fn(() => ({ afterClosed: () => of(undefined) })),
+      open: vi.fn(() => ({ afterClosed: () => of(options.dialogResult) })),
     };
     const healthEventsService = {
       createEvent: vi.fn(() => of({ outcome: 'queued', message: 'Evento sanitario encolado.' })),
@@ -120,5 +135,27 @@ describe('VetVisitsPageComponent', () => {
     component.openNewVisitDialog();
 
     expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ width: 'min(92vw, 960px)' }));
+  });
+
+  it('should keep a newly saved visit visible when the central backend list reload is stale', async () => {
+    const { component, healthEventsService } = await configure({ dialogResult: newVisitResult });
+
+    component.openNewVisitDialog();
+
+    expect(healthEventsService.createEvent).toHaveBeenCalled();
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual([
+      'VISIT-NEW',
+      'VISIT-GLOBAL',
+      'VISIT-SPECIFIC',
+    ]);
+  });
+
+  it('should not show a newly saved visit when the current filters exclude it', async () => {
+    const { component } = await configure({ dialogResult: newVisitResult });
+
+    component.handleFiltersChange({ mode: 'Específica' });
+    component.openNewVisitDialog();
+
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC']);
   });
 });

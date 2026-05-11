@@ -24,6 +24,7 @@ import {
   VetVisitCancelDialogComponent,
   type VetVisitCancelDialogResult,
 } from './vet-visit-cancel-dialog.component';
+import { VetVisitDetailDialogComponent } from './vet-visit-detail-dialog.component';
 
 type VetVisitMode = VetVisitItem['mode'];
 type VetVisitStatus = VetVisitItem['status'];
@@ -113,8 +114,8 @@ export class VetVisitsPageComponent {
   ];
 
   readonly visitActions: DataTableAction[] = [
+    { id: 'view', label: 'Ver', icon: 'visibility' },
     { id: 'attend', label: 'Atender', icon: 'medical_services', visible: (row) => canAttend(row as VetVisitRow) },
-    { id: 'reschedule', label: 'Reprogramar', icon: 'event_repeat', visible: (row) => canContinue(row as VetVisitRow) },
     { id: 'cancel', label: 'Cancelar', icon: 'cancel', color: 'warn', visible: (row) => canCancel(row as VetVisitRow) },
   ];
 
@@ -152,6 +153,10 @@ export class VetVisitsPageComponent {
 
   handleRowAction(event: DataTableRowActionEvent) {
     const row = event.row as VetVisitRow;
+    if (event.actionId === 'view') {
+      this.openDetailVisitDialog(row);
+      return;
+    }
     if (event.actionId === 'cancel') {
       if (!canCancel(row)) {
         return;
@@ -166,17 +171,15 @@ export class VetVisitsPageComponent {
       this.openAttendVisitDialog(row);
       return;
     }
+  }
 
-    if (!canContinue(row)) {
-      return;
-    }
-
-    const data = {
-      mode: row.mode,
-      parentVisitId: row.visitId,
-      targetAnimalCount: row.targetAnimalCount,
-    };
-    this.dialog.open(VetVisitFormDialogComponent, { width: 'min(92vw, 960px)', data });
+  private openDetailVisitDialog(row: VetVisitRow) {
+    this.vetVisitsService.getVetVisitChain(row.visitId).subscribe((chain) => {
+      this.dialog.open(VetVisitDetailDialogComponent, {
+        width: 'min(92vw, 960px)',
+        data: { visit: row, chain },
+      });
+    });
   }
 
   private openCancelVisitDialog(row: VetVisitRow) {
@@ -258,6 +261,7 @@ export class VetVisitsPageComponent {
       chainStatus: closesChain ? 'CLOSED' : 'OPEN',
       nextControlAt: result.nextDueAt,
       atencionNotas: result.notes,
+      findings: result.findings ?? null,
       costo: result.cost?.amount ?? null,
       costCurrency: result.cost?.currency ?? null,
       treatmentPlan: result.treatmentPlan?.length ? result.treatmentPlan : null,
@@ -295,11 +299,9 @@ const VISIT_MODE_LABELS: Record<VetVisitMode, string> = {
   SPECIFIC: 'Específica',
 };
 
-const VISIT_STATUS_LABELS: Record<VetVisitStatus, string> = {
+const VISIT_STATUS_LABELS: Partial<Record<VetVisitStatus, string>> = {
   PENDING: 'Programada',
   ATTENDED: 'Atendida',
-  RESCHEDULED: 'Reprogramada',
-  FINALIZED: 'Finalizada',
   CANCELED: 'Cancelada',
 };
 
@@ -307,7 +309,7 @@ function toVetVisitRow(item: VetVisitItem): VetVisitRow {
   return {
     ...item,
     modeLabel: VISIT_MODE_LABELS[item.mode],
-    statusLabel: VISIT_STATUS_LABELS[item.status],
+    statusLabel: VISIT_STATUS_LABELS[item.status] ?? item.status,
     veterinarianName: item.veterinarian?.name ?? '—',
   };
 }
@@ -342,6 +344,7 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
     animalUuid: result.animalUuid,
     targetAnimalCount: result.targetAnimalCount,
     atencionNotas: result.notes,
+    findings: result.findings ?? null,
     costo: null,
     costCurrency: null,
     treatmentPlan: null,
@@ -427,15 +430,11 @@ function statusFromLabel(value: string | undefined): VetVisitStatus | undefined 
 }
 
 function canAttend(row: VetVisitRow) {
-  return row.status === 'PENDING' || row.status === 'RESCHEDULED';
-}
-
-function canContinue(row: VetVisitRow) {
-  return row.status === 'ATTENDED';
+  return row.status === 'PENDING' && row.chainStatus !== 'CLOSED';
 }
 
 function canCancel(row: VetVisitRow) {
-  return row.status !== 'FINALIZED' && row.status !== 'CANCELED';
+  return row.status !== 'CANCELED' && row.chainStatus !== 'CLOSED';
 }
 
 function formatDateTime(value: unknown) {
@@ -533,6 +532,7 @@ function toVetVisitItemFromRow(row: VetVisitRow, overrides: Partial<VetVisitItem
     animalUuid: overrides.animalUuid ?? row.animalUuid,
     targetAnimalCount: overrides.targetAnimalCount ?? row.targetAnimalCount,
     atencionNotas: overrides.atencionNotas ?? row.atencionNotas,
+    findings: overrides.findings ?? row.findings,
     costo: overrides.costo ?? row.costo,
     costCurrency: overrides.costCurrency ?? row.costCurrency,
     treatmentPlan: overrides.treatmentPlan ?? row.treatmentPlan,

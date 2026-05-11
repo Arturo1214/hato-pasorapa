@@ -3,8 +3,8 @@
 **Change**: vet-visit-clinical-workflow-v1
 **Mode**: Strict TDD
 **Artifact store**: hybrid
-**PR boundary**: PR 1 complete; PR 2 / Phase 2 `vet-visit-fe-form` complete — FE types, form dialog clinical controls, mapper, service, and focused FE tests. Central `Ver` detail dialog remains intentionally pending for PR 3.
-**Review strategy**: chained PR slice, `stacked-to-main`; PR 2 targets the PR 1 branch.
+**PR boundary**: PR 1 complete; PR 2 complete; PR 3 / Phase 3 `vet-visit-fe-detail` complete — central `Ver`, read-only chain/detail dialog, chain fetch service, terminal action guards, and focused FE tests.
+**Review strategy**: chained PR slice, `stacked-to-main`; PR 3 targets the PR 2 branch.
 
 ## Completed Tasks
 - [x] 1.1 Add `parentVisitId: String` and `cancelReason: String` fields to `VetVisitItemDto.java`
@@ -28,8 +28,19 @@
 - [x] 2.10 Add `VetVisitFormValue.creationMode` and map scheduled/attended-now payloads without leaking scheduled clinical fields
 - [x] 2.11 Add dialog specs for mode-specific visibility, attended-now clock, and mandatory follow-up choice/date behavior
 - [x] 2.12 Add service specs for `cancelReason` and `chainStatus` mapping
-- [x] 2.13 Add mapper specs for scheduled, attended-now, and linked follow-up payloads
+- [x] 2.13 Add mapper specs for scheduled, attended-now, and linked follow-up payload mapping
 - [x] 2.14 Verify focused FE tests with Node 20.19.6
+- [x] 3.1 Create read-only `VetVisitDetailDialogComponent` for state, mode, dates, veterinarian, motive/description, findings, notes, cost, treatment plan, cancel reason, chain/protocol status, and next scheduled visit
+- [x] 3.2 Add detail-dialog specs for parent clinical detail plus canceled and pending linked children
+- [x] 3.3 Add central `Ver` action to every visit row without terminal guard
+- [x] 3.4 Implement `openDetailVisitDialog(row)` using `VetVisitsService.getVetVisitChain(row.visitId)` and `MatDialog`
+- [x] 3.5 Update cancel guard so `CANCELED` and `chainStatus === 'CLOSED'` are terminal
+- [x] 3.6 Update attend guard so only `PENDING`/Programada rows can be attended and closed-chain rows are blocked
+- [x] 3.7 Remove `RESCHEDULED` and `FINALIZED` from visible status labels/options
+- [x] 3.8 Remove direct row `Reprogramar`; follow-up child creation remains only in attend flow
+- [x] 3.9 Keep cancel event protocol status as `CLOSED` on cancel
+- [x] 3.10 Add page specs for `Ver` visibility, terminal guards, detail fetch/dialog open, and absent `Reprogramar`
+- [x] 3.11 Verify focused FE tests with Node 20.19.6
 
 ## TDD Cycle Evidence
 
@@ -44,37 +55,38 @@
 | 2.8–2.9, 2.12 | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts` | Angular service unit | ✅ 39/39 baseline passing | ✅ Compile failed on missing `cancelReason`/`chainStatus` item fields | ✅ 44/44 focused tests passed | ✅ ACTIVE→OPEN, CLOSED passthrough, missing fields→null | ✅ Extracted `normalizeChainStatus` |
 | 2.10, 2.13 | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.spec.ts` | Pure mapper unit | ✅ 39/39 baseline passing | ✅ Compile failed on missing `VetVisitFormValue.creationMode` | ✅ 44/44 focused tests passed | ✅ Scheduled, attended-now finalized, and child follow-up payloads | ✅ Centralized clinical-field inclusion based on resolved status |
 | 2.14 | Focused Angular command | Verification | ✅ 39/39 baseline passing | N/A | ✅ 44 tests passing | N/A | N/A |
+| 3.1–3.2 | `hato-fe/src/app/features/admin/vet-visits/vet-visit-detail-dialog.component.spec.ts` | Angular component | ✅ 44/44 baseline passing | ✅ Compile failed on missing detail component and `findings` contract | ✅ 49/49 focused tests passed | ✅ Parent clinical detail + canceled child + pending child | ✅ Kept view read-only and feature-scoped |
+| 3.3–3.8, 3.10 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 44/44 baseline passing | ✅ Specs expected always-visible `Ver`, no `Reprogramar`, terminal guards, and detail fetch before code | ✅ 49/49 focused tests passed | ✅ Pending, attended/open, canceled, and attended/closed rows | ✅ Removed stale direct follow-up row branch |
+| 3.4 + service detail fetch | `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts` | Angular service unit | ✅ 44/44 baseline passing | ✅ Compile failed on missing `getVetVisitChain` and `findings` mapping | ✅ 49/49 focused tests passed | ✅ Attended parent, canceled child, pending child response mapping | ✅ Shared existing DTO mapper for list and chain detail |
+| 3.9 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 44/44 baseline passing | ✅ Existing cancel spec asserts `protocol.status=CLOSED`; preserved while changing guards | ✅ 49/49 focused tests passed | ✅ Cancel row still writes cancelReason and closes protocol | ➖ No refactor needed |
+| 3.11 | Focused Angular command | Verification | ✅ 44/44 baseline passing | N/A | ✅ 49 tests passing | N/A | N/A |
 
 ## Test Summary
-- **Total tests written this slice**: 5
-- **Total focused FE tests passing**: 44
-- **Layers used**: Angular component/unit (3 new assertions/cases), service unit (1 new case + extended mapping), pure mapper unit (3 new cases)
+- **Total tests written this PR3 slice**: 5
+- **Total focused FE tests passing**: 49
+- **Layers used**: Angular component/page (4 new cases), Angular service unit (1 new case)
 - **Approval tests**: None — behavior change, not pure refactor
-- **Pure functions created**: 1 (`normalizeChainStatus`)
+- **Pure functions created**: 2 (`normalizeVetVisitCollection`, `normalizeNestedClinicalFindings`)
 
 ## Exact Tests Run
-1. Baseline safety net: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` from `hato-fe/` → ✅ 39 tests passing
-2. RED run after tests: same command → ✅ expected compilation failure for missing `creationMode`, `DateTimeClock`, `cancelReason`, and `chainStatus`
-3. GREEN run: same command → ✅ 44 tests passing
-4. REFACTOR/final run: same command → ✅ 44 tests passing
+1. Baseline safety net: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` from `hato-fe/` → ✅ 44 tests passing
+2. RED run after tests: same command → ✅ expected compilation failure for missing `VetVisitDetailDialogComponent`, `getVetVisitChain`, and `findings` contract
+3. GREEN/final run: same command → ✅ 49 tests passing
 
 ## Files Changed
-- `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.ts` — added creation modes, injectable clock, clinical-mode validation, attended-now current moment, and follow-up-only next-control date.
-- `hato-fe/src/app/features/admin/vet-visits/vet-visit-form-dialog.component.spec.ts` — added mode-specific form visibility, attended-now clock, and follow-up validation tests.
-- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.ts` — added `cancelReason`/`chainStatus` fields and chain-status normalization.
-- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts` — covered cancel reason and ACTIVE/CLOSED chain-status mapping.
-- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.ts` — added `creationMode` mapping so scheduled payloads do not emit clinical findings/cost/plan and attended-now maps as clinical attendance.
-- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visit-form.mapper.spec.ts` — covered scheduled, attended-now, and child follow-up payload mapping.
-- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` — minimal PR2 support for new dialog/result shape, linked follow-up child payloads, and attended-finalize status remaining `ATTENDED` with closed chain.
-- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — updated fixtures/contracts for new item fields and attended-finalize payload semantics.
-- `openspec/changes/vet-visit-clinical-workflow-v1/tasks.md` — marked Phase 2 complete with the exact targeted FE test command.
-- `openspec/changes/vet-visit-clinical-workflow-v1/apply-progress.md` — persisted cumulative apply progress for PR 1 + PR 2.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visit-detail-dialog.component.ts` — created read-only chain/history dialog for clinical details and linked child follow-ups.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visit-detail-dialog.component.spec.ts` — added rendering tests for parent clinical detail and attended/canceled/pending chain distinctions.
+- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.ts` — added `findings` mapping and `getVetVisitChain(visitId)` backed by `/api/vet-visits/{visitId}/chain`.
+- `hato-fe/src/app/features/admin/vet-visits/data-access/vet-visits.service.spec.ts` — covered chain endpoint fetch and chain DTO mapping.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` — added always-visible `Ver`, removed direct `Reprogramar`, opened detail dialog from fetched chain, and tightened terminal guards.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — covered action visibility, terminal guards, detail fetch/dialog open, and removed `Reprogramar`/`RESCHEDULED` options.
+- `openspec/changes/vet-visit-clinical-workflow-v1/tasks.md` — marked Phase 3 complete with focused FE test command.
+- `openspec/changes/vet-visit-clinical-workflow-v1/apply-progress.md` — persisted cumulative apply progress through PR3.
 
 ## Deviations / Notes
-- The OpenSpec task text mentioned scheduled creation showing `next control`, but the user launch prompt explicitly narrowed PR2 to “Crear Programada: no `Próximo control`”; implementation follows the launch prompt.
-- FE normalizes backend `chainStatus=ACTIVE` to `OPEN` because Phase 2 task requires the FE type `OPEN | CLOSED`, while PR 1 BE currently emits `ACTIVE | CLOSED`.
-- No central `Ver` detail dialog was implemented; only minimal type/page support required by PR2 was touched.
+- FE keeps the backend `ACTIVE` chain status normalized as `OPEN`, continuing the PR2 contract.
+- `canAttend` blocks closed chains and only allows `PENDING`; pending rows with missing chain status remain attendable for legacy compatibility.
+- No direct row `Finalizar` or `Reprogramar` action remains in the page action list.
 
 ## Remaining Tasks
-- Phase 3 FE detail/action/terminal-guard slice.
-- Phase 4 final integration verification.
+- Phase 4 final integration verification/archive is intentionally pending for a later run.

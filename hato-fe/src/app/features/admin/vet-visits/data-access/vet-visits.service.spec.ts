@@ -119,6 +119,7 @@ describe('VetVisitsService', () => {
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: 'Estable tras atención',
+      findings: null,
       costo: 150,
       costCurrency: 'BOB',
       treatmentPlan: ['Antibiótico por 3 días', 'Control en 7 días'],
@@ -190,5 +191,87 @@ describe('VetVisitsService', () => {
     });
 
     expect(received?.[0].chainStatus).toBe('CLOSED');
+  });
+
+  it('should fetch visit chain detail preserving attended, canceled, and pending children', () => {
+    let received: VetVisitItem[] | undefined;
+
+    service.getVetVisitChain('visit-parent-1').subscribe((items) => {
+      received = items;
+    });
+
+    const request = httpMock.expectOne('/api/vet-visits/visit-parent-1/chain');
+    expect(request.request.method).toBe('GET');
+    expect(request.request.headers.get('Authorization')).toBe('Bearer token-vet');
+    request.flush({
+      items: [
+        {
+          visitId: 'visit-parent-1',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dra. Laguna', license: 'MV-77' },
+          occurredAt: '2026-05-10T10:00:00Z',
+          nextControlAt: '2026-05-17T10:00:00Z',
+          parentVisitId: null,
+          chainStatus: 'ACTIVE',
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: 'Responder al tratamiento y controlar fiebre.',
+          findings: 'Fiebre persistente y mucosas pálidas.',
+          costo: 180,
+          costCurrency: 'BOB',
+          treatmentPlan: ['Antibiótico 3 días', 'Controlar temperatura'],
+        },
+        {
+          visitId: 'visit-child-canceled',
+          mode: 'SPECIFIC',
+          status: 'CANCELED',
+          veterinarian: { name: 'Dra. Laguna' },
+          occurredAt: '2026-05-17T10:00:00Z',
+          nextControlAt: null,
+          parentVisitId: 'visit-parent-1',
+          cancelReason: 'Animal vendido',
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: 'Animal vendido',
+        },
+        {
+          visitId: 'visit-child-pending',
+          mode: 'SPECIFIC',
+          status: 'PENDING',
+          veterinarian: { name: 'Dr. Río' },
+          occurredAt: '2026-05-24T10:00:00Z',
+          nextControlAt: null,
+          parentVisitId: 'visit-parent-1',
+          animalUuid: 'animal-1',
+          targetAnimalCount: null,
+          atencionNotas: 'Próximo control',
+        },
+      ],
+    });
+
+    expect(received).toEqual([
+      expect.objectContaining({
+        visitId: 'visit-parent-1',
+        status: 'ATTENDED',
+        chainStatus: 'OPEN',
+        findings: 'Fiebre persistente y mucosas pálidas.',
+        atencionNotas: 'Responder al tratamiento y controlar fiebre.',
+        costo: 180,
+        treatmentPlan: ['Antibiótico 3 días', 'Controlar temperatura'],
+      }),
+      expect.objectContaining({
+        visitId: 'visit-child-canceled',
+        status: 'CANCELED',
+        parentVisitId: 'visit-parent-1',
+        cancelReason: 'Animal vendido',
+      }),
+      expect.objectContaining({
+        visitId: 'visit-child-pending',
+        status: 'PENDING',
+        parentVisitId: 'visit-parent-1',
+        occurredAt: '2026-05-24T10:00:00Z',
+      }),
+    ]);
   });
 });

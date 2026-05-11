@@ -59,17 +59,17 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: FE Page — Ver Action, Detail Dialog, Cancel Terminal Guard
 
-- [ ] 3.1 Create `vet-visit-detail-dialog.component.ts`: read-only display of estado, fecha, veterinario, hallazgos, notas, plan, costo, motivo cancelación, linked children. Inject `DateTimeClock` for formatting.
-- [ ] 3.2 Create `vet-visit-detail-dialog.component.spec.ts`: renders chain with parent + canceled child; shows cancel reason
-- [ ] 3.3 Add `Ver` action to `visitActions` in `vet-visits-page.component.ts` — always visible, no terminal guard
-- [ ] 3.4 Implement `openDetailVisitDialog(row)` — calls `GET /api/vet-visits/{visitId}/chain` or uses existing list data, opens detail dialog
-- [ ] 3.5 Update `canCancel()` guard: terminal = `CANCELED` OR (`ATTENDED` with `chainStatus === 'CLOSED'`) — add `chainStatus` check
-- [ ] 3.6 Update `canAttend()` guard: only `PROGRAMADA` (not `RESCHEDULED`); add `chainStatus === 'OPEN'` check
-- [ ] 3.7 Remove `RESCHEDULED` from `VISIT_STATUS_LABELS` and status options — `PROGRAMADA` replaces it
-- [ ] 3.8 Remove `reschedule` action from `visitActions`; create child follow-up only from attend flow `followUpChoice === 'schedule'`
-- [ ] 3.9 Update `cancelVisit()`: `protocolStatus` always `CLOSED` on cancel; child chain remains `OPEN` for parent
-- [ ] 3.10 Write Vitest spec: `vet-visits-page.component.spec.ts` — `Ver` always visible, terminal cancel blocked, `ATTENDED + CLOSED` attend blocked, `RESCHEDULED` absent
-- [ ] 3.11 Run FE tests with Node 20.19.6: `npm test -- --run --reporter=verbose`
+- [x] 3.1 Create `vet-visit-detail-dialog.component.ts`: read-only display of estado, fecha, veterinario, hallazgos, notas, plan, costo, motivo cancelación, linked children. Inject `DateTimeClock` for formatting.
+- [x] 3.2 Create `vet-visit-detail-dialog.component.spec.ts`: renders chain with parent + canceled child; shows cancel reason
+- [x] 3.3 Add `Ver` action to `visitActions` in `vet-visits-page.component.ts` — always visible, no terminal guard
+- [x] 3.4 Implement `openDetailVisitDialog(row)` — calls `GET /api/vet-visits/{visitId}/chain` or uses existing list data, opens detail dialog
+- [x] 3.5 Update `canCancel()` guard: terminal = `CANCELED` OR (`ATTENDED` with `chainStatus === 'CLOSED'`) — add `chainStatus` check
+- [x] 3.6 Update `canAttend()` guard: only `PROGRAMADA` (not `RESCHEDULED`); add `chainStatus === 'OPEN'` check
+- [x] 3.7 Remove `RESCHEDULED` from `VISIT_STATUS_LABELS` and status options — `PROGRAMADA` replaces it
+- [x] 3.8 Remove `reschedule` action from `visitActions`; create child follow-up only from attend flow `followUpChoice === 'schedule'`
+- [x] 3.9 Update `cancelVisit()`: `protocolStatus` always `CLOSED` on cancel; child chain remains `OPEN` for parent
+- [x] 3.10 Write Vitest spec: `vet-visits-page.component.spec.ts` — `Ver` always visible, terminal cancel blocked, `ATTENDED + CLOSED` attend blocked, `RESCHEDULED` absent
+- [x] 3.11 Run FE tests with Node 20.19.6: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` (no build)
 
 ---
 

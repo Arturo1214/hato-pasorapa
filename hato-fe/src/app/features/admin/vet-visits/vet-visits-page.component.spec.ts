@@ -6,6 +6,7 @@ import { VetVisitsPageComponent } from './vet-visits-page.component';
 import { VetVisitsService, type VetVisitItem } from './data-access/vet-visits.service';
 import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
 import { VetVisitCancelDialogComponent } from './vet-visit-cancel-dialog.component';
+import { VetVisitDetailDialogComponent } from './vet-visit-detail-dialog.component';
 import { VetVisitFormDialogComponent, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
 
 describe('VetVisitsPageComponent', () => {
@@ -26,6 +27,7 @@ describe('VetVisitsPageComponent', () => {
       costo: null,
       costCurrency: null,
       treatmentPlan: null,
+      findings: null,
     },
     {
       visitId: 'VISIT-SPECIFIC',
@@ -43,6 +45,7 @@ describe('VetVisitsPageComponent', () => {
       costo: null,
       costCurrency: null,
       treatmentPlan: null,
+      findings: 'Herida limpia y sin infección.',
     },
     {
       visitId: 'VISIT-CANCELED',
@@ -60,6 +63,25 @@ describe('VetVisitsPageComponent', () => {
       costo: null,
       costCurrency: null,
       treatmentPlan: null,
+      findings: null,
+    },
+    {
+      visitId: 'VISIT-CLOSED',
+      mode: 'SPECIFIC',
+      status: 'ATTENDED',
+      veterinarian: { name: 'Dra. Alta' },
+      occurredAt: '2026-05-05T10:00:00.000Z',
+      nextControlAt: null,
+      parentVisitId: null,
+      cancelReason: null,
+      chainStatus: 'CLOSED',
+      animalUuid: 'animal-closed',
+      targetAnimalCount: null,
+      atencionNotas: 'Alta clínica',
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
+      findings: 'Sin novedades clínicas.',
     },
   ];
 
@@ -101,6 +123,7 @@ describe('VetVisitsPageComponent', () => {
   const configure = async (options: { dialogResults?: unknown[]; dialogResult?: typeof newVisitResult } = {}) => {
     const vetVisitsService = {
       listVetVisits: vi.fn(() => of(visits)),
+      getVetVisitChain: vi.fn((visitId: string) => of(visits.filter((visit) => visit.visitId === visitId || visit.parentVisitId === visitId))),
     };
     const dialogResults = [...(options.dialogResults ?? (options.dialogResult ? [options.dialogResult] : []))];
     const dialog = {
@@ -182,13 +205,50 @@ describe('VetVisitsPageComponent', () => {
     const attendedActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[1]));
     const canceledActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[2]));
 
-    expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Cancelar']);
-    expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Cancelar']);
-    expect(canceledActions.map((action) => action.label)).toEqual([]);
+    expect(pendingActions.map((action) => action.label)).toEqual(['Ver', 'Atender', 'Cancelar']);
+    expect(attendedActions.map((action) => action.label)).toEqual(['Ver', 'Cancelar']);
+    expect(canceledActions.map((action) => action.label)).toEqual(['Ver']);
+    expect(component.visitActions.map((action) => action.label)).not.toContain('Reprogramar');
+    expect(component.visitColumns[3].filterOptions?.map((option) => option.label)).not.toContain('Reprogramada');
 
     component.openNewVisitDialog();
 
     expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ width: 'min(92vw, 960px)' }));
+  });
+
+  it('should keep Ver visible for terminal visits while blocking attend and cancel transitions', async () => {
+    const { component, dialog, healthEventsService } = await configure();
+
+    const closedActions = component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[3]));
+    const canceledActions = component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[2]));
+
+    expect(closedActions.map((action) => action.label)).toEqual(['Ver']);
+    expect(canceledActions.map((action) => action.label)).toEqual(['Ver']);
+
+    component.handleRowAction({ actionId: 'cancel', row: component.visitRows()[3] });
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[3] });
+
+    expect(dialog.open).not.toHaveBeenCalledWith(VetVisitCancelDialogComponent, expect.anything());
+    expect(dialog.open).not.toHaveBeenCalledWith(VetVisitFormDialogComponent, expect.anything());
+    expect(healthEventsService.createEvent).not.toHaveBeenCalled();
+  });
+
+  it('should fetch chain detail and open the read-only Ver dialog for any row', async () => {
+    const { component, dialog, vetVisitsService } = await configure();
+
+    component.handleRowAction({ actionId: 'view', row: component.visitRows()[2] });
+
+    expect(vetVisitsService.getVetVisitChain).toHaveBeenCalledWith('VISIT-CANCELED');
+    expect(dialog.open).toHaveBeenCalledWith(
+      VetVisitDetailDialogComponent,
+      expect.objectContaining({
+        width: 'min(92vw, 960px)',
+        data: {
+          visit: component.visitRows()[2],
+          chain: [visits[2]],
+        },
+      }),
+    );
   });
 
   it('should open the cancel dialog and create a canceled vet visit event with cancelReason', async () => {
@@ -292,6 +352,7 @@ describe('VetVisitsPageComponent', () => {
       expect.stringMatching(/^vet-follow-up-|^[0-9a-f-]{36}$/),
       'VISIT-SPECIFIC',
       'VISIT-CANCELED',
+      'VISIT-CLOSED',
     ]);
     expect(component.visitRows().filter((visit) => visit.visitId === 'VISIT-GLOBAL')).toEqual([
       expect.objectContaining({ status: 'ATTENDED', statusLabel: 'Atendida' }),
@@ -331,6 +392,7 @@ describe('VetVisitsPageComponent', () => {
       'VISIT-GLOBAL',
       'VISIT-SPECIFIC',
       'VISIT-CANCELED',
+      'VISIT-CLOSED',
     ]);
   });
 
@@ -340,6 +402,6 @@ describe('VetVisitsPageComponent', () => {
     component.handleFiltersChange({ mode: 'Específica' });
     component.openNewVisitDialog();
 
-    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC', 'VISIT-CANCELED']);
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC', 'VISIT-CANCELED', 'VISIT-CLOSED']);
   });
 });

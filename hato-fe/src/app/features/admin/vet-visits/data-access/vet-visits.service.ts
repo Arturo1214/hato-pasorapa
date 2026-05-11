@@ -37,6 +37,7 @@ export interface VetVisitItem {
   animalUuid: string | null;
   targetAnimalCount: number | null;
   atencionNotas: string | null;
+  findings: string | null;
   costo: number | null;
   costCurrency: string | null;
   treatmentPlan: string[] | null;
@@ -65,6 +66,14 @@ export class VetVisitsService {
       .pipe(map((response) => (response.items ?? []).map(mapVetVisitItem)));
   }
 
+  getVetVisitChain(visitId: string): Observable<VetVisitItem[]> {
+    return this.http
+      .get<VetVisitListResponse | Array<Record<string, unknown>>>(`${this.appConfig.config().apiBaseUrl}/vet-visits/${encodeURIComponent(visitId)}/chain`, {
+        headers: this.buildHeaders(),
+      })
+      .pipe(map((response) => normalizeVetVisitCollection(response).map(mapVetVisitItem)));
+  }
+
   private buildHeaders() {
     const token = this.authService.getAccessToken();
     return token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : new HttpHeaders();
@@ -85,10 +94,22 @@ function mapVetVisitItem(item: Record<string, unknown>): VetVisitItem {
     animalUuid: normalizeNullableString(item['animalUuid']),
     targetAnimalCount: typeof item['targetAnimalCount'] === 'number' ? item['targetAnimalCount'] : null,
     atencionNotas: normalizeNullableString(item['atencionNotas']),
+    findings: normalizeNullableString(item['findings']) ?? normalizeNestedClinicalFindings(item['clinicalNote']),
     costo: typeof item['costo'] === 'number' ? item['costo'] : null,
     costCurrency: normalizeNullableString(item['costCurrency']),
     treatmentPlan: normalizeTreatmentPlan(item['treatmentPlan']),
   };
+}
+
+function normalizeVetVisitCollection(response: VetVisitListResponse | Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+  return Array.isArray(response) ? response : response.items ?? [];
+}
+
+function normalizeNestedClinicalFindings(value: unknown): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return normalizeNullableString((value as Record<string, unknown>)['findings']);
 }
 
 function normalizeChainStatus(value: unknown): 'OPEN' | 'CLOSED' | null {

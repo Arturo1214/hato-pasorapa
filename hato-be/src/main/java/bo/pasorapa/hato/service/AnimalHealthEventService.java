@@ -147,6 +147,44 @@ public class AnimalHealthEventService {
         return new VetVisitListResponse(groupedItems.subList(fromIndex, toIndex), filter.page, filter.size, groupedItems.size());
     }
 
+    public List<VetVisitItemDto> getVisitChainDetail(String visitId, UUID currentUserId, boolean ganaderoScoped) {
+        UUID ownerId = ganaderoScoped ? resolveAuthenticatedGanaderoId(currentUserId) : null;
+        List<AnimalHealthEvent> selectedEvents = filterEventsByOwner(animalHealthEventRepository.findByVisitId(visitId), ownerId);
+        if (selectedEvents.isEmpty()) {
+            return List.of();
+        }
+
+        AnimalHealthEvent selected = selectedEvents.stream()
+                .max(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
+                .orElseThrow();
+        Map<String, Object> selectedMetadata = animalHealthEventMapper.readMetadataJson(selected.getMetadataJson());
+        String rootVisitId = readText(readVisit(selectedMetadata).get("parentVisitId"));
+        if (rootVisitId == null) {
+            rootVisitId = visitId;
+        }
+
+        List<AnimalHealthEvent> chainEvents = new ArrayList<>();
+        chainEvents.addAll(filterEventsByOwner(animalHealthEventRepository.findByVisitId(rootVisitId), ownerId));
+        chainEvents.addAll(filterEventsByOwner(animalHealthEventRepository.findByParentVisitId(rootVisitId), ownerId));
+
+        return groupVetVisitItems(chainEvents).stream()
+                .sorted(Comparator.comparing((VetVisitItemDto item) -> item.parentVisitId() == null ? 0 : 1)
+                        .thenComparing(VetVisitItemDto::occurredAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(VetVisitItemDto::visitId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    private List<AnimalHealthEvent> filterEventsByOwner(List<AnimalHealthEvent> events, UUID ownerId) {
+        if (ownerId == null) {
+            return events;
+        }
+        return events.stream()
+                .filter(event -> event.getAnimal() != null
+                        && event.getAnimal().getOwnerGanadero() != null
+                        && ownerId.equals(event.getAnimal().getOwnerGanadero().getId()))
+                .toList();
+    }
+
     private void requireAnimalOwnedByAuthenticatedGanadero(UUID animalUuid, UUID currentUserId) {
         Animal animal = animalRepository.findByUuid(animalUuid)
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
@@ -177,6 +215,13 @@ public class AnimalHealthEventService {
     }
 
     private List<VetVisitItemDto> groupVetVisits(List<AnimalHealthEvent> events) {
+        return groupVetVisitItems(events).stream()
+                .sorted(Comparator.comparing(VetVisitItemDto::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed()
+                        .thenComparing(VetVisitItemDto::visitId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    private List<VetVisitItemDto> groupVetVisitItems(List<AnimalHealthEvent> events) {
         Map<String, List<AnimalHealthEvent>> groups = new LinkedHashMap<>();
         for (AnimalHealthEvent event : events) {
             Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
@@ -188,8 +233,6 @@ public class AnimalHealthEventService {
         }
         return groups.values().stream()
                 .map(this::toVetVisitItem)
-                .sorted(Comparator.comparing(VetVisitItemDto::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed()
-                        .thenComparing(VetVisitItemDto::visitId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
@@ -200,6 +243,8 @@ public class AnimalHealthEventService {
         Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(representative.getMetadataJson());
         Map<String, Object> visit = readVisit(metadata);
         String mode = readText(visit.get("mode"));
+        String status = readText(visit.get("status"));
+        String parentVisitId = readText(visit.get("parentVisitId"));
         Map<String, Object> veterinarian = readMap(visit.get("veterinarian"));
         OffsetDateTime nextControlAt = readOffsetDateTime(visit.get("nextControlAt"));
         if (nextControlAt == null) {
@@ -208,7 +253,10 @@ public class AnimalHealthEventService {
         return new VetVisitItemDto(
                 readText(visit.get("visitId")),
                 mode,
-                readText(visit.get("status")),
+                status,
+                parentVisitId,
+                animalHealthEventMapper.readCancelReason(metadata),
+                deriveChainStatus(status, parentVisitId, metadata),
                 new VetVisitItemDto.VeterinarianDto(readText(veterinarian.get("name")), readText(veterinarian.get("license"))),
                 representative.getOccurredAt().atOffset(ZoneOffset.UTC),
                 nextControlAt,
@@ -218,6 +266,14 @@ public class AnimalHealthEventService {
                 readCostAmount(metadata),
                 readCostCurrency(metadata),
                 animalHealthEventMapper.readTreatmentPlan(metadata));
+    }
+
+    private String deriveChainStatus(String visitStatus, String parentVisitId, Map<String, Object> metadata) {
+        String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
+        if ("CLOSED".equalsIgnoreCase(protocolStatus) || "CANCELADA".equalsIgnoreCase(visitStatus) || "CANCELED".equalsIgnoreCase(visitStatus)) {
+            return "CLOSED";
+        }
+        return "ACTIVE";
     }
 
     private BigDecimal readCostAmount(Map<String, Object> metadata) {

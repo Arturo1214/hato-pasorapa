@@ -366,6 +366,101 @@ class AnimalHealthEventServiceTest {
     }
 
     @Test
+    void shouldProjectParentCancelReasonAndChainStatusForLatestVetVisitRows() {
+        UUID animalUuid = UUID.fromString("14e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-PARENT-900", "SPECIFIC", "ATENDIDA", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-CHILD-901",
+                "SPECIFIC",
+                "PROGRAMADA",
+                "Dra. Camila",
+                1,
+                "2026-05-12T08:00:00",
+                null,
+                null,
+                "VISIT-PARENT-900",
+                null,
+                "STARTED");
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-CHILD-901",
+                "SPECIFIC",
+                "CANCELADA",
+                "Dra. Camila",
+                1,
+                "2026-05-12T09:00:00",
+                null,
+                null,
+                "VISIT-PARENT-900",
+                "Animal vendido",
+                "CLOSED");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.mode = "SPECIFIC";
+        filter.page = 0;
+        filter.size = 20;
+
+        var items = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).items();
+        var parent = items.stream().filter(item -> "VISIT-PARENT-900".equals(item.visitId())).findFirst().orElseThrow();
+        var child = items.stream().filter(item -> "VISIT-CHILD-901".equals(item.visitId())).findFirst().orElseThrow();
+
+        assertEquals("ATENDIDA", parent.status());
+        assertEquals(null, parent.parentVisitId());
+        assertEquals(null, parent.cancelReason());
+        assertEquals("ACTIVE", parent.chainStatus());
+        assertEquals("VISIT-PARENT-900", child.parentVisitId());
+        assertEquals("CANCELADA", child.status());
+        assertEquals("Animal vendido", child.cancelReason());
+        assertEquals("CLOSED", child.chainStatus());
+    }
+
+    @Test
+    void shouldReturnVisitChainDetailOrderedByParentThenChildWithoutMutatingAttendedParent() {
+        UUID animalUuid = UUID.fromString("15e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-CHAIN-PARENT",
+                "SPECIFIC",
+                "ATENDIDA",
+                "Dra. Camila",
+                1,
+                "2026-05-10T08:00:00",
+                null,
+                List.of("Reposo"),
+                null,
+                null,
+                "STARTED");
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-CHAIN-CHILD",
+                "SPECIFIC",
+                "CANCELADA",
+                "Dra. Camila",
+                1,
+                "2026-05-12T09:00:00",
+                null,
+                null,
+                "VISIT-CHAIN-PARENT",
+                "Animal movido a otro potrero",
+                "CLOSED");
+
+        var chain = animalHealthEventService.getVisitChainDetail("VISIT-CHAIN-PARENT", USER_ID, false);
+
+        assertEquals(2, chain.size());
+        assertEquals("VISIT-CHAIN-PARENT", chain.get(0).visitId());
+        assertEquals("ATENDIDA", chain.get(0).status());
+        assertEquals(List.of("Reposo"), chain.get(0).treatmentPlan());
+        assertEquals(null, chain.get(0).parentVisitId());
+        assertEquals("VISIT-CHAIN-CHILD", chain.get(1).visitId());
+        assertEquals("VISIT-CHAIN-PARENT", chain.get(1).parentVisitId());
+        assertEquals("CANCELADA", chain.get(1).status());
+        assertEquals("Animal movido a otro potrero", chain.get(1).cancelReason());
+    }
+
+    @Test
     void shouldProjectLegacyStringPlanAndNullCostForFieldVetVisits() {
         UUID animalUuid = UUID.fromString("13e6c94d-4f97-47f1-9c27-db25b2d28cc4");
         seedAnimal(animalUuid);
@@ -500,21 +595,45 @@ class AnimalHealthEventServiceTest {
             String occurredAt,
             Map<String, Object> cost,
             List<String> treatmentPlan) {
+        seedFieldVetEvent(animalUuid, visitId, mode, status, veterinarianName, targetAnimalCount, occurredAt, cost, treatmentPlan, null, null, "STARTED");
+    }
+
+    private void seedFieldVetEvent(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            String veterinarianName,
+            int targetAnimalCount,
+            String occurredAt,
+            Map<String, Object> cost,
+            List<String> treatmentPlan,
+            String parentVisitId,
+            String cancelReason,
+            String protocolStatus) {
         QuarkusTransaction.requiringNew().run(() -> {
             LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("visit", Map.of(
-                    "visitId", visitId,
-                    "mode", mode,
-                    "status", status,
-                    "veterinarian", Map.of("name", veterinarianName),
-                    "targetAnimalCount", targetAnimalCount,
-                    "atencionNotas", "Atención " + visitId));
+            LinkedHashMap<String, Object> visit = new LinkedHashMap<>();
+            visit.put("visitId", visitId);
+            visit.put("mode", mode);
+            visit.put("status", status);
+            visit.put("veterinarian", Map.of("name", veterinarianName));
+            visit.put("targetAnimalCount", targetAnimalCount);
+            visit.put("atencionNotas", "Atención " + visitId);
+            if (parentVisitId != null) {
+                visit.put("parentVisitId", parentVisitId);
+            }
+            if (cancelReason != null) {
+                visit.put("cancelReason", cancelReason);
+                metadata.put("cancelReason", cancelReason);
+            }
+            metadata.put("visit", visit);
             metadata.put("checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)));
             metadata.put("clinicalNote", Map.of(
                     "reason", "Control",
                     "findings", "Ok",
                     "plan", treatmentPlan == null ? "Seguimiento" : treatmentPlan));
-            metadata.put("protocol", Map.of("status", "STARTED"));
+            metadata.put("protocol", Map.of("status", protocolStatus));
             if (cost != null) {
                 metadata.put("cost", cost);
             }

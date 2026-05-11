@@ -169,6 +169,68 @@ class VetVisitResourceTest {
                 .body("items[0].treatmentPlan", equalTo(List.of("Antibiótico", "Control en 7 días")));
     }
 
+    @Test
+    void shouldExposeParentVisitCancelReasonAndChainStatusInListResponse() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        Map<String, Object> parent = new LinkedHashMap<>(vetVisitMetadata("VISIT-REST-PARENT", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Atención parent"));
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-610", parent);
+        Map<String, Object> child = new LinkedHashMap<>(vetVisitMetadata("VISIT-REST-CHILD", "SPECIFIC", "CANCELED", "Dr. Luis", null, null, 1, "Atención child"));
+        LinkedHashMap<String, Object> visit = new LinkedHashMap<>((Map<String, Object>) child.get("visit"));
+        visit.put("parentVisitId", "VISIT-REST-PARENT");
+        visit.put("cancelReason", "Animal vendido");
+        child.put("visit", visit);
+        child.put("cancelReason", "Animal vendido");
+        child.put("protocol", Map.of("status", "CLOSED"));
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-10T09:00:00", "event-611", child);
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("mode", "SPECIFIC")
+                .when()
+                .get("/api/vet-visits")
+                .then()
+                .statusCode(200)
+                .body("items.find { it.visitId == 'VISIT-REST-PARENT' }.parentVisitId", nullValue())
+                .body("items.find { it.visitId == 'VISIT-REST-PARENT' }.cancelReason", nullValue())
+                .body("items.find { it.visitId == 'VISIT-REST-PARENT' }.chainStatus", equalTo("ACTIVE"))
+                .body("items.find { it.visitId == 'VISIT-REST-CHILD' }.parentVisitId", equalTo("VISIT-REST-PARENT"))
+                .body("items.find { it.visitId == 'VISIT-REST-CHILD' }.cancelReason", equalTo("Animal vendido"))
+                .body("items.find { it.visitId == 'VISIT-REST-CHILD' }.chainStatus", equalTo("CLOSED"));
+    }
+
+    @Test
+    void shouldExposeVisitChainDetailOrderedByParentThenCanceledChild() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-620", vetVisitMetadata("VISIT-REST-CHAIN-PARENT", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Parent attended"));
+        Map<String, Object> child = new LinkedHashMap<>(vetVisitMetadata("VISIT-REST-CHAIN-CHILD", "SPECIFIC", "CANCELED", "Dr. Luis", null, null, 1, "Child canceled"));
+        LinkedHashMap<String, Object> visit = new LinkedHashMap<>((Map<String, Object>) child.get("visit"));
+        visit.put("parentVisitId", "VISIT-REST-CHAIN-PARENT");
+        visit.put("cancelReason", "Animal movido");
+        child.put("visit", visit);
+        child.put("cancelReason", "Animal movido");
+        child.put("protocol", Map.of("status", "CLOSED"));
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-10T09:00:00", "event-621", child);
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/vet-visits/VISIT-REST-CHAIN-PARENT/chain")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(2))
+                .body("items[0].visitId", equalTo("VISIT-REST-CHAIN-PARENT"))
+                .body("items[0].status", equalTo("ATTENDED"))
+                .body("items[0].parentVisitId", nullValue())
+                .body("items[1].visitId", equalTo("VISIT-REST-CHAIN-CHILD"))
+                .body("items[1].status", equalTo("CANCELED"))
+                .body("items[1].parentVisitId", equalTo("VISIT-REST-CHAIN-PARENT"))
+                .body("items[1].cancelReason", equalTo("Animal movido"));
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)

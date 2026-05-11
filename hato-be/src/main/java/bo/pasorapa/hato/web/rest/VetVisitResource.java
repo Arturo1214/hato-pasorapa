@@ -9,6 +9,7 @@ import jakarta.ws.rs.BeanParam;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import java.util.UUID;
@@ -31,6 +32,13 @@ public class VetVisitResource {
     @GET
     public VetVisitListResponse list(@Valid @BeanParam VetVisitFilterDto filter) {
         return animalHealthEventService.listVetVisits(filter, currentUserId(), jsonWebToken.getGroups().contains("GANADERO"));
+    }
+
+    @GET
+    @Path("/{visitId}/chain")
+    public VetVisitListResponse chain(@PathParam("visitId") String visitId) {
+        var items = animalHealthEventService.getVisitChainDetail(visitId, currentUserId(), jsonWebToken.getGroups().contains("GANADERO"));
+        return new VetVisitListResponse(items, 0, items.size(), items.size());
     }
 
     private UUID currentUserId() {

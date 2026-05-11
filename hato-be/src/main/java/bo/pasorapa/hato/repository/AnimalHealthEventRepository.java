@@ -70,6 +70,30 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
         return listHistory(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT, occurredFrom, occurredTo, visitId);
     }
 
+    public List<AnimalHealthEvent> findByVisitId(String visitId) {
+        if (visitId == null || visitId.isBlank()) {
+            return List.of();
+        }
+        return find("from AnimalHealthEvent event join fetch event.animal animal where event.healthEventType = ?1 order by event.occurredAt asc, event.eventId asc",
+                AnimalHealthEventType.FIELD_VET_VISIT)
+                .list()
+                .stream()
+                .filter(event -> visitId.equals(readVisitId(event.getMetadataJson())))
+                .toList();
+    }
+
+    public List<AnimalHealthEvent> findByParentVisitId(String parentVisitId) {
+        if (parentVisitId == null || parentVisitId.isBlank()) {
+            return List.of();
+        }
+        return find("from AnimalHealthEvent event join fetch event.animal animal where event.healthEventType = ?1 order by event.occurredAt asc, event.eventId asc",
+                AnimalHealthEventType.FIELD_VET_VISIT)
+                .list()
+                .stream()
+                .filter(event -> parentVisitId.equals(readParentVisitId(event.getMetadataJson())))
+                .toList();
+    }
+
     public List<AnimalHealthEvent> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
         if (cursorUpdatedAt == null) {
             return find("from AnimalHealthEvent order by updatedAt asc, eventId asc").page(0, limitPlusOne).list();
@@ -226,6 +250,11 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
 
     private String readVisitId(String metadataJson) {
         Object value = readVisit(metadataJson).get("visitId");
+        return value instanceof String text && !text.isBlank() ? text.trim() : null;
+    }
+
+    private String readParentVisitId(String metadataJson) {
+        Object value = readVisit(metadataJson).get("parentVisitId");
         return value instanceof String text && !text.isBlank() ? text.trim() : null;
     }
 

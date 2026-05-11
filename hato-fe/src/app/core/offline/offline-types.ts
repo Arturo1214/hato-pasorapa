@@ -539,8 +539,8 @@ export interface FieldVetChecklistItem extends Record<string, unknown> {
 
 export interface FieldVetClinicalNote extends Record<string, unknown> {
   reason: string;
-  findings: string;
-  plan: string;
+  findings?: string;
+  plan?: string;
 }
 
 export interface FieldVetProtocol extends Record<string, unknown> {

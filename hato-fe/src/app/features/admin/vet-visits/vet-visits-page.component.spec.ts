@@ -71,6 +71,7 @@ describe('VetVisitsPageComponent', () => {
     expect(vetVisitsService.listVetVisits).toHaveBeenCalledWith({ page: 0, size: 20 });
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Nueva Visita');
+    expect(text).not.toContain('Listado central de campañas y visitas específicas, con filtros operativos y acciones por estado.');
     expect(text).toContain('Visita');
     expect(text).toContain('Modo');
     expect(text).toContain('Veterinario');
@@ -80,6 +81,17 @@ describe('VetVisitsPageComponent', () => {
     expect(text).toContain('Campaña');
     expect(text).toContain('Específica');
     expect(text).not.toContain('UUID animal');
+  });
+
+  it('should place the create visit CTA in a standalone toolbar like the animals page', async () => {
+    const { fixture } = await configure();
+
+    const toolbar = fixture.nativeElement.querySelector('[aria-label="Acciones de visitas veterinarias"]');
+    const createButton = toolbar?.querySelector('button');
+
+    expect(toolbar?.textContent).toContain('Nueva Visita');
+    expect(createButton?.textContent).toContain('Nueva Visita');
+    expect(fixture.nativeElement.querySelector('mat-card [aria-label="Acciones de visitas veterinarias"]')).toBeNull();
   });
 
   it('should convert table filters into the backend list query', async () => {
@@ -102,8 +114,8 @@ describe('VetVisitsPageComponent', () => {
     const pendingActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[0]));
     const attendedActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[1]));
 
-    expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Cancelar']);
-    expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Finalizar', 'Cancelar']);
+    expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Finalizar', 'Cancelar']);
+    expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Finalizar']);
 
     component.openNewVisitDialog();
 

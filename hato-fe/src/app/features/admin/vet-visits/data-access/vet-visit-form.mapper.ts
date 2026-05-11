@@ -10,7 +10,7 @@ export interface VetVisitFormValue {
   visitId: string;
   mode?: 'GLOBAL' | 'SPECIFIC';
   status?: 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED';
-  occurredAt: string;
+  occurredAt: string | Date;
   notes?: string | null;
   checklist: FieldVetChecklistItem[];
   clinicalNote: FieldVetClinicalNote;
@@ -42,10 +42,11 @@ export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHe
         ok: item.ok,
         ...(normalizeOptionalText(item.note) ? { note: normalizeOptionalText(item.note)! } : {}),
       })),
+      ...(normalizeOptionalText(value.notes) ? { atencionNotas: normalizeOptionalText(value.notes)! } : {}),
       clinicalNote: {
         reason: value.clinicalNote.reason.trim(),
-        findings: value.clinicalNote.findings.trim(),
-        plan: value.clinicalNote.plan.trim(),
+        ...(normalizeOptionalText(value.clinicalNote.findings) ? { findings: normalizeOptionalText(value.clinicalNote.findings)! } : {}),
+        ...(normalizeOptionalText(value.clinicalNote.plan) ? { plan: normalizeOptionalText(value.clinicalNote.plan)! } : {}),
       },
       protocol: {
         status: value.protocolStatus,
@@ -73,6 +74,12 @@ function buildVeterinarian(value: VetVisitFormValue) {
   };
 }
 
-function normalizeOccurredAtValue(value: string) {
-  return value.includes('T') && !value.endsWith('Z') ? `${value}:00.000Z` : value;
+function normalizeOccurredAtValue(value: string | Date) {
+  if (value instanceof Date) {
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())).toISOString();
+  }
+  if (!value.includes('T')) {
+    return `${value}T00:00:00.000Z`;
+  }
+  return value.endsWith('Z') ? value : `${value}:00.000Z`;
 }

@@ -271,7 +271,13 @@ public class AnimalHealthEventMapper {
         Map<String, Object> veterinarian = requireMap(visit.get("veterinarian"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_REQUIRED");
         requireText(veterinarian.get("name"), "ANIMAL_HEALTH_EVENT_VET_VISIT_VETERINARIAN_NAME_REQUIRED");
         readOptionalText(veterinarian.get("license"));
-        readOptionalText(visit.get("atencionNotas"));
+        String visitAttentionNotes = readOptionalText(visit.get("atencionNotas"));
+        String metadataAttentionNotes = readOptionalText(metadata.get("atencionNotas"));
+        if (("ATTENDED".equals(visitStatus) || "ATENDIDA".equals(visitStatus))
+                && visitAttentionNotes == null
+                && metadataAttentionNotes == null) {
+            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_ATTENTION_NOTES_REQUIRED");
+        }
         readOptionalText(visit.get("parentVisitId"));
         if (visit.get("targetAnimalCount") != null && !(visit.get("targetAnimalCount") instanceof Number)) {
             throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_VISIT_TARGET_ANIMAL_COUNT_INVALID");
@@ -281,9 +287,6 @@ public class AnimalHealthEventMapper {
         }
 
         List<Map<String, Object>> checklist = requireListOfMaps(metadata.get("checklist"), "ANIMAL_HEALTH_EVENT_VET_CHECKLIST_REQUIRED");
-        if (checklist.isEmpty()) {
-            throw new IllegalArgumentException("ANIMAL_HEALTH_EVENT_VET_CHECKLIST_REQUIRED");
-        }
         for (Map<String, Object> item : checklist) {
             String code = requireText(item.get("code"), "ANIMAL_HEALTH_EVENT_VET_CHECKLIST_CODE_REQUIRED");
             if (!FIELD_VET_CHECKLIST_CODES.contains(code)) {
@@ -297,8 +300,8 @@ public class AnimalHealthEventMapper {
 
         Map<String, Object> clinicalNote = requireMap(metadata.get("clinicalNote"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_NOTE_REQUIRED");
         requireText(clinicalNote.get("reason"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_REASON_REQUIRED");
-        requireText(clinicalNote.get("findings"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_FINDINGS_REQUIRED");
-        requireText(clinicalNote.get("plan"), "ANIMAL_HEALTH_EVENT_VET_CLINICAL_PLAN_REQUIRED");
+        readOptionalText(clinicalNote.get("findings"));
+        readOptionalText(clinicalNote.get("plan"));
 
         Map<String, Object> protocol = requireMap(metadata.get("protocol"), "ANIMAL_HEALTH_EVENT_VET_PROTOCOL_REQUIRED");
         String status = requireText(protocol.get("status"), "ANIMAL_HEALTH_EVENT_VET_PROTOCOL_STATUS_REQUIRED");

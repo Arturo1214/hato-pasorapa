@@ -71,6 +71,77 @@ class AnimalHealthEventMapperTest {
     }
 
     @Test
+    void shouldAcceptScheduledFieldVetVisitWithReasonOnly() {
+        var request = mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "visit", validVisitBlock("VISIT-SCHEDULED"),
+                                "checklist", List.of(),
+                                "clinicalNote", Map.of("reason", "Control preventivo"),
+                                "protocol", Map.of("status", "STARTED"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z"));
+
+        assertEquals("Control preventivo", ((Map<?, ?>) request.metadata().get("clinicalNote")).get("reason"));
+        assertEquals(List.of(), request.metadata().get("checklist"));
+    }
+
+    @Test
+    void shouldAcceptAttendedFieldVetVisitWithAttentionNotesInsteadOfFindingsAndPlan() {
+        Map<String, Object> visit = new java.util.LinkedHashMap<>(validVisitBlock("VISIT-ATTENDED"));
+        visit.put("status", "ATENDIDA");
+        visit.put("atencionNotas", "Se atendió al animal y quedó estable.");
+
+        var request = mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "notes", "Se atendió al animal y quedó estable.",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "visit", visit,
+                                "checklist", List.of(),
+                                "clinicalNote", Map.of("reason", "Cojera"),
+                                "protocol", Map.of("status", "CLOSED"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z"));
+
+        assertEquals("ATENDIDA", ((Map<?, ?>) request.metadata().get("visit")).get("status"));
+        assertEquals("Cojera", ((Map<?, ?>) request.metadata().get("clinicalNote")).get("reason"));
+    }
+
+    @Test
+    void shouldRejectAttendedFieldVetVisitWithoutAttentionNotes() {
+        Map<String, Object> visit = new java.util.LinkedHashMap<>(validVisitBlock("VISIT-ATTENDED"));
+        visit.put("status", "ATENDIDA");
+        visit.remove("atencionNotas");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> mapper.toRequest(
+                Map.of(
+                        "animalUuid", "d249f65d-af66-4488-9e78-7a5996b8f1ea",
+                        "healthEventType", "FIELD_VET_VISIT",
+                        "occurredAt", "2026-04-27T10:00:00Z",
+                        "performedByUserId", "85a0b2bb-f2d8-42ab-b215-178bb30f0276",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "f0d97cca-d80d-4911-b815-2f6f748ff429",
+                        "metadata", Map.of(
+                                "visit", visit,
+                                "checklist", List.of(),
+                                "clinicalNote", Map.of("reason", "Cojera"),
+                                "protocol", Map.of("status", "CLOSED"))),
+                OffsetDateTime.parse("2026-04-27T10:05:00Z")));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_ATTENTION_NOTES_REQUIRED", exception.getMessage());
+    }
+
+    @Test
     void shouldRejectFieldVetVisitWithoutVisitMode() {
         Map<String, Object> metadata = validFieldVetMetadata("VISIT-001", "STARTED", null);
         Map<String, Object> visit = new java.util.LinkedHashMap<>((Map<String, Object>) metadata.get("visit"));

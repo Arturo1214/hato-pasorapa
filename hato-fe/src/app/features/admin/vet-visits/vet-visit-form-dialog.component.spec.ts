@@ -58,8 +58,6 @@ describe('VetVisitFormDialogComponent', () => {
       veterinarianLicense: ' MV-001 ',
       notes: ' Control de rodeo ',
       reason: 'Campaña',
-      findings: 'Sin novedades',
-      plan: 'Revisar lote completo',
     });
     component.submit();
     fixture.detectChanges();
@@ -73,6 +71,54 @@ describe('VetVisitFormDialogComponent', () => {
         status: 'PENDING',
       } satisfies Partial<VetVisitDialogResult>),
     );
+  });
+
+  it('should use Material datepicker controls for visit dates', async () => {
+    const { fixture } = await configure();
+
+    expect(fixture.nativeElement.querySelectorAll('mat-datepicker-toggle')).toHaveLength(2);
+    expect(fixture.nativeElement.textContent).toContain('Fecha de visita');
+    expect(fixture.nativeElement.textContent).toContain('Próximo control');
+  });
+
+  it('should offer only Programada and Atendida as initial statuses in the new visit form', async () => {
+    const { fixture, component } = await configure();
+
+    expect(component.initialStatusOptions.map((option) => option.label)).toEqual(['Programada', 'Atendida']);
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Programada');
+    expect(text).toContain('Atendida');
+    expect(text).not.toContain('Reprogramada');
+    expect(text).not.toContain('Finalizada');
+    expect(text).not.toContain('Cancelada');
+  });
+
+  it('should require only motive for scheduled visits and attention notes for attended visits', async () => {
+    const { component } = await configure([], { mode: 'GLOBAL' });
+
+    component.form.patchValue({
+      mode: 'GLOBAL',
+      status: 'PENDING',
+      veterinarianName: 'Dra. Luna',
+      reason: 'Campaña de control',
+      notes: '',
+    });
+    expect(component.form.valid).toBe(true);
+
+    component.form.patchValue({ status: 'ATTENDED', notes: '' });
+    expect(component.form.valid).toBe(false);
+
+    component.form.patchValue({ notes: 'Se aplicó tratamiento inmediato.' });
+    expect(component.form.valid).toBe(true);
+  });
+
+  it('should not show redundant Hallazgos or Plan fields in the initial visit form', async () => {
+    const { fixture } = await configure();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Motivo');
+    expect(text).not.toContain('Hallazgos');
+    expect(text).not.toContain('Plan');
   });
 
   it('should require an animal in specific mode with an explicit Spanish validation message', async () => {

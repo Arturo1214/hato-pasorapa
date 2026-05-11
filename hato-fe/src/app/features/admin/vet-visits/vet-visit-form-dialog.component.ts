@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
+import { provideNativeDateAdapter } from '@angular/material/core';
 import { MatAutocompleteModule, type MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -28,8 +30,6 @@ export interface VetVisitDialogResult {
   nextDueAt: string | null;
   notes: string | null;
   reason: string;
-  findings: string;
-  plan: string;
   veterinarianName: string;
   veterinarianLicense: string | null;
   targetAnimalCount: number | null;
@@ -44,12 +44,14 @@ export interface VetVisitDialogResult {
     ReactiveFormsModule,
     MatAutocompleteModule,
     MatButtonModule,
+    MatDatepickerModule,
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     FormErrorsComponent,
   ],
+  providers: [provideNativeDateAdapter()],
   template: `
     <h2 mat-dialog-title>Nueva visita veterinaria</h2>
 
@@ -66,12 +68,11 @@ export interface VetVisitDialogResult {
         <mat-form-field appearance="outline">
           <mat-label>Estado</mat-label>
           <mat-select formControlName="status">
-            <mat-option value="PENDING">Programada</mat-option>
-            <mat-option value="ATTENDED">Atendida</mat-option>
-            <mat-option value="RESCHEDULED">Reprogramada</mat-option>
-            <mat-option value="FINALIZED">Finalizada</mat-option>
-            <mat-option value="CANCELED">Cancelada</mat-option>
+            @for (option of initialStatusOptions; track option.value) {
+              <mat-option [value]="option.value">{{ option.label }}</mat-option>
+            }
           </mat-select>
+          <mat-hint>Inicial: Programada o Atendida</mat-hint>
         </mat-form-field>
 
         @if (form.controls.mode.value === 'SPECIFIC') {
@@ -87,13 +88,17 @@ export interface VetVisitDialogResult {
         }
 
         <mat-form-field appearance="outline">
-          <mat-label>Fecha/hora</mat-label>
-          <input matInput type="datetime-local" formControlName="occurredAt" />
+          <mat-label>Fecha de visita</mat-label>
+          <input matInput [matDatepicker]="occurredAtPicker" formControlName="occurredAt" />
+          <mat-datepicker-toggle matIconSuffix [for]="occurredAtPicker" />
+          <mat-datepicker #occurredAtPicker />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>Próximo control</mat-label>
-          <input matInput type="datetime-local" formControlName="nextDueAt" />
+          <input matInput [matDatepicker]="nextDueAtPicker" formControlName="nextDueAt" />
+          <mat-datepicker-toggle matIconSuffix [for]="nextDueAtPicker" />
+          <mat-datepicker #nextDueAtPicker />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -106,31 +111,25 @@ export interface VetVisitDialogResult {
           <input matInput formControlName="veterinarianLicense" />
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="form-field--full">
-          <mat-label>Notas de atención</mat-label>
-          <textarea matInput formControlName="notes"></textarea>
-        </mat-form-field>
-
         <mat-form-field appearance="outline">
           <mat-label>Motivo</mat-label>
           <input matInput formControlName="reason" />
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Hallazgos</mat-label>
-          <input matInput formControlName="findings" />
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Plan</mat-label>
-          <input matInput formControlName="plan" />
-        </mat-form-field>
+        @if (form.controls.status.value === 'ATTENDED') {
+          <mat-form-field appearance="outline" class="form-field--full">
+            <mat-label>Notas de atención</mat-label>
+            <textarea matInput formControlName="notes"></textarea>
+          </mat-form-field>
+        }
 
         @if (showAnimalRequiredError()) {
           <div class="form-alert form-field--full" role="alert">Seleccioná el animal de la visita específica.</div>
         }
         <app-form-errors [control]="form.controls.veterinarianName" [messages]="messages.veterinarianName" />
         <app-form-errors [control]="form.controls.occurredAt" [messages]="messages.occurredAt" />
+        <app-form-errors [control]="form.controls.reason" [messages]="messages.reason" />
+        <app-form-errors [control]="form.controls.notes" [messages]="messages.notes" />
       </form>
     </mat-dialog-content>
 
@@ -156,6 +155,11 @@ export class VetVisitFormDialogComponent {
   private readonly animalsService = inject(AnimalsService);
   private readonly animalCandidates = signal<AnimalItem[]>([]);
 
+  readonly initialStatusOptions: readonly { value: VetVisitDialogStatus; label: string }[] = [
+    { value: 'PENDING', label: 'Programada' },
+    { value: 'ATTENDED', label: 'Atendida' },
+  ];
+
   readonly form = this.formBuilder.group(
     {
       mode: [this.data.mode ?? 'SPECIFIC' as VetVisitDialogMode, [Validators.required]],
@@ -163,23 +167,23 @@ export class VetVisitFormDialogComponent {
       animalSearch: [''],
       visitId: [createUuid(), [Validators.required]],
       status: ['PENDING' as VetVisitDialogStatus, [Validators.required]],
-      occurredAt: [currentLocalDateTimeInput(), [Validators.required]],
-      nextDueAt: [''],
+      occurredAt: [currentLocalDateInput(), [Validators.required]],
+      nextDueAt: this.formBuilder.control<Date | null>(null),
       notes: [''],
       reason: ['', [Validators.required]],
-      findings: ['', [Validators.required]],
-      plan: ['', [Validators.required]],
       veterinarianName: ['', [Validators.required]],
       veterinarianLicense: [''],
       targetAnimalCount: [this.data.targetAnimalCount ?? null],
       parentVisitId: [this.data.parentVisitId ?? null],
     },
-    { validators: [specificAnimalValidator] },
+    { validators: [specificAnimalValidator, attendedNotesValidator] },
   );
 
   readonly messages = {
     veterinarianName: { required: 'Ingresá el nombre del veterinario.' },
     occurredAt: { required: 'Informá cuándo se programa o registra la visita.' },
+    reason: { required: 'Ingresá el motivo de la visita.' },
+    notes: { attentionRequired: 'Ingresá las notas de atención para una visita atendida.' },
   };
 
   constructor() {
@@ -201,6 +205,11 @@ export class VetVisitFormDialogComponent {
       if (selectedAnimal && search !== animalLabel(selectedAnimal)) {
         this.form.controls.animalUuid.setValue(null);
       }
+    });
+
+    this.form.controls.status.valueChanges.subscribe(() => {
+      this.form.controls.notes.updateValueAndValidity({ onlySelf: true });
+      this.form.updateValueAndValidity();
     });
   }
 
@@ -237,12 +246,10 @@ export class VetVisitFormDialogComponent {
       animalUuid: value.mode === 'GLOBAL' ? null : value.animalUuid,
       visitId: value.visitId ?? '',
       status: value.status ?? 'PENDING',
-      occurredAt: value.occurredAt ?? '',
-      nextDueAt: normalizeOptionalText(value.nextDueAt),
+      occurredAt: normalizeDateValue(value.occurredAt ?? currentLocalDateInput()),
+      nextDueAt: normalizeOptionalDate(value.nextDueAt),
       notes: normalizeOptionalText(value.notes),
       reason: normalizeRequiredText(value.reason),
-      findings: normalizeRequiredText(value.findings),
-      plan: normalizeRequiredText(value.plan),
       veterinarianName: normalizeRequiredText(value.veterinarianName),
       veterinarianLicense: normalizeOptionalText(value.veterinarianLicense),
       targetAnimalCount: value.targetAnimalCount,
@@ -254,6 +261,21 @@ export class VetVisitFormDialogComponent {
 const specificAnimalValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
   const value = control.value as { mode?: VetVisitDialogMode | null; animalUuid?: string | null };
   return value.mode === 'SPECIFIC' && !value.animalUuid ? { animalRequired: true } : null;
+};
+
+const attendedNotesValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+  const value = control.value as { status?: VetVisitDialogStatus | null; notes?: string | null };
+  const notesControl = control.get('notes');
+  const currentErrors = notesControl?.errors ?? null;
+  if (value.status === 'ATTENDED' && !normalizeOptionalText(value.notes)) {
+    notesControl?.setErrors({ ...(currentErrors ?? {}), attentionRequired: true });
+    return { attentionNotesRequired: true };
+  }
+  if (currentErrors?.['attentionRequired']) {
+    const { attentionRequired: _attentionRequired, ...remainingErrors } = currentErrors;
+    notesControl?.setErrors(Object.keys(remainingErrors).length ? remainingErrors : null);
+  }
+  return null;
 };
 
 function filterAnimalCandidates(candidates: AnimalItem[], search: string | null | undefined) {
@@ -283,12 +305,24 @@ function normalizeOptionalText(value: string | null | undefined) {
   return normalized ? normalized : null;
 }
 
+function normalizeOptionalDate(value: Date | string | null | undefined) {
+  return value ? normalizeDateValue(value) : null;
+}
+
 function normalizeRequiredText(value: string | null | undefined) {
   return value?.trim() ?? '';
 }
 
-function currentLocalDateTimeInput() {
-  return new Date().toISOString().slice(0, 16);
+function normalizeDateValue(value: Date | string) {
+  if (value instanceof Date) {
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())).toISOString();
+  }
+  return value;
+}
+
+function currentLocalDateInput() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 function createUuid() {

@@ -36,15 +36,12 @@ interface VetVisitRow extends DataTableRow, VetVisitItem {
   imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule, DataTableComponent],
   template: `
     <section class="admin-page">
-      <mat-card appearance="outlined" class="toolbar-card">
-        <div class="toolbar-card__content">
-          <p>Listado central de campañas y visitas específicas, con filtros operativos y acciones por estado.</p>
-          <button mat-flat-button color="primary" type="button" (click)="openNewVisitDialog()">
-            <mat-icon>add</mat-icon>
-            Nueva Visita
-          </button>
-        </div>
-      </mat-card>
+      <div class="toolbar-actions" aria-label="Acciones de visitas veterinarias">
+        <button mat-flat-button color="primary" class="primary-action-button" type="button" (click)="openNewVisitDialog()">
+          <mat-icon>add</mat-icon>
+          <span>Nueva Visita</span>
+        </button>
+      </div>
 
       @if (feedbackMessage()) {
         <mat-card appearance="outlined"><p>{{ feedbackMessage() }}</p></mat-card>
@@ -67,12 +64,11 @@ interface VetVisitRow extends DataTableRow, VetVisitItem {
   styles: [
     `
       .admin-page { display: grid; gap: 1rem; padding: 1rem; }
-      .toolbar-card__content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-      .toolbar-card__content p { margin: 0; color: var(--mat-sys-on-surface-variant); }
-      .toolbar-card__content button { border-radius: 999px; }
-      .toolbar-card__content mat-icon { margin-inline-end: .25rem; }
+      .toolbar-actions { display: flex; justify-content: flex-end; gap: 1rem; }
+      .primary-action-button { border-radius: 999px; }
+      .primary-action-button mat-icon { margin-inline-end: .25rem; }
       .table-card { padding: .75rem; }
-      @media (max-width: 720px) { .toolbar-card__content { align-items: stretch; flex-direction: column; } }
+      @media (max-width: 720px) { .toolbar-actions { justify-content: stretch; } .primary-action-button { width: 100%; } }
     `,
   ],
 })
@@ -225,11 +221,11 @@ function canContinue(row: VetVisitRow) {
 }
 
 function canClose(row: VetVisitRow) {
-  return row.status === 'ATTENDED' || row.status === 'RESCHEDULED';
+  return row.status === 'PENDING' || row.status === 'ATTENDED' || row.status === 'RESCHEDULED';
 }
 
 function canCancel(row: VetVisitRow) {
-  return row.status !== 'FINALIZED' && row.status !== 'CANCELED';
+  return row.status === 'PENDING' || row.status === 'RESCHEDULED';
 }
 
 function formatDateTime(value: unknown) {
@@ -250,8 +246,8 @@ function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
     checklist: [],
     clinicalNote: {
       reason: result.reason,
-      findings: result.findings,
-      plan: result.plan,
+      findings: '',
+      plan: '',
     },
     protocolStatus: protocolStatusFromVisitStatus(result.status, result.nextDueAt),
     nextDueAt: result.nextDueAt,

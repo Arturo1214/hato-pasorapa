@@ -54,16 +54,16 @@ Chain strategy: feature-branch-chain
 
 ## Phase 3: Frontend — Admin Raza ABM Page (PR 3)
 
-- [ ] 3.1 Create `hato-fe/src/app/features/admin/razas/data-access/razas.service.ts` — calls `/api/admin/razas` and `/api/razas/active`
-- [ ] 3.2 Create `hato-fe/src/app/features/admin/razas/data-access/razas.service.spec.ts`
-- [ ] 3.3 Create `hato-fe/src/app/features/admin/razas/models/raza.model.ts` — `RazaItem` interface matching BE `RazaResponse`
-- [ ] 3.4 Create `hato-fe/src/app/features/admin/razas/razas-page.component.ts` — standalone, uses `app-data-table`, loads list, emits create/edit events
-- [ ] 3.5 Create `hato-fe/src/app/features/admin/razas/razas-page.component.spec.ts`
-- [ ] 3.6 Create `hato-fe/src/app/features/admin/razas/raza-form-dialog.component.ts` — `MatDialog` typed form, `FormGroup` with `nombre`, `descripcion`, `activo`
-- [ ] 3.7 Create `hato-fe/src/app/features/admin/razas/raza-form-dialog.component.spec.ts`
-- [ ] 3.8 Add route `{ path: 'admin/razas', component: RazasPageComponent }` to `app.routes.ts`
-- [ ] 3.9 Add sidebar menu entry for ADMIN in `sidebar.ts` — label "Razas", icon, route `/admin/razas`
-- [ ] 3.10 Run migration for offline types if needed — update `offline-store.migrations.ts` if schema bump required
+- [x] 3.1 Create `hato-fe/src/app/features/admin/razas/data-access/razas.service.ts` — calls `/api/admin/razas` and `/api/razas/active`
+- [x] 3.2 Create `hato-fe/src/app/features/admin/razas/data-access/razas.service.spec.ts`
+- [x] 3.3 Create `hato-fe/src/app/features/admin/razas/models/raza.model.ts` — `RazaItem` interface matching BE `RazaResponse`
+- [x] 3.4 Create `hato-fe/src/app/features/admin/razas/razas-page.component.ts` — standalone, uses `app-data-table`, loads list, emits create/edit events
+- [x] 3.5 Create `hato-fe/src/app/features/admin/razas/razas-page.component.spec.ts`
+- [x] 3.6 Create `hato-fe/src/app/features/admin/razas/raza-form-dialog.component.ts` — `MatDialog` typed form, `FormGroup` with `nombre`, `descripcion`, `activo`
+- [x] 3.7 Create `hato-fe/src/app/features/admin/razas/raza-form-dialog.component.spec.ts`
+- [x] 3.8 Add route `{ path: 'admin/razas', component: RazasPageComponent }` to `app.routes.ts`
+- [x] 3.9 Add sidebar menu entry for ADMIN in `sidebar.ts` — label "Razas", icon, route `/admin/razas`
+- [x] 3.10 Run migration for offline types if needed — update `offline-store.migrations.ts` if schema bump required (not needed: admin raza ABM is online-only and stores no offline schema)
 
 ## Phase 4: Frontend — Animal Form Breed Selector + Offline (PR 4)
 

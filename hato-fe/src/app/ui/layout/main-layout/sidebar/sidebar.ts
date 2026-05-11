@@ -49,6 +49,12 @@ const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
     description: 'Padrón ganadero con seguimiento administrativo y soporte operativo.',
   },
   {
+    label: 'Razas',
+    icon: 'cruelty_free',
+    route: '/admin/razas',
+    description: 'Catálogo de razas disponible para el registro operativo del rodeo.',
+  },
+  {
     label: 'Notificaciones',
     icon: 'notifications',
     route: '/admin/notificaciones',

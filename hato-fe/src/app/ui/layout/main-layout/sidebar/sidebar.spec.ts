@@ -65,8 +65,8 @@ describe('SidebarComponent', () => {
 
     const labels = fixture.componentInstance.menuItems().map((item) => item.label);
 
-    expect(labels).toEqual(['Dashboard', 'Usuarios', 'Ganaderos', 'Notificaciones', 'Reportes']);
-    expect(labels).toHaveLength(5);
+    expect(labels).toEqual(['Dashboard', 'Usuarios', 'Ganaderos', 'Razas', 'Notificaciones', 'Reportes']);
+    expect(labels).toHaveLength(6);
   });
 
   it('should expose the role-ordered ganadero sidebar entries', async () => {

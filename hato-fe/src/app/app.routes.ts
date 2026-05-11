@@ -89,6 +89,16 @@ export const routes: Routes = [
         },
       },
       {
+        path: 'admin/razas',
+        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
+        loadComponent: () =>
+          import('./features/admin/razas/razas-page.component').then((m) => m.RazasPageComponent),
+        data: {
+          title: 'Razas',
+          subtitle: 'Administrá el catálogo de razas disponible para la carga operativa de animales.',
+        },
+      },
+      {
         path: 'admin/conflictos',
         canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
         loadComponent: () =>

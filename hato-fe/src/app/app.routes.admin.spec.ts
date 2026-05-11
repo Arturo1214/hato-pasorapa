@@ -38,16 +38,25 @@ describe('admin routes', () => {
       'admin/decision-support',
       'admin/usuarios',
       'admin/ganaderos',
+      'admin/razas',
       'admin/conflictos',
       'admin/notificaciones',
+      'admin/animales',
+      'admin/animales/nuevo',
+      'admin/animales/:uuid/editar',
+      'admin/animales/:uuid',
       'ganadero/dashboard',
       'ganadero/animales',
+      'ganadero/animales/nuevo',
+      'ganadero/animales/:uuid/editar',
+      'ganadero/animales/:uuid',
       'ganadero/visitas',
       'ganadero/calendario',
       'ganadero/notificaciones',
       'ganadero/sincronizacion',
       'ganadero/backups',
       'ganadero/conflictos',
+      '403',
     ]);
 
     const routesMissingHeaderMeta = protectedRoutes
@@ -69,5 +78,15 @@ describe('admin routes', () => {
 
     expect(rootRoute?.loadComponent).toBeDefined();
     expect(rootRoute?.canActivate?.length).toBe(1);
+  });
+
+  it('should expose the admin razas route with header metadata and admin guard', () => {
+    const protectedShell = routes.find((route) => route.path === '');
+    const razasRoute = protectedShell?.children?.find((route) => route.path === 'admin/razas');
+
+    expect(razasRoute?.loadComponent).toBeDefined();
+    expect(razasRoute?.canActivate?.length).toBe(1);
+    expect(razasRoute?.data?.['title']).toBe('Razas');
+    expect(razasRoute?.data?.['subtitle']).toContain('catálogo');
   });
 });

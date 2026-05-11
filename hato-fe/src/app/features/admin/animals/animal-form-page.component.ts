@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
 import { MatAutocompleteModule, type MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
@@ -70,22 +70,51 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
                 <img [src]="image.previewUrl" [alt]="image.fileName" />
               }
             </div>
-            <label class="image-picker">
-              <span>Agregar imágenes</span>
-              <input type="file" accept="image/jpeg,image/png" multiple />
-            </label>
+            <ng-container [ngTemplateOutlet]="imageUploadControls" />
           } @else {
             <div class="image-placeholder"><mat-icon>pets</mat-icon><span>Sin foto principal</span></div>
             @if (!isEdit()) {
               <p class="image-note">Podrás agregar imágenes después de guardar.</p>
             } @else {
-              <label class="image-picker">
-                <span>Agregar imágenes</span>
-                <input type="file" accept="image/jpeg,image/png" multiple />
-              </label>
+              <ng-container [ngTemplateOutlet]="imageUploadControls" />
             }
           }
         </mat-card>
+
+        <ng-template #imageUploadControls>
+          <div class="image-picker">
+            <input
+              #imageInput
+              class="native-file-input"
+              type="file"
+              accept="image/*"
+              multiple
+              aria-label="Seleccionar imágenes del animal"
+              (change)="onImagesSelected($event)"
+            />
+            <button mat-stroked-button type="button" (click)="openImagePicker(imageInput)">
+              <mat-icon>add_photo_alternate</mat-icon>Seleccionar imágenes
+            </button>
+          </div>
+
+          @if (imageUploadMessage()) {
+            <p class="image-upload-message" role="status">{{ imageUploadMessage() }}</p>
+          }
+
+          @if (selectedImagePreviews().length) {
+            <div class="selected-image-preview-list" aria-label="Vista previa de imágenes seleccionadas">
+              @for (preview of selectedImagePreviews(); track preview.url) {
+                <article class="selected-image-preview">
+                  <img [src]="preview.url" [alt]="preview.fileName" />
+                  <span>{{ preview.fileName }}</span>
+                </article>
+              }
+            </div>
+            <button mat-flat-button color="primary" type="button" [disabled]="uploadingImages()" (click)="submitSelectedImages()">
+              <mat-icon>cloud_upload</mat-icon>Guardar imágenes
+            </button>
+          }
+        </ng-template>
 
         <mat-card appearance="outlined" class="fields-panel">
           <form [formGroup]="form" class="animal-form">
@@ -209,6 +238,14 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
     .thumbnail-strip { display: flex; gap: .75rem; margin-top: .75rem; overflow-x: auto; }
     .thumbnail-strip img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
     .image-picker, .image-note { display: grid; margin-top: 1rem; }
+    .image-picker button { justify-self: start; }
+    .native-file-input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+    .image-upload-message { margin: .75rem 0 0; color: var(--mat-sys-on-surface-variant); font-weight: 500; }
+    .selected-image-preview-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: .75rem; margin-top: 1rem; }
+    .selected-image-preview { display: grid; gap: .35rem; }
+    .selected-image-preview img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: .75rem; }
+    .selected-image-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mat-sys-on-surface-variant); font-size: .875rem; }
+    .selected-image-preview-list + button { margin-top: 1rem; }
     .animal-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .form-field--full { grid-column: 1 / -1; }
     .form-note, .parent-summary { padding: .875rem 1rem; border-radius: .75rem; background: rgba(33, 150, 243, .08); color: #0f3d66; font-weight: 500; }
@@ -219,6 +256,7 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
 export class AnimalFormPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly authService = inject(AuthService);
   private readonly animalsService = inject(AnimalsService);
   private readonly imagesService = inject(AnimalsImagesService);
@@ -234,6 +272,10 @@ export class AnimalFormPageComponent {
   readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
   readonly breedOptions = signal<RazaOption[]>([]);
   readonly images = signal<AnimalImageItem[]>([]);
+  readonly selectedImageFiles = signal<File[]>([]);
+  readonly selectedImagePreviews = signal<SelectedImagePreview[]>([]);
+  readonly imageUploadMessage = signal<string | null>(null);
+  readonly uploadingImages = signal(false);
   readonly saving = signal(false);
   readonly errorMessage = signal<string | null>(null);
   readonly isEdit = computed(() => Boolean(this.uuid));
@@ -275,6 +317,7 @@ export class AnimalFormPageComponent {
   constructor() {
     this.form.controls.sex.valueChanges.subscribe((sex) => this.resetCategoryIfInvalid(sex));
     this.form.controls.breedSearch.valueChanges.subscribe((search) => this.clearSelectedBreedIfSearchChanged(search));
+    this.destroyRef.onDestroy(() => this.clearSelectedImageSelection());
     void this.load();
   }
 
@@ -303,6 +346,48 @@ export class AnimalFormPageComponent {
   }
 
   imageAlt() { return `Foto de ${this.animal()?.arete || this.form.controls.arete.value || 'animal sin identificador'}`; }
+
+  openImagePicker(input: HTMLInputElement) { input.click(); }
+
+  onImagesSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    this.clearSelectedImageSelection();
+
+    if (!files.length) {
+      input.value = '';
+      return;
+    }
+
+    if (files.some((file) => !file.type.startsWith('image/'))) {
+      input.value = '';
+      this.imageUploadMessage.set('Solo podés seleccionar archivos de imagen.');
+      return;
+    }
+
+    this.selectedImageFiles.set(files);
+    this.selectedImagePreviews.set(files.map((file) => ({ fileName: file.name, url: URL.createObjectURL(file) })));
+    this.imageUploadMessage.set('Revisá las miniaturas antes de guardar las imágenes.');
+  }
+
+  submitSelectedImages() {
+    if (!this.uuid || !this.selectedImageFiles().length) return;
+
+    this.uploadingImages.set(true);
+    this.imagesService.addImages(this.uuid, this.selectedImageFiles()).subscribe({
+      next: (feedback) => {
+        this.uploadingImages.set(false);
+        this.imageUploadMessage.set(feedback.message);
+        if (feedback.outcome === 'blocked') return;
+        this.clearSelectedImageSelection({ keepMessage: true });
+        void this.reloadImages();
+      },
+      error: () => {
+        this.uploadingImages.set(false);
+        this.imageUploadMessage.set('No pudimos encolar las imágenes del animal.');
+      },
+    });
+  }
 
   selectParent(kind: 'mother' | 'father', event: MatAutocompleteSelectedEvent) {
     const selectedUuid = event.option.value as string;
@@ -403,6 +488,22 @@ export class AnimalFormPageComponent {
     }
   }
 
+  private async reloadImages() {
+    if (!this.uuid) return;
+    this.images.set((await firstValueFrom(this.imagesService.listImages(this.uuid))).filter((image) => Boolean(image.previewUrl)));
+  }
+
+  private clearSelectedImageSelection(options: { keepMessage?: boolean } = {}) {
+    for (const preview of this.selectedImagePreviews()) {
+      URL.revokeObjectURL(preview.url);
+    }
+    this.selectedImageFiles.set([]);
+    this.selectedImagePreviews.set([]);
+    if (!options.keepMessage) {
+      this.imageUploadMessage.set(null);
+    }
+  }
+
   private async loadOwnersIfNeeded() {
     if (!this.canSelectOwner()) return;
     const ganaderos = await firstValueFrom(this.ganaderosService.listGanaderos());
@@ -480,6 +581,11 @@ export class AnimalFormPageComponent {
       return !sameAnimal && sameOwner;
     });
   }
+}
+
+interface SelectedImagePreview {
+  fileName: string;
+  url: string;
 }
 
 const visibleIdentifierValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {

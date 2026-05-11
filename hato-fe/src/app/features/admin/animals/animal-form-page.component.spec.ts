@@ -47,6 +47,10 @@ describe('AnimalFormPageComponent', () => {
       createAnimal: vi.fn(() => of({ outcome: 'queued', animalUuid: 'created-animal-uuid', message: 'Alta de animal encolada.' })),
       updateAnimal: vi.fn(() => of({ outcome: 'queued', message: 'Actualización de animal encolada.' })),
     };
+    const imagesService = {
+      listImages: vi.fn(() => of(options.images ?? [])),
+      addImages: vi.fn(() => of({ outcome: 'queued', message: 'Imágenes encoladas. Se disparó la sincronización automática.' })),
+    };
     const router = { navigateByUrl: vi.fn().mockResolvedValue(true) };
 
     await TestBed.configureTestingModule({
@@ -54,7 +58,7 @@ describe('AnimalFormPageComponent', () => {
       providers: [
         provideNoopAnimations(),
         { provide: AnimalsService, useValue: animalsService },
-        { provide: AnimalsImagesService, useValue: { listImages: vi.fn(() => of(options.images ?? [])) } },
+        { provide: AnimalsImagesService, useValue: imagesService },
         { provide: GanaderosService, useValue: { listGanaderos: vi.fn(() => of([{ id: 'ganadero-uuid-1', name: 'Ganadero Uno', businessIdentifier: 'NIT-1' }])) } },
         { provide: RazasService, useValue: { listActiveOptions: vi.fn(() => of([
           { uuid: 'raza-criolla-uuid', nombre: 'Criolla', origen: 'Pasorapa', tipo: 'BEEF', sortOrder: 1 },
@@ -71,10 +75,85 @@ describe('AnimalFormPageComponent', () => {
     await fixture.whenStable();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance, animalsService, router };
+    return { fixture, component: fixture.componentInstance, animalsService, imagesService, router };
   };
 
-  afterEach(() => TestBed.resetTestingModule());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  });
+
+  it('should render a Material-styled image selector trigger instead of relying on the native file button', async () => {
+    const { fixture } = await configure({ uuid: 'animal-uuid-1' });
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const trigger = Array.from(compiled.querySelectorAll('button')).find((button) => button.textContent?.includes('Seleccionar imágenes'));
+    const input = compiled.querySelector<HTMLInputElement>('input[type="file"]');
+
+    expect(trigger?.textContent).toContain('Seleccionar imágenes');
+    expect(input?.getAttribute('accept')).toBe('image/*');
+    expect(input?.multiple).toBe(true);
+    expect(input?.getAttribute('aria-label')).toBe('Seleccionar imágenes del animal');
+  });
+
+  it('should validate selected files and reject non-image files with a Spanish message', async () => {
+    const { fixture, component, imagesService } = await configure({ uuid: 'animal-uuid-1' });
+    const textFile = new File(['no soy imagen'], 'notas.txt', { type: 'text/plain' });
+
+    component.onImagesSelected({ target: { files: [textFile], value: 'notas.txt' } } as unknown as Event);
+    fixture.detectChanges();
+
+    expect(imagesService.addImages).not.toHaveBeenCalled();
+    expect(component.selectedImagePreviews()).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain('Solo podés seleccionar archivos de imagen.');
+  });
+
+  it('should preview selected image files before uploading them', async () => {
+    const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const { fixture, component, imagesService } = await configure({ uuid: 'animal-uuid-1' });
+    const firstImage = new File(['foto-1'], 'frente.png', { type: 'image/png' });
+    const secondImage = new File(['foto-2'], 'perfil.jpeg', { type: 'image/jpeg' });
+
+    component.onImagesSelected({ target: { files: [firstImage, secondImage], value: 'imagenes' } } as unknown as Event);
+    fixture.detectChanges();
+
+    const selectedPreviewImages = fixture.nativeElement.querySelectorAll('.selected-image-preview img') as NodeListOf<HTMLImageElement>;
+    expect(imagesService.addImages).not.toHaveBeenCalled();
+    expect(createObjectUrl).toHaveBeenCalledTimes(2);
+    expect(Array.from(selectedPreviewImages).map((image) => image.alt)).toEqual(['frente.png', 'perfil.jpeg']);
+    expect(Array.from(selectedPreviewImages).map((image) => image.src)).toEqual(['blob:frente.png', 'blob:perfil.jpeg']);
+  });
+
+  it('should upload valid selected images with the existing image service payload and clear previews after success', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const { fixture, component, imagesService } = await configure({ uuid: 'animal-uuid-1' });
+    const imageFile = new File(['foto'], 'animal.png', { type: 'image/png' });
+
+    component.onImagesSelected({ target: { files: [imageFile], value: 'animal.png' } } as unknown as Event);
+    component.submitSelectedImages();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(imagesService.addImages).toHaveBeenCalledWith('animal-uuid-1', [imageFile]);
+    expect(component.selectedImagePreviews()).toEqual([]);
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:animal.png');
+    expect(fixture.nativeElement.textContent).toContain('Imágenes encoladas. Se disparó la sincronización automática.');
+  });
+
+  it('should revoke stale preview URLs when replacing a previous valid selection with invalid files', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => `blob:${(file as File).name}`);
+    const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const { component } = await configure({ uuid: 'animal-uuid-1' });
+    const imageFile = new File(['foto'], 'animal.png', { type: 'image/png' });
+    const textFile = new File(['texto'], 'animal.txt', { type: 'text/plain' });
+
+    component.onImagesSelected({ target: { files: [imageFile], value: 'animal.png' } } as unknown as Event);
+    component.onImagesSelected({ target: { files: [textFile], value: 'animal.txt' } } as unknown as Event);
+
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:animal.png');
+    expect(component.selectedImagePreviews()).toEqual([]);
+  });
 
   it('should render create mode with image-after-save note and parent selectors', async () => {
     const { fixture } = await configure({ uuid: null });

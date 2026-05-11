@@ -20,6 +20,25 @@ public record AnimalRequest(
         @NotNull Boolean active,
         @NotNull LocalDate admissionDate,
         @DecimalMin("0.00") BigDecimal weightKg,
-        LocalDate birthDate
+        LocalDate birthDate,
+        String color,
+        String description,
+        UUID breedUuid
 ) {
+    public AnimalRequest(
+            UUID ownerGanaderoId,
+            UUID motherAnimalUuid,
+            UUID fatherAnimalUuid,
+            String arete,
+            String marca,
+            String tatuaje,
+            AnimalCategory category,
+            AnimalSex sex,
+            Boolean active,
+            LocalDate admissionDate,
+            BigDecimal weightKg,
+            LocalDate birthDate) {
+        this(ownerGanaderoId, motherAnimalUuid, fatherAnimalUuid, arete, marca, tatuaje, category, sex, active,
+                admissionDate, weightKg, birthDate, null, null, null);
+    }
 }

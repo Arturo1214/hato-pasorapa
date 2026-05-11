@@ -43,14 +43,14 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Backend — Animal Contract + Sync (PR 2)
 
-- [ ] 2.1 Add `color` and `description` `String` columns to `Animal.java` entity
-- [ ] 2.2 Add `@ManyToOne Raza breed` nullable FK + `breedUuid` column to `Animal.java`
-- [ ] 2.3 Add `breedUuid` and `breedName` (denormalized, nullable String) to `AnimalRequest.java` and `AnimalResponse.java`
-- [ ] 2.4 Update `hato-be/src/main/java/bo/pasorapa/hato/service/mapper/AnimalMapper.java` — map `breedUuid`, `breedName`; call `RazaService` for active breed validation
-- [ ] 2.5 Update `hato-be/src/main/java/bo/pasorapa/hato/service/AnimalService.java` — validate `breedUuid` is active on create/update; preserve denormalized `breedName` in response
-- [ ] 2.6 Update `hato-be/src/main/java/bo/pasorapa/hato/service/mapper/SyncPayloadMapper.java` — preserve `color`, `description`, `breedUuid`, `breedName` in push/pull payloads
-- [ ] 2.7 Write `hato-be/src/test/java/bo/pasorapa/hato/service/mapper/AnimalMapperTest.java` — breed fields mapping
-- [ ] 2.8 Write `hato-be/src/test/java/bo/pasorapa/hato/service/AnimalServiceTest.java` — breed validation (inactive → reject, missing → accept null)
+- [x] 2.1 Add `color` and `description` `String` columns to `Animal.java` entity
+- [x] 2.2 Add `@ManyToOne Raza breed` nullable FK + `breedUuid` column to `Animal.java`
+- [x] 2.3 Add `breedUuid` and `breedName` (denormalized, nullable String) to `AnimalRequest.java` and `AnimalResponse.java`
+- [x] 2.4 Update `hato-be/src/main/java/bo/pasorapa/hato/service/mapper/AnimalMapper.java` — map `breedUuid`, `breedName`; call `RazaService` for active breed validation
+- [x] 2.5 Update `hato-be/src/main/java/bo/pasorapa/hato/service/AnimalService.java` — validate `breedUuid` is active on create/update; preserve denormalized `breedName` in response
+- [x] 2.6 Update `hato-be/src/main/java/bo/pasorapa/hato/service/mapper/SyncPayloadMapper.java` — preserve `color`, `description`, `breedUuid`, `breedName` in push/pull payloads
+- [x] 2.7 Write `hato-be/src/test/java/bo/pasorapa/hato/service/mapper/AnimalMapperTest.java` — breed fields mapping
+- [x] 2.8 Write `hato-be/src/test/java/bo/pasorapa/hato/service/AnimalServiceTest.java` — breed validation (inactive → reject, missing → accept null)
 
 ## Phase 3: Frontend — Admin Raza ABM Page (PR 3)
 

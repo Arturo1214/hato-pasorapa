@@ -1085,7 +1085,7 @@ public class SyncService {
     private String resolveSeverity(String path) {
         return switch (path) {
             case "ownerGanaderoId", "status", "active", "category", "animalUuid", "type", "healthEventType", "reproductionEventType", "businessIdentifier" -> "high";
-            case "arete", "marca", "tatuaje", "name", "weightKg", "occurredAt", "capturedAt" -> "medium";
+            case "arete", "marca", "tatuaje", "name", "weightKg", "color", "description", "breedUuid", "occurredAt", "capturedAt" -> "medium";
             default -> "low";
         };
     }
@@ -1106,6 +1106,10 @@ public class SyncService {
         item.put("active", animal.getActive());
         item.put("admissionDate", animal.getAdmissionDate());
         item.put("weightKg", animal.getWeightKg());
+        item.put("color", animal.getColor());
+        item.put("description", animal.getDescription());
+        item.put("breedUuid", animal.getBreed() == null ? null : animal.getBreed().getUuid().toString());
+        item.put("breedName", animal.getBreed() == null ? null : animal.getBreed().getNombre());
         item.put("createdAt", animal.getCreatedAt().atOffset(ZoneOffset.UTC));
         item.put("version", animal.getVersion().intValue());
         item.put("updatedAt", animal.getUpdatedAt().atOffset(ZoneOffset.UTC));

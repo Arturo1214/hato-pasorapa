@@ -159,13 +159,22 @@ public class SyncPayloadMapper {
         if (payload.containsKey("weightKg") && payload.get("weightKg") != null) {
             animal.setWeightKg(new BigDecimal(String.valueOf(payload.get("weightKg"))));
         }
+        if (payload.containsKey("color")) {
+            animal.setColor(readOptionalText(payload.get("color")));
+        }
+        if (payload.containsKey("description")) {
+            animal.setDescription(readOptionalText(payload.get("description")));
+        }
     }
 
     public boolean hasAnimalCorePayload(Map<String, Object> payload) {
         return payload.containsKey("ownerGanaderoId")
                 || payload.containsKey("arete")
                 || payload.containsKey("marca")
-                || payload.containsKey("tatuaje");
+                || payload.containsKey("tatuaje")
+                || payload.containsKey("color")
+                || payload.containsKey("description")
+                || payload.containsKey("breedUuid");
     }
 
     public AnimalRequest toAnimalRequest(Map<String, Object> payload) {
@@ -187,7 +196,10 @@ public class SyncPayloadMapper {
                 active,
                 admissionDate,
                 readOptionalDecimal(payload.get("weightKg")),
-                readOptionalDate(payload.get("birthDate"), "ANIMAL_BIRTH_DATE_INVALID"));
+                readOptionalDate(payload.get("birthDate"), "ANIMAL_BIRTH_DATE_INVALID"),
+                readOptionalText(payload.get("color")),
+                readOptionalText(payload.get("description")),
+                readOptionalUuid(payload.get("breedUuid"), "ANIMAL_BREED_UUID_INVALID"));
     }
 
     public UserStatus readUserStatus(Map<String, Object> payload) {

@@ -2,6 +2,7 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.domain.Raza;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
@@ -10,6 +11,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.RazaRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
 import bo.pasorapa.hato.service.dto.AnimalGenealogyResponse;
@@ -44,6 +46,7 @@ public class AnimalService {
     private final AnimalEventRepository animalEventRepository;
     private final GanaderoRepository ganaderoRepository;
     private final UserRepository userRepository;
+    private final RazaRepository razaRepository;
     private final AnimalMapper animalMapper;
     private final AnimalEventMapper animalEventMapper;
     private final AnimalReproductionEventService animalReproductionEventService;
@@ -53,6 +56,7 @@ public class AnimalService {
             AnimalEventRepository animalEventRepository,
             GanaderoRepository ganaderoRepository,
             UserRepository userRepository,
+            RazaRepository razaRepository,
             AnimalMapper animalMapper,
             AnimalEventMapper animalEventMapper,
             AnimalReproductionEventService animalReproductionEventService) {
@@ -60,6 +64,7 @@ public class AnimalService {
         this.animalEventRepository = animalEventRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.userRepository = userRepository;
+        this.razaRepository = razaRepository;
         this.animalMapper = animalMapper;
         this.animalEventMapper = animalEventMapper;
         this.animalReproductionEventService = animalReproductionEventService;
@@ -204,7 +209,10 @@ public class AnimalService {
                         offspringRequest.active(),
                         offspringRequest.admissionDate() == null ? request.birthDate() : offspringRequest.admissionDate(),
                         offspringRequest.weightKg(),
-                        request.birthDate()), currentUserId))
+                        request.birthDate(),
+                        null,
+                        null,
+                        null), currentUserId))
                 .toList();
 
         var event = animalReproductionEventService.create(new AnimalReproductionEventRequest(
@@ -277,18 +285,41 @@ public class AnimalService {
                 request.active(),
                 request.admissionDate(),
                 request.weightKg(),
-                request.birthDate());
+                request.birthDate(),
+                normalizeVisible(request.color()),
+                request.description(),
+                request.breedUuid());
 
         applyCategorySexValidation(normalizedRequest.category(), normalizedRequest.sex());
         validateBirthDateForYoungAnimals(normalizedRequest);
         validateParents(normalizedRequest, ownerGanadero.getId(), animal.getUuid());
+        Raza breed = resolveActiveBreed(normalizedRequest.breedUuid());
 
-        animalMapper.updateEntity(animal, normalizedRequest, ownerGanadero);
+        animalMapper.updateEntity(animal, normalizedRequest, ownerGanadero, breed);
         animal.setAreteNormalized(toNormalizedKey(normalizedArete));
         animal.setMarcaNormalized(toNormalizedKey(normalizedMarca));
         animal.setTatuajeNormalized(toNormalizedKey(normalizedTatuaje));
         animal.setCode(resolveLegacyCode(animal));
         animal.setTag(resolveLegacyTag(animal, normalizedArete));
+    }
+
+    private Raza resolveActiveBreed(UUID breedUuid) {
+        if (breedUuid == null) {
+            return null;
+        }
+
+        Raza breed = razaRepository.findByUuid(breedUuid)
+                .orElseThrow(() -> new BusinessException(
+                        "ANIMAL_BREED_NOT_ACTIVE",
+                        "La raza seleccionada no está disponible.",
+                        Response.Status.BAD_REQUEST));
+        if (!Boolean.TRUE.equals(breed.getActivo())) {
+            throw new BusinessException(
+                    "ANIMAL_BREED_NOT_ACTIVE",
+                    "La raza seleccionada no está disponible.",
+                    Response.Status.BAD_REQUEST);
+        }
+        return breed;
     }
 
     public UUID resolveAuthenticatedGanaderoId(UUID currentUserId) {

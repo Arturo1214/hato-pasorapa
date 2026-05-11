@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: 019-animal-characteristics-breed-v1
+      author: opencode
+      changes:
+        - addColumn:
+            tableName: animals
+            columns:
+              - column:
+                  name: color
+                  type: VARCHAR(120)
+              - column:
+                  name: description
+                  type: VARCHAR(500)
+              - column:
+                  name: breed_id
+                  type: BIGINT
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: breed_id
+            referencedTableName: razas
+            referencedColumnNames: id
+            constraintName: fk_animals_breed
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_breed
+            columns:
+              - column:
+                  name: breed_id

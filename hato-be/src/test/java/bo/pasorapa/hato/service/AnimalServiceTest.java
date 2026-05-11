@@ -2,10 +2,12 @@ package bo.pasorapa.hato.service;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.Raza;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
@@ -14,6 +16,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.RazaRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.AnimalRequest;
@@ -58,6 +61,9 @@ class AnimalServiceTest {
     UserRepository userRepository;
 
     @Inject
+    RazaRepository razaRepository;
+
+    @Inject
     PasswordHasher passwordHasher;
 
     @Inject
@@ -67,6 +73,7 @@ class AnimalServiceTest {
     void setUp() {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
+            razaRepository.deleteAll();
             ganaderoRepository.persist(buildGanadero(PRIMARY_GANADERO_ID, "NIT-ANIMAL-001", "Ganadero Uno", "ganadero1@hato.bo"));
             ganaderoRepository.persist(buildGanadero(SECONDARY_GANADERO_ID, "NIT-ANIMAL-002", "Ganadero Dos", "ganadero2@hato.bo"));
             userRepository.persist(buildUser(ADMIN_USER_ID, "animal-admin", "animal-admin@hato.bo", Role.ADMIN));
@@ -372,6 +379,123 @@ class AnimalServiceTest {
         assertEquals("ANIMAL_BIRTH_MOTHER_SEX_INVALID", exception.code());
     }
 
+    @Test
+    void shouldPersistNullableCharacteristicsAndActiveBreedOnCreate() {
+        UUID breedUuid = UUID.fromString("00000000-0000-4000-8000-000000000001");
+        QuarkusTransaction.requiringNew().run(() -> razaRepository.persist(buildRaza(breedUuid, "Criolla", true)));
+
+        Animal created = QuarkusTransaction.requiringNew().call(() ->
+                animalService.create(new AnimalRequest(
+                        PRIMARY_GANADERO_ID,
+                        null,
+                        null,
+                        "BO-9300",
+                        null,
+                        null,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        null,
+                        "Colorado",
+                        "Bueno para carne",
+                        breedUuid)));
+
+        assertEquals("Colorado", created.getColor());
+        assertEquals("Bueno para carne", created.getDescription());
+        assertEquals(breedUuid, created.getBreed().getUuid());
+        assertEquals("Criolla", created.getBreed().getNombre());
+    }
+
+    @Test
+    void shouldKeepLegacyAnimalsValidWhenBreedIsNull() {
+        Animal created = QuarkusTransaction.requiringNew().call(() ->
+                animalService.create(new AnimalRequest(
+                        PRIMARY_GANADERO_ID,
+                        null,
+                        null,
+                        "BO-9400",
+                        null,
+                        null,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        null,
+                        null,
+                        null,
+                        null)));
+
+        assertNull(created.getColor());
+        assertNull(created.getDescription());
+        assertNull(created.getBreed());
+    }
+
+    @Test
+    void shouldRejectInactiveBreedOnCreate() {
+        UUID breedUuid = UUID.fromString("00000000-0000-4000-8000-000000000002");
+        QuarkusTransaction.requiringNew().run(() -> razaRepository.persist(buildRaza(breedUuid, "Nelore", false)));
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> QuarkusTransaction.requiringNew().call(() ->
+                animalService.create(new AnimalRequest(
+                        PRIMARY_GANADERO_ID,
+                        null,
+                        null,
+                        "BO-9500",
+                        null,
+                        null,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        null,
+                        "Overo",
+                        null,
+                        breedUuid))));
+
+        assertEquals("ANIMAL_BREED_NOT_ACTIVE", exception.code());
+        assertEquals(Response.Status.BAD_REQUEST, exception.status());
+    }
+
+    @Test
+    void shouldPreserveBreedAndDescriptionWhenUpdatingOnlyColor() {
+        UUID breedUuid = UUID.fromString("00000000-0000-4000-8000-000000000003");
+        UUID animalUuid = UUID.fromString("81c707fe-0b35-414a-a372-c5db6585af11");
+        QuarkusTransaction.requiringNew().run(() -> {
+            Raza raza = buildRaza(breedUuid, "Brahman", true);
+            razaRepository.persist(raza);
+            Animal animal = buildAnimal(animalUuid, PRIMARY_GANADERO_ID, "BO-9600", "Marca 9600", null);
+            animal.setDescription("Inicial");
+            animal.setBreed(raza);
+            animalRepository.persist(animal);
+        });
+
+        Animal updated = QuarkusTransaction.requiringNew().call(() ->
+                animalService.update(animalUuid, new AnimalRequest(
+                        PRIMARY_GANADERO_ID,
+                        null,
+                        null,
+                        "BO-9600",
+                        null,
+                        null,
+                        AnimalCategory.VACA,
+                        AnimalSex.HEMBRA,
+                        true,
+                        LocalDate.of(2024, 2, 1),
+                        new BigDecimal("410.50"),
+                        null,
+                        "Negro",
+                        null,
+                        null)));
+
+        assertEquals("Negro", updated.getColor());
+        assertEquals("Inicial", updated.getDescription());
+        assertEquals(breedUuid, updated.getBreed().getUuid());
+    }
+
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
         ganadero.setId(id);
@@ -412,5 +536,15 @@ class AnimalServiceTest {
         animal.setAdmissionDate(LocalDate.of(2024, 1, 10));
         animal.setWeightKg(new BigDecimal("420.50"));
         return animal;
+    }
+
+    private Raza buildRaza(UUID uuid, String nombre, boolean activo) {
+        Raza raza = new Raza();
+        raza.setUuid(uuid);
+        raza.setNombre(nombre);
+        raza.setNombreNormalizado(nombre.toLowerCase());
+        raza.setActivo(activo);
+        raza.setSortOrder(1);
+        return raza;
     }
 }

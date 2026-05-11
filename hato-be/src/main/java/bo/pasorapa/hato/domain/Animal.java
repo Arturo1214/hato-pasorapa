@@ -76,6 +76,16 @@ public class Animal {
     @Column(name = "weight_kg", precision = 10, scale = 2)
     private BigDecimal weightKg;
 
+    @Column(name = "color", length = 120)
+    private String color;
+
+    @Column(name = "description", length = 500)
+    private String description;
+
+    @ManyToOne
+    @JoinColumn(name = "breed_id")
+    private Raza breed;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -246,6 +256,30 @@ public class Animal {
 
     public void setWeightKg(BigDecimal weightKg) {
         this.weightKg = weightKg;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public Raza getBreed() {
+        return breed;
+    }
+
+    public void setBreed(Raza breed) {
+        this.breed = breed;
     }
 
     public LocalDateTime getCreatedAt() {

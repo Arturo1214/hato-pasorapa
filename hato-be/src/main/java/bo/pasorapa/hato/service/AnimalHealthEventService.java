@@ -155,7 +155,7 @@ public class AnimalHealthEventService {
         }
 
         AnimalHealthEvent selected = selectedEvents.stream()
-                .max(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
+                .max(vetVisitLifecycleComparator())
                 .orElseThrow();
         Map<String, Object> selectedMetadata = animalHealthEventMapper.readMetadataJson(selected.getMetadataJson());
         String rootVisitId = readText(readVisit(selectedMetadata).get("parentVisitId"));
@@ -238,7 +238,7 @@ public class AnimalHealthEventService {
 
     private VetVisitItemDto toVetVisitItem(List<AnimalHealthEvent> group) {
         AnimalHealthEvent representative = group.stream()
-                .max(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
+                .max(vetVisitLifecycleComparator())
                 .orElseThrow();
         Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(representative.getMetadataJson());
         Map<String, Object> visit = readVisit(metadata);
@@ -261,11 +261,37 @@ public class AnimalHealthEventService {
                 representative.getOccurredAt().atOffset(ZoneOffset.UTC),
                 nextControlAt,
                 "GLOBAL".equalsIgnoreCase(mode) ? null : representative.getAnimal().getUuid(),
-                resolveTargetAnimalCount(visit, group.size()),
+                resolveTargetAnimalCount(visit, group),
                 readAtencionNotas(visit, metadata),
                 readCostAmount(metadata),
                 readCostCurrency(metadata),
                 animalHealthEventMapper.readTreatmentPlan(metadata));
+    }
+
+    private Comparator<AnimalHealthEvent> vetVisitLifecycleComparator() {
+        return Comparator.comparingInt(this::lifecycleRank)
+                .thenComparing(AnimalHealthEvent::getOccurredAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(AnimalHealthEvent::getClientCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(AnimalHealthEvent::getCreatedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(AnimalHealthEvent::getEventId, Comparator.nullsFirst(Comparator.naturalOrder()));
+    }
+
+    private int lifecycleRank(AnimalHealthEvent event) {
+        Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
+        Map<String, Object> visit = readVisit(metadata);
+        String status = readText(visit.get("status"));
+        String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
+        if ("CANCELADA".equalsIgnoreCase(status) || "CANCELED".equalsIgnoreCase(status)) {
+            return 40;
+        }
+        if ("ATENDIDA".equalsIgnoreCase(status) || "ATTENDED".equalsIgnoreCase(status)
+                || "CLOSED".equalsIgnoreCase(protocolStatus)) {
+            return 30;
+        }
+        if ("REPROGRAMADA".equalsIgnoreCase(status) || "RESCHEDULED".equalsIgnoreCase(status)) {
+            return 20;
+        }
+        return 10;
     }
 
     private String deriveChainStatus(String visitStatus, String parentVisitId, Map<String, Object> metadata) {
@@ -295,12 +321,17 @@ public class AnimalHealthEventService {
         return readText(cost.get("currency"));
     }
 
-    private Integer resolveTargetAnimalCount(Map<String, Object> visit, int groupSize) {
+    private Integer resolveTargetAnimalCount(Map<String, Object> visit, List<AnimalHealthEvent> group) {
         Object targetAnimalCount = visit.get("targetAnimalCount");
         if (targetAnimalCount instanceof Number number) {
             return number.intValue();
         }
-        return groupSize;
+        return (int) group.stream()
+                .map(AnimalHealthEvent::getAnimal)
+                .filter(animal -> animal != null && animal.getUuid() != null)
+                .map(Animal::getUuid)
+                .distinct()
+                .count();
     }
 
     private String readAtencionNotas(Map<String, Object> visit, Map<String, Object> metadata) {

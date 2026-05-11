@@ -80,3 +80,4 @@ Chain strategy: stacked-to-main
 - [ ] 4.3 Manual smoke: create scheduled visit (no clinical fields visible), create attended-now visit (clinical fields + follow-up choice required), attend pending visit (clinical + choice), cancel child (parent stays `ATENDIDA`), `Ver` on terminal row (read-only chain)
 - [ ] 4.4 Confirm no direct row `Finalizar` action exists anywhere in the feature
 - [ ] 4.5 Confirm "Finalizada" label in UI only appears as chain status (`CLOSED`), never as a row status dropdown option
+- [x] 4.6 Bugfix regression: GLOBAL list projection chooses attended/closed lifecycle rows over stale scheduled fan-out rows for the same `visitId`

@@ -339,6 +339,100 @@ class AnimalHealthEventServiceTest {
     }
 
     @Test
+    void shouldProjectGlobalVisitFromLatestLifecycleRowWhenFanOutRowsShareScheduledOccurrence() {
+        UUID firstAnimal = UUID.fromString("16e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        UUID secondAnimal = UUID.fromString("17e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        String visitId = "VISIT-GLOBAL-LIFECYCLE-950";
+        seedAnimal(firstAnimal);
+        seedAnimal(secondAnimal);
+        seedFieldVetEvent(
+                firstAnimal,
+                UUID.fromString("ffffffff-ffff-4fff-8fff-fffffffffff1"),
+                visitId,
+                "GLOBAL",
+                "PENDING",
+                "Dra. Camila",
+                2,
+                "2026-05-20T08:00:00",
+                "Pendiente animal uno",
+                null,
+                null,
+                null,
+                null,
+                "STARTED");
+        seedFieldVetEvent(
+                secondAnimal,
+                UUID.fromString("ffffffff-ffff-4fff-8fff-fffffffffff2"),
+                visitId,
+                "GLOBAL",
+                "PENDING",
+                "Dra. Camila",
+                2,
+                "2026-05-20T08:00:00",
+                "Pendiente animal dos",
+                null,
+                null,
+                null,
+                null,
+                "STARTED");
+        seedFieldVetEvent(
+                firstAnimal,
+                UUID.fromString("00000000-0000-4000-8000-000000000001"),
+                visitId,
+                "GLOBAL",
+                "ATTENDED",
+                "Dra. Camila",
+                2,
+                "2026-05-10T08:00:00",
+                "Atención clínica cerrada animal uno",
+                new BigDecimal("75.00"),
+                List.of("Control finalizado"),
+                null,
+                null,
+                "CLOSED");
+        seedFieldVetEvent(
+                secondAnimal,
+                UUID.fromString("00000000-0000-4000-8000-000000000002"),
+                visitId,
+                "GLOBAL",
+                "ATTENDED",
+                "Dra. Camila",
+                2,
+                "2026-05-10T08:00:00",
+                "Atención clínica cerrada animal dos",
+                new BigDecimal("75.00"),
+                List.of("Control finalizado"),
+                null,
+                null,
+                "CLOSED");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.visitId = visitId;
+        filter.page = 0;
+        filter.size = 20;
+
+        var response = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+
+        assertEquals(1, response.total());
+        var item = response.items().get(0);
+        assertEquals(visitId, item.visitId());
+        assertEquals("GLOBAL", item.mode());
+        assertEquals("ATTENDED", item.status());
+        assertEquals("CLOSED", item.chainStatus());
+        assertEquals(null, item.animalUuid());
+        assertEquals(2, item.targetAnimalCount());
+        assertEquals("Atención clínica cerrada animal dos", item.atencionNotas());
+        assertEquals(0, new BigDecimal("75.00").compareTo(item.costo()));
+        assertEquals(List.of("Control finalizado"), item.treatmentPlan());
+
+        filter.status = "PENDING";
+        assertEquals(0, animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).total());
+
+        filter.status = "ATTENDED";
+        assertEquals(1, animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).total());
+    }
+
+    @Test
     void shouldProjectFieldVetVisitCostAndTreatmentPlanFromMetadata() {
         UUID animalUuid = UUID.fromString("12e6c94d-4f97-47f1-9c27-db25b2d28cc4");
         seedAnimal(animalUuid);
@@ -611,6 +705,38 @@ class AnimalHealthEventServiceTest {
             String parentVisitId,
             String cancelReason,
             String protocolStatus) {
+        seedFieldVetEvent(
+                animalUuid,
+                UUID.randomUUID(),
+                visitId,
+                mode,
+                status,
+                veterinarianName,
+                targetAnimalCount,
+                occurredAt,
+                "Atención " + visitId,
+                cost == null ? null : (BigDecimal) cost.get("amount"),
+                treatmentPlan,
+                parentVisitId,
+                cancelReason,
+                protocolStatus);
+    }
+
+    private void seedFieldVetEvent(
+            UUID animalUuid,
+            UUID eventId,
+            String visitId,
+            String mode,
+            String status,
+            String veterinarianName,
+            int targetAnimalCount,
+            String occurredAt,
+            String atencionNotas,
+            BigDecimal costAmount,
+            List<String> treatmentPlan,
+            String parentVisitId,
+            String cancelReason,
+            String protocolStatus) {
         QuarkusTransaction.requiringNew().run(() -> {
             LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
             LinkedHashMap<String, Object> visit = new LinkedHashMap<>();
@@ -619,7 +745,7 @@ class AnimalHealthEventServiceTest {
             visit.put("status", status);
             visit.put("veterinarian", Map.of("name", veterinarianName));
             visit.put("targetAnimalCount", targetAnimalCount);
-            visit.put("atencionNotas", "Atención " + visitId);
+            visit.put("atencionNotas", atencionNotas);
             if (parentVisitId != null) {
                 visit.put("parentVisitId", parentVisitId);
             }
@@ -634,12 +760,12 @@ class AnimalHealthEventServiceTest {
                     "findings", "Ok",
                     "plan", treatmentPlan == null ? "Seguimiento" : treatmentPlan));
             metadata.put("protocol", Map.of("status", protocolStatus));
-            if (cost != null) {
-                metadata.put("cost", cost);
+            if (costAmount != null) {
+                metadata.put("cost", Map.of("amount", costAmount, "currency", "BOB"));
             }
 
             var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
-            event.setEventId(UUID.randomUUID());
+            event.setEventId(eventId);
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
             event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);
             event.setOccurredAt(LocalDateTime.parse(occurredAt));

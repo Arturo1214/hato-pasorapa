@@ -8,6 +8,7 @@ import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,6 +93,41 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
                 .list();
     }
 
+    public VetVisitQueryResult findFieldVetVisitsByOwner(UUID ownerId, VetVisitQuery filter) {
+        StringBuilder query = new StringBuilder(
+                "from AnimalHealthEvent event join fetch event.animal animal where event.healthEventType = ?1");
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalHealthEventType.FIELD_VET_VISIT);
+
+        if (ownerId != null) {
+            query.append(" and animal.ownerGanadero.id = ?").append(params.size() + 1);
+            params.add(ownerId);
+        }
+        if (filter.animalUuid() != null) {
+            query.append(" and animal.uuid = ?").append(params.size() + 1);
+            params.add(filter.animalUuid());
+        }
+        if (filter.occurredFrom() != null) {
+            query.append(" and event.occurredAt >= ?").append(params.size() + 1);
+            params.add(filter.occurredFrom());
+        }
+        if (filter.occurredTo() != null) {
+            query.append(" and event.occurredAt <= ?").append(params.size() + 1);
+            params.add(filter.occurredTo());
+        }
+        query.append(" order by event.occurredAt desc, event.eventId desc");
+
+        List<AnimalHealthEvent> filtered = find(query.toString(), params.toArray()).list().stream()
+                .filter(event -> matchesVisitMetadata(event, filter))
+                .sorted(Comparator.comparing(AnimalHealthEvent::getOccurredAt).reversed()
+                        .thenComparing(AnimalHealthEvent::getEventId))
+                .toList();
+
+        int fromIndex = Math.min(filter.offset(), filtered.size());
+        int toIndex = Math.min(fromIndex + filter.limit(), filtered.size());
+        return new VetVisitQueryResult(filtered.subList(fromIndex, toIndex), filtered.size());
+    }
+
     public List<HealthActivityRow> listHealthActivity(
             LocalDateTime occurredFrom,
             LocalDateTime occurredTo,
@@ -152,12 +188,44 @@ public class AnimalHealthEventRepository implements PanacheRepositoryBase<Animal
             String animalTag,
             String notes) {}
 
-    private String readVisitId(String metadataJson) {
+    public record VetVisitQuery(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo,
+            int limit,
+            int offset) {}
+
+    public record VetVisitQueryResult(List<AnimalHealthEvent> items, long total) {}
+
+    private boolean matchesVisitMetadata(AnimalHealthEvent event, VetVisitQuery filter) {
+        Map<String, Object> visit = readVisit(event.getMetadataJson());
+        return matchesText(filter.visitId(), visit.get("visitId"))
+                && matchesText(filter.mode(), visit.get("mode"))
+                && matchesText(filter.status(), visit.get("status"));
+    }
+
+    private boolean matchesText(String expected, Object actual) {
+        if (expected == null || expected.isBlank()) {
+            return true;
+        }
+        return actual instanceof String text && expected.trim().equalsIgnoreCase(text.trim());
+    }
+
+    private Map<String, Object> readVisit(String metadataJson) {
         Object visit = readMetadata(metadataJson).get("visit");
         if (!(visit instanceof Map<?, ?> visitMap)) {
-            return null;
+            return Map.of();
         }
-        Object value = visitMap.get("visitId");
+        Map<String, Object> normalized = new java.util.LinkedHashMap<>();
+        visitMap.forEach((key, value) -> normalized.put(String.valueOf(key), value));
+        return normalized;
+    }
+
+    private String readVisitId(String metadataJson) {
+        Object value = readVisit(metadataJson).get("visitId");
         return value instanceof String text && !text.isBlank() ? text.trim() : null;
     }
 

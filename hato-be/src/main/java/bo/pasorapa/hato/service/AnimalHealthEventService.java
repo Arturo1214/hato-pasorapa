@@ -6,17 +6,24 @@ import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalHealthEventRepository.VetVisitQuery;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventResponse;
+import bo.pasorapa.hato.service.dto.vetvisit.VetVisitFilterDto;
+import bo.pasorapa.hato.service.dto.vetvisit.VetVisitItemDto;
+import bo.pasorapa.hato.service.dto.vetvisit.VetVisitListResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,6 +120,23 @@ public class AnimalHealthEventService {
                 .toList();
     }
 
+    public VetVisitListResponse listVetVisits(VetVisitFilterDto filter, UUID currentUserId, boolean ganaderoScoped) {
+        UUID ownerId = ganaderoScoped ? resolveAuthenticatedGanaderoId(currentUserId) : null;
+        VetVisitQuery query = new VetVisitQuery(
+                filter.animalUuid,
+                filter.normalizedVisitId(),
+                filter.normalizedMode(),
+                filter.normalizedStatus(),
+                filter.occurredFrom == null ? null : filter.occurredFrom.toLocalDateTime(),
+                filter.occurredTo == null ? null : filter.occurredTo.toLocalDateTime(),
+                Integer.MAX_VALUE,
+                0);
+        List<VetVisitItemDto> groupedItems = groupVetVisits(animalHealthEventRepository.findFieldVetVisitsByOwner(ownerId, query).items());
+        int fromIndex = Math.min(filter.offset(), groupedItems.size());
+        int toIndex = Math.min(fromIndex + filter.size, groupedItems.size());
+        return new VetVisitListResponse(groupedItems.subList(fromIndex, toIndex), filter.page, filter.size, groupedItems.size());
+    }
+
     private void requireAnimalOwnedByAuthenticatedGanadero(UUID animalUuid, UUID currentUserId) {
         Animal animal = animalRepository.findByUuid(animalUuid)
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
@@ -128,6 +152,96 @@ public class AnimalHealthEventService {
         if (!authenticatedGanaderoId.equals(animal.getOwnerGanadero().getId())) {
             throw new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND);
         }
+    }
+
+    private UUID resolveAuthenticatedGanaderoId(UUID currentUserId) {
+        User currentUser = userRepository.findByIdOptional(currentUserId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "No encontramos el usuario autenticado.", Response.Status.NOT_FOUND));
+        if (currentUser.getRole() != Role.GANADERO) {
+            throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no pertenece a un ganadero.", Response.Status.FORBIDDEN);
+        }
+
+        return ganaderoRepository.findByEmail(currentUser.getEmail())
+                .orElseThrow(() -> new BusinessException("GANADERO_NOT_FOUND", "No encontramos el ganadero autenticado.", Response.Status.NOT_FOUND))
+                .getId();
+    }
+
+    private List<VetVisitItemDto> groupVetVisits(List<AnimalHealthEvent> events) {
+        Map<String, List<AnimalHealthEvent>> groups = new LinkedHashMap<>();
+        for (AnimalHealthEvent event : events) {
+            Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
+            Map<String, Object> visit = readVisit(metadata);
+            String visitId = readText(visit.get("visitId"));
+            String mode = readText(visit.get("mode"));
+            String key = "GLOBAL".equalsIgnoreCase(mode) && visitId != null ? "GLOBAL:" + visitId : "EVENT:" + event.getEventId();
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(event);
+        }
+        return groups.values().stream()
+                .map(this::toVetVisitItem)
+                .sorted(Comparator.comparing(VetVisitItemDto::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed()
+                        .thenComparing(VetVisitItemDto::visitId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    private VetVisitItemDto toVetVisitItem(List<AnimalHealthEvent> group) {
+        AnimalHealthEvent representative = group.stream()
+                .min(Comparator.comparing(AnimalHealthEvent::getOccurredAt).thenComparing(AnimalHealthEvent::getEventId))
+                .orElseThrow();
+        Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(representative.getMetadataJson());
+        Map<String, Object> visit = readVisit(metadata);
+        String mode = readText(visit.get("mode"));
+        Map<String, Object> veterinarian = readMap(visit.get("veterinarian"));
+        OffsetDateTime nextControlAt = readOffsetDateTime(visit.get("nextControlAt"));
+        if (nextControlAt == null) {
+            nextControlAt = animalHealthEventMapper.readNextDueAt(metadata);
+        }
+        return new VetVisitItemDto(
+                readText(visit.get("visitId")),
+                mode,
+                readText(visit.get("status")),
+                new VetVisitItemDto.VeterinarianDto(readText(veterinarian.get("name")), readText(veterinarian.get("license"))),
+                representative.getOccurredAt().atOffset(ZoneOffset.UTC),
+                nextControlAt,
+                "GLOBAL".equalsIgnoreCase(mode) ? null : representative.getAnimal().getUuid(),
+                resolveTargetAnimalCount(visit, group.size()),
+                readAtencionNotas(visit, metadata));
+    }
+
+    private Integer resolveTargetAnimalCount(Map<String, Object> visit, int groupSize) {
+        Object targetAnimalCount = visit.get("targetAnimalCount");
+        if (targetAnimalCount instanceof Number number) {
+            return number.intValue();
+        }
+        return groupSize;
+    }
+
+    private String readAtencionNotas(Map<String, Object> visit, Map<String, Object> metadata) {
+        String notes = readText(visit.get("atencionNotas"));
+        return notes == null ? readText(metadata.get("atencionNotas")) : notes;
+    }
+
+    private Map<String, Object> readVisit(Map<String, Object> metadata) {
+        return readMap(metadata.get("visit"));
+    }
+
+    private Map<String, Object> readMap(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        map.forEach((key, nestedValue) -> normalized.put(String.valueOf(key), nestedValue));
+        return normalized;
+    }
+
+    private String readText(Object value) {
+        return value instanceof String text && !text.isBlank() ? text.trim() : null;
+    }
+
+    private OffsetDateTime readOffsetDateTime(Object value) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return null;
+        }
+        return OffsetDateTime.parse(text);
     }
 
     public Map<String, Object> toPullItem(AnimalHealthEvent event) {

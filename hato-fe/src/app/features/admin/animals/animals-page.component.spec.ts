@@ -43,6 +43,10 @@ describe('AnimalsPageComponent', () => {
     lastSyncedAt: '2026-04-26T10:05:00.000Z',
     motherAnimalUuid: null,
     fatherAnimalUuid: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
     ...overrides,
   });
 
@@ -125,12 +129,15 @@ describe('AnimalsPageComponent', () => {
 
   it('should render the animals data table with the sex column and without legacy global filters', async () => {
     const animalsServiceMock = createAnimalsServiceMock();
-    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal()]));
+    animalsServiceMock.listAnimals.mockReturnValue(of([createAnimal({ color: 'Colorado', breedUuid: 'raza-criolla-uuid', breedName: 'Criolla' })]));
     const { fixture } = await configure(animalsServiceMock);
 
     expect(fixture.nativeElement.textContent).toContain('Estado de sync:');
     expect(fixture.nativeElement.textContent).toContain('Sexo');
     expect(fixture.nativeElement.textContent).toContain('Hembra');
+    expect(fixture.nativeElement.textContent).toContain('Raza');
+    expect(fixture.nativeElement.textContent).toContain('Criolla');
+    expect(fixture.nativeElement.textContent).toContain('Colorado');
     expect(fixture.nativeElement.textContent).toContain('AR-100');
     expect(fixture.nativeElement.textContent).not.toContain('UUID owner actual');
     expect(fixture.nativeElement.textContent).not.toContain('Estado operativo');

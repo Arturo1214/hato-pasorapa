@@ -27,6 +27,10 @@ describe('AnimalsService', () => {
     version: 1,
     updatedAt: '2026-04-26T10:00:00.000Z',
     lastSyncedAt: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
     ...overrides,
   });
 
@@ -593,6 +597,79 @@ describe('AnimalsService', () => {
           sex: 'HEMBRA',
           birthDate: '2025-10-26',
         }),
+      }),
+    ]);
+  });
+
+  it('should preserve animal characteristics in queued create payloads and optimistic snapshots', async () => {
+    const { service, store } = setup({ online: false });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('33333333-4444-4555-8666-777777777777');
+
+    await firstValueFrom(
+      service.createAnimal({
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-881',
+        category: ANIMAL_CATEGORY.VACA,
+        active: true,
+        admissionDate: '2026-04-26',
+        color: ' Colorado ',
+        description: ' Bueno para carne ',
+        breedUuid: 'raza-criolla-uuid',
+      })
+    );
+
+    const outbox = await store.listOutbox();
+    expect(outbox[0]?.payload).toEqual(expect.objectContaining({
+      color: 'Colorado',
+      description: 'Bueno para carne',
+      breedUuid: 'raza-criolla-uuid',
+    }));
+    await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          color: 'Colorado',
+          description: 'Bueno para carne',
+          breedUuid: 'raza-criolla-uuid',
+        }),
+      }),
+    ]);
+  });
+
+  it('should preserve unchanged breed and description when only color changes in an optimistic update', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL:animal-uuid-88',
+      entityType: 'ANIMAL',
+      entityId: 'animal-uuid-88',
+      payload: { ...createAnimal({
+        uuid: 'animal-uuid-88',
+        color: 'Colorado',
+        description: 'Bueno para carne',
+        breedUuid: 'raza-criolla-uuid',
+        breedName: 'Criolla',
+      }) },
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 5,
+    });
+
+    await firstValueFrom(
+      service.updateAnimal('animal-uuid-88', {
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-881',
+        category: ANIMAL_CATEGORY.VACA,
+        active: true,
+        admissionDate: '2026-04-26',
+        color: 'Negro',
+      })
+    );
+
+    await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([
+      expect.objectContaining({
+        uuid: 'animal-uuid-88',
+        color: 'Negro',
+        description: 'Bueno para carne',
+        breedUuid: 'raza-criolla-uuid',
+        breedName: 'Criolla',
       }),
     ]);
   });

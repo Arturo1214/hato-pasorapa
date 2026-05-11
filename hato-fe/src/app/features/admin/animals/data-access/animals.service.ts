@@ -53,6 +53,10 @@ export interface AnimalItem {
   arete: string | null;
   marca: string | null;
   tatuaje: string | null;
+  color: string | null;
+  description: string | null;
+  breedUuid: string | null;
+  breedName: string | null;
   category: AnimalCategory;
   sex: AnimalSex | null;
   active: boolean;
@@ -109,6 +113,10 @@ export interface AnimalMutationPayload {
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
+  color?: string | null;
+  description?: string | null;
+  breedUuid?: string | null;
+  breedName?: string | null;
   category: AnimalCategory;
   sex?: AnimalSex | null;
   active: boolean;
@@ -457,6 +465,10 @@ function createOptimisticAnimalSnapshot(
     arete: payload.arete ?? null,
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
+    color: payload.color ?? null,
+    description: payload.description ?? null,
+    breedUuid: payload.breedUuid ?? null,
+    breedName: payload.breedName ?? null,
     category: payload.category,
     sex: payload.sex ?? inferAnimalSexFromCategory(payload.category),
     active: payload.active,
@@ -486,6 +498,10 @@ function applyOptimisticAnimalUpdate(
     arete: payload.arete ?? null,
     marca: payload.marca ?? null,
     tatuaje: payload.tatuaje ?? null,
+    color: payload.color ?? currentSnapshot?.color ?? null,
+    description: payload.description ?? currentSnapshot?.description ?? null,
+    breedUuid: payload.breedUuid ?? currentSnapshot?.breedUuid ?? null,
+    breedName: payload.breedName ?? currentSnapshot?.breedName ?? null,
     category: payload.category,
     sex: payload.sex ?? currentSnapshot?.sex ?? inferAnimalSexFromCategory(payload.category),
     active: payload.active,
@@ -508,6 +524,10 @@ function normalizeAnimalItem(animal: RawAnimalItem | AnimalItem): AnimalItem {
     category,
     sex: animal.sex ?? inferAnimalSexFromCategory(category),
     birthDate: animal.birthDate ?? null,
+    color: animal.color ?? null,
+    description: animal.description ?? null,
+    breedUuid: animal.breedUuid ?? null,
+    breedName: animal.breedName ?? null,
   } satisfies AnimalItem;
 }
 
@@ -644,6 +664,10 @@ function sanitizeMutationPayload(payload: AnimalMutationPayload): AnimalOfflineM
     arete: normalizeOptionalText(payload.arete),
     marca: normalizeOptionalText(payload.marca),
     tatuaje: normalizeOptionalText(payload.tatuaje),
+    color: normalizeOptionalText(payload.color),
+    description: normalizeOptionalText(payload.description),
+    breedUuid: normalizeOptionalText(payload.breedUuid),
+    breedName: normalizeOptionalText(payload.breedName),
     category: payload.category,
     sex: payload.sex ?? null,
     active: payload.active,

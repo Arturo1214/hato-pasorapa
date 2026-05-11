@@ -72,6 +72,9 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
                 <div><dt>Arete</dt><dd>{{ animal()?.arete || '—' }}</dd></div>
                 <div><dt>Marca</dt><dd>{{ animal()?.marca || '—' }}</dd></div>
                 <div><dt>Tatuaje</dt><dd>{{ animal()?.tatuaje || '—' }}</dd></div>
+                <div><dt>Raza</dt><dd>{{ animal()?.breedName || 'Sin raza asignada' }}</dd></div>
+                <div><dt>Color</dt><dd>{{ animal()?.color || '—' }}</dd></div>
+                <div class="ficha-grid__wide"><dt>Descripción</dt><dd>{{ animal()?.description || '—' }}</dd></div>
                 <div><dt>Categoría</dt><dd>{{ categoryLabel(animal()?.category) }}</dd></div>
                 <div><dt>Sexo</dt><dd>{{ sexLabel(animal()?.sex) }}</dd></div>
                 <div><dt>Estado</dt><dd>{{ animal()?.active ? 'Activo' : 'Inactivo' }}</dd></div>
@@ -245,6 +248,7 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .detail-actions mat-icon { margin-inline-end: .25rem; }
     .detail-card { margin-top: 1rem; padding: 1rem; }
     .ficha-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; margin: 0; }
+    .ficha-grid__wide { grid-column: 1 / -1; }
     dt { color: var(--mat-sys-on-surface-variant); font-size: .8rem; }
     dd { margin: .25rem 0 0; font-weight: 600; }
     .main-image { width: min(36rem, 100%); max-height: 24rem; object-fit: cover; border-radius: 1rem; }

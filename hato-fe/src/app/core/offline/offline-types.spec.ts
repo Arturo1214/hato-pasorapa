@@ -4,6 +4,8 @@ import {
   MANUAL_RESOLUTION_ACTIONS,
   OFFLINE_ENTITY_TYPES,
   REPORTING_WINDOWS,
+  type AnimalOfflineMutationPayload,
+  type AnimalOfflineSnapshotPayload,
 } from './offline-types';
 
 describe('offline v2 entity types', () => {
@@ -109,5 +111,33 @@ describe('offline v2 entity types', () => {
     expect(insight.why.source).toEqual(expect.arrayContaining(['COST_LEDGER']));
     expect((insight as Record<string, unknown>)['forecast']).toBeUndefined();
     expect((insight as Record<string, unknown>)['autoAction']).toBeUndefined();
+  });
+
+  it('should type animal offline payloads with core characteristics and breed display snapshots', () => {
+    const mutationPayload: AnimalOfflineMutationPayload = {
+      arete: 'AR-100',
+      category: 'VACA',
+      active: true,
+      admissionDate: '2026-04-26',
+      color: 'Colorado',
+      description: 'Bueno para carne',
+      breedUuid: 'raza-criolla-uuid',
+    };
+    const breedUuid: string | null | undefined = mutationPayload.breedUuid;
+    const snapshotPayload: AnimalOfflineSnapshotPayload = {
+      ...mutationPayload,
+      uuid: 'animal-uuid-1',
+      breedName: 'Criolla',
+      createdAt: '2026-04-26T10:00:00.000Z',
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 1,
+      lastSyncedAt: null,
+    };
+    const breedName: string | null | undefined = snapshotPayload.breedName;
+
+    expect(breedUuid).toBe('raza-criolla-uuid');
+    expect(snapshotPayload.color).toBe('Colorado');
+    expect(snapshotPayload.description).toBe('Bueno para carne');
+    expect(breedName).toBe('Criolla');
   });
 });

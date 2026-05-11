@@ -34,6 +34,10 @@ describe('AnimalDetailPageComponent', () => {
     lastSyncedAt: '2026-04-26T10:05:00.000Z',
     motherAnimalUuid: null,
     fatherAnimalUuid: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
     ...overrides,
   });
 
@@ -119,7 +123,7 @@ describe('AnimalDetailPageComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('should render the read-only ficha, gallery, history, reproduction and genealogy sections', async () => {
-    const { fixture } = await configure();
+    const { fixture } = await configure({ animal: createAnimal({ color: 'Colorado', description: 'Bueno para carne', breedUuid: 'raza-criolla-uuid', breedName: 'Criolla' }) });
     let text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('Volver a animales');
@@ -127,6 +131,12 @@ describe('AnimalDetailPageComponent', () => {
     expect(text).toContain('Arete');
     expect(text).toContain('AR-100');
     expect(text).toContain('Marca Sur');
+    expect(text).toContain('Raza');
+    expect(text).toContain('Criolla');
+    expect(text).toContain('Color');
+    expect(text).toContain('Colorado');
+    expect(text).toContain('Descripción');
+    expect(text).toContain('Bueno para carne');
     expect(text).toContain('Hembra');
     expect(text).toContain('420 kg');
     expect(text).toContain('Imágenes');
@@ -143,6 +153,15 @@ describe('AnimalDetailPageComponent', () => {
     expect(text).toContain('MADRE-001');
     expect(text).toContain('PADRE-001');
     expect(text).toContain('CRIA-001');
+  });
+
+  it('should show legacy animals without breed gracefully', async () => {
+    const { fixture } = await configure({ animal: createAnimal({ breedUuid: null, breedName: null }) });
+
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('Raza');
+    expect(text).toContain('Sin raza asignada');
   });
 
   it('should render genealogy as a visual parent-current-offspring tree', async () => {
@@ -384,6 +403,10 @@ describe('AnimalBirthRegistrationDialogComponent', () => {
     lastSyncedAt: '2026-04-26T10:05:00.000Z',
     motherAnimalUuid: null,
     fatherAnimalUuid: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
     ...overrides,
   });
 

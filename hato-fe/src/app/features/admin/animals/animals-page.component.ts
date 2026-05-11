@@ -117,6 +117,7 @@ const ANIMAL_TABLE_ACTION = {
             <div class="animal-identity">
               <strong class="animal-identity__primary">{{ animal.arete || 'Sin arete' }}</strong>
               <span class="animal-identity__meta">Marca: {{ animal.marca || '—' }} · Tatuaje: {{ animal.tatuaje || '—' }}</span>
+              <span class="animal-identity__meta">Color: {{ animal.color || '—' }}</span>
             </div>
           </ng-template>
 
@@ -246,6 +247,13 @@ export class AnimalsPageComponent {
       filterType: DATA_TABLE_FILTER_TYPE.TEXT,
       formatter: (_value, row) => formatAnimalIdentity(this.animalFromRow(row)),
       cellTemplate: this.animalIdentityCell(),
+    },
+    {
+      key: 'breedName',
+      label: 'Raza',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (value) => typeof value === 'string' && value ? value : 'Sin raza asignada',
     },
     {
       key: 'category',

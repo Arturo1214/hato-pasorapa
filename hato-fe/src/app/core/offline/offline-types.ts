@@ -423,6 +423,10 @@ export interface AnimalOfflineMutationPayload extends Record<string, unknown> {
   arete?: string | null;
   marca?: string | null;
   tatuaje?: string | null;
+  color?: string | null;
+  description?: string | null;
+  breedUuid?: string | null;
+  breedName?: string | null;
   category: 'TERNERO' | 'TERNERA' | 'VAQUILLONA' | 'VACA' | 'TORO' | 'BUEY';
   sex?: 'MACHO' | 'HEMBRA' | null;
   active: boolean;

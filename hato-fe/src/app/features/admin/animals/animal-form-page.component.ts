@@ -15,6 +15,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
 import { GanaderosService } from '../ganaderos/data-access/ganaderos.service';
+import { RazasService, type RazaOption } from '../razas/data-access/razas.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import {
   ANIMAL_CATEGORY,
@@ -104,6 +105,23 @@ import type { AnimalOwnerOption } from './animal-form-dialog.component';
             <mat-form-field appearance="outline"><mat-label>Arete</mat-label><input matInput formControlName="arete" /></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Marca</mat-label><input matInput formControlName="marca" /></mat-form-field>
             <mat-form-field appearance="outline"><mat-label>Tatuaje</mat-label><input matInput formControlName="tatuaje" /></mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Raza</mat-label>
+              <mat-select formControlName="breedUuid">
+                <mat-option [value]="null">Sin raza asignada</mat-option>
+                @for (breed of breedOptions(); track breed.uuid) {
+                  <mat-option [value]="breed.uuid">{{ breed.nombre }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline"><mat-label>Color</mat-label><input matInput formControlName="color" placeholder="Ej. Colorado" /></mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field--full">
+              <mat-label>Descripción</mat-label>
+              <textarea matInput rows="3" formControlName="description" placeholder="Observaciones productivas o físicas"></textarea>
+            </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Sexo</mat-label>
@@ -204,6 +222,7 @@ export class AnimalFormPageComponent {
   private readonly animalsService = inject(AnimalsService);
   private readonly imagesService = inject(AnimalsImagesService);
   private readonly ganaderosService = inject(GanaderosService);
+  private readonly razasService = inject(RazasService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly uuid = this.route.snapshot.paramMap.get('uuid');
 
@@ -212,6 +231,7 @@ export class AnimalFormPageComponent {
   readonly animal = signal<AnimalItem | null>(null);
   readonly parentCandidates = signal<AnimalItem[]>([]);
   readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
+  readonly breedOptions = signal<RazaOption[]>([]);
   readonly images = signal<AnimalImageItem[]>([]);
   readonly saving = signal(false);
   readonly errorMessage = signal<string | null>(null);
@@ -230,6 +250,9 @@ export class AnimalFormPageComponent {
       arete: [''],
       marca: [''],
       tatuaje: [''],
+      color: [''],
+      description: [''],
+      breedUuid: [null as string | null],
       category: [ANIMAL_CATEGORY.VACA as AnimalCategory | null, [Validators.required]],
       sex: [ANIMAL_SEX.HEMBRA as AnimalSex, [Validators.required]],
       birthDate: [null as Date | string | null],
@@ -320,8 +343,9 @@ export class AnimalFormPageComponent {
 
   private async load() {
     try {
-      const [parents] = await Promise.all([firstValueFrom(this.animalsService.listAnimals()), this.loadOwnersIfNeeded()]);
+      const [parents, breeds] = await Promise.all([firstValueFrom(this.animalsService.listAnimals()), firstValueFrom(this.razasService.listActiveOptions()), this.loadOwnersIfNeeded()]);
       this.parentCandidates.set(parents);
+      this.breedOptions.set(breeds);
       if (this.uuid) {
         const animal = await firstValueFrom(this.animalsService.getAnimal(this.uuid));
         this.animal.set(animal);
@@ -332,6 +356,9 @@ export class AnimalFormPageComponent {
           arete: animal.arete ?? '',
           marca: animal.marca ?? '',
           tatuaje: animal.tatuaje ?? '',
+          color: animal.color ?? '',
+          description: animal.description ?? '',
+          breedUuid: animal.breedUuid ?? null,
           category: animal.category,
           sex: animal.sex ?? inferAnimalSexFromCategory(animal.category),
           birthDate: dateFromIsoDate(animal.birthDate),
@@ -364,6 +391,10 @@ export class AnimalFormPageComponent {
       arete: normalizeOptionalText(value.arete),
       marca: normalizeOptionalText(value.marca),
       tatuaje: normalizeOptionalText(value.tatuaje),
+      color: normalizeOptionalText(value.color),
+      description: normalizeOptionalText(value.description),
+      breedUuid: normalizeOptionalText(value.breedUuid),
+      breedName: this.breedOptions().find((breed) => breed.uuid === value.breedUuid)?.nombre ?? null,
       category: value.category ?? ANIMAL_CATEGORY.VACA,
       sex: value.sex ?? inferAnimalSexFromCategory(value.category ?? ANIMAL_CATEGORY.VACA),
       active: this.animal()?.active ?? true,

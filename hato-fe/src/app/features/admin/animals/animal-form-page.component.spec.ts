@@ -6,6 +6,7 @@ import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import { ANIMAL_CATEGORY, ANIMAL_SEX, AnimalsService, type AnimalItem } from './data-access/animals.service';
 import { GanaderosService } from '../ganaderos/data-access/ganaderos.service';
+import { RazasService } from '../razas/data-access/razas.service';
 import { AnimalFormPageComponent } from './animal-form-page.component';
 
 describe('AnimalFormPageComponent', () => {
@@ -27,6 +28,10 @@ describe('AnimalFormPageComponent', () => {
     version: 1,
     updatedAt: '2026-01-02T10:00:00.000Z',
     lastSyncedAt: null,
+    color: null,
+    description: null,
+    breedUuid: null,
+    breedName: null,
     ...overrides,
   });
 
@@ -51,6 +56,10 @@ describe('AnimalFormPageComponent', () => {
         { provide: AnimalsService, useValue: animalsService },
         { provide: AnimalsImagesService, useValue: { listImages: vi.fn(() => of(options.images ?? [])) } },
         { provide: GanaderosService, useValue: { listGanaderos: vi.fn(() => of([{ id: 'ganadero-uuid-1', name: 'Ganadero Uno', businessIdentifier: 'NIT-1' }])) } },
+        { provide: RazasService, useValue: { listActiveOptions: vi.fn(() => of([
+          { uuid: 'raza-criolla-uuid', nombre: 'Criolla', origen: 'Pasorapa', tipo: 'BEEF', sortOrder: 1 },
+          { uuid: 'raza-brangus-uuid', nombre: 'Brangus', origen: null, tipo: 'DUAL_PURPOSE', sortOrder: 2 },
+        ])) } },
         { provide: AuthService, useValue: { currentUser: () => ({ role: options.role ?? 'ADMIN', status: 'ACTIVE' }) } },
         { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => options.uuid ?? null }, routeConfig: { path: options.uuid ? 'admin/animales/:uuid/editar' : 'admin/animales/nuevo' } } } },
@@ -130,6 +139,53 @@ describe('AnimalFormPageComponent', () => {
     editComponent.submit();
 
     expect(editAnimalsService.updateAnimal).toHaveBeenCalledWith('animal-uuid-1', expect.objectContaining({ active: false }));
+  });
+
+  it('should render active breed options and submit normalized core characteristics', async () => {
+    const { fixture, component, animalsService } = await configure({ uuid: null, role: 'GANADERO' });
+
+    expect(fixture.nativeElement.textContent).toContain('Raza');
+    expect(component.breedOptions().map((breed) => breed.nombre)).toEqual(['Criolla', 'Brangus']);
+    expect(fixture.nativeElement.textContent).toContain('Color');
+    expect(fixture.nativeElement.textContent).toContain('Descripción');
+
+    component.form.patchValue({
+      arete: 'CRIA-004',
+      category: ANIMAL_CATEGORY.TERNERA,
+      sex: ANIMAL_SEX.HEMBRA,
+      birthDate: '2026-01-01',
+      admissionDate: '2026-01-02',
+      color: ' Colorado ',
+      description: ' Bueno para carne ',
+      breedUuid: 'raza-criolla-uuid',
+    });
+    component.submit();
+
+    expect(animalsService.createAnimal).toHaveBeenCalledWith(expect.objectContaining({
+      color: 'Colorado',
+      description: 'Bueno para carne',
+      breedUuid: 'raza-criolla-uuid',
+    }));
+  });
+
+  it('should prefill existing animal characteristics and keep them on edit submit', async () => {
+    const { component, animalsService } = await configure({ uuid: 'animal-uuid-1', animals: [
+      createAnimal({ uuid: 'mother-uuid', arete: 'MADRE-001', category: ANIMAL_CATEGORY.VACA, sex: ANIMAL_SEX.HEMBRA }),
+      createAnimal({ uuid: 'father-uuid', arete: 'PADRE-001', category: ANIMAL_CATEGORY.TORO, sex: ANIMAL_SEX.MACHO }),
+      createAnimal({ uuid: 'animal-uuid-1', color: 'Colorado', description: 'Bueno para carne', breedUuid: 'raza-criolla-uuid', breedName: 'Criolla' }),
+    ] });
+
+    expect(component.form.controls.color.value).toBe('Colorado');
+    expect(component.form.controls.description.value).toBe('Bueno para carne');
+    expect(component.form.controls.breedUuid.value).toBe('raza-criolla-uuid');
+
+    component.submit();
+
+    expect(animalsService.updateAnimal).toHaveBeenCalledWith('animal-uuid-1', expect.objectContaining({
+      color: 'Colorado',
+      description: 'Bueno para carne',
+      breedUuid: 'raza-criolla-uuid',
+    }));
   });
 
   it('should expose datepicker controls for birth and herd admission dates', async () => {

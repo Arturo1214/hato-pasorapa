@@ -5,6 +5,8 @@ import { of } from 'rxjs';
 import { VetVisitsPageComponent } from './vet-visits-page.component';
 import { VetVisitsService, type VetVisitItem } from './data-access/vet-visits.service';
 import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
+import { VetVisitCancelDialogComponent } from './vet-visit-cancel-dialog.component';
+import { VetVisitFormDialogComponent, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
 
 describe('VetVisitsPageComponent', () => {
   const visits: VetVisitItem[] = [
@@ -15,6 +17,7 @@ describe('VetVisitsPageComponent', () => {
       veterinarian: { name: 'Dra. Luna', license: 'MV-1' },
       occurredAt: '2026-05-01T10:00:00.000Z',
       nextControlAt: '2026-05-08T10:00:00.000Z',
+      parentVisitId: null,
       animalUuid: null,
       targetAnimalCount: 12,
       atencionNotas: 'Campaña anual',
@@ -29,6 +32,7 @@ describe('VetVisitsPageComponent', () => {
       veterinarian: { name: 'Dr. Río' },
       occurredAt: '2026-05-02T11:00:00.000Z',
       nextControlAt: null,
+      parentVisitId: null,
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: null,
@@ -53,12 +57,31 @@ describe('VetVisitsPageComponent', () => {
     parentVisitId: null,
   };
 
-  const configure = async (options: { dialogResult?: typeof newVisitResult } = {}) => {
+  const attendResult: VetVisitDialogResult = {
+    ...newVisitResult,
+    visitId: 'VISIT-GLOBAL',
+    status: 'ATTENDED',
+    findings: 'Animal estable con signos leves de infección.',
+    notes: 'Aplicar antibiótico y observar evolución.',
+    cost: { amount: 150, currency: 'BOB' },
+    treatmentPlan: ['Aplicar antibiótico', 'Revisar temperatura'],
+    followUpChoice: 'schedule',
+    nextDueAt: '2026-05-15T00:00:00.000Z',
+  };
+
+  const finalizeAttendResult: VetVisitDialogResult = {
+    ...attendResult,
+    followUpChoice: 'finalize',
+    nextDueAt: null,
+  };
+
+  const configure = async (options: { dialogResults?: unknown[]; dialogResult?: typeof newVisitResult } = {}) => {
     const vetVisitsService = {
       listVetVisits: vi.fn(() => of(visits)),
     };
+    const dialogResults = [...(options.dialogResults ?? (options.dialogResult ? [options.dialogResult] : []))];
     const dialog = {
-      open: vi.fn(() => ({ afterClosed: () => of(options.dialogResult) })),
+      open: vi.fn(() => ({ afterClosed: () => of(dialogResults.shift()) })),
     };
     const healthEventsService = {
       createEvent: vi.fn(() => of({ outcome: 'queued', message: 'Evento sanitario encolado.' })),
@@ -135,12 +158,87 @@ describe('VetVisitsPageComponent', () => {
     const pendingActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[0]));
     const attendedActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[1]));
 
-    expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Finalizar', 'Cancelar']);
-    expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Finalizar']);
+    expect(pendingActions.map((action) => action.label)).toEqual(['Atender', 'Cancelar']);
+    expect(attendedActions.map((action) => action.label)).toEqual(['Reprogramar', 'Cancelar']);
 
     component.openNewVisitDialog();
 
     expect(dialog.open).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ width: 'min(92vw, 960px)' }));
+  });
+
+  it('should open the cancel dialog and create a canceled vet visit event with cancelReason', async () => {
+    const { component, dialog, healthEventsService } = await configure({
+      dialogResults: [{ cancelReason: 'El productor solicitó reprogramar la atención.' }],
+    });
+
+    component.handleRowAction({ actionId: 'cancel', row: component.visitRows()[0] });
+
+    expect(dialog.open).toHaveBeenCalledWith(VetVisitCancelDialogComponent, expect.objectContaining({ width: 'min(92vw, 32rem)' }));
+    expect(healthEventsService.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        healthEventType: 'FIELD_VET_VISIT',
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({
+            visitId: 'VISIT-GLOBAL',
+            status: 'CANCELED',
+            cancelReason: 'El productor solicitó reprogramar la atención.',
+          }),
+          protocol: expect.objectContaining({ status: 'CLOSED' }),
+        }),
+      }),
+    );
+  });
+
+  it('should open attend mode and create attended plus linked follow-up events when scheduling next control', async () => {
+    const { component, dialog, healthEventsService } = await configure({ dialogResults: [attendResult] });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      VetVisitFormDialogComponent,
+      expect.objectContaining({ data: expect.objectContaining({ action: 'attend', parentVisitId: 'VISIT-GLOBAL' }) }),
+    );
+    expect(healthEventsService.createEvent).toHaveBeenCalledTimes(2);
+    expect(healthEventsService.createEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'ATTENDED' }),
+          clinicalNote: expect.objectContaining({ findings: 'Animal estable con signos leves de infección.' }),
+          cost: { amount: 150, currency: 'BOB' },
+          treatmentPlan: ['Aplicar antibiótico', 'Revisar temperatura'],
+          protocol: expect.objectContaining({ status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-15T00:00:00.000Z' }),
+        }),
+      }),
+    );
+    expect(healthEventsService.createEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({
+            parentVisitId: 'VISIT-GLOBAL',
+            status: 'PENDING',
+          }),
+          protocol: expect.objectContaining({ status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-15T00:00:00.000Z' }),
+        }),
+      }),
+    );
+  });
+
+  it('should create a finalized chain event when attend flow chooses finalize', async () => {
+    const { component, healthEventsService } = await configure({ dialogResults: [finalizeAttendResult] });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+
+    expect(healthEventsService.createEvent).toHaveBeenCalledTimes(1);
+    expect(healthEventsService.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'FINALIZED' }),
+          protocol: expect.objectContaining({ status: 'CLOSED' }),
+        }),
+      }),
+    );
   });
 
   it('should keep a newly saved visit visible when the central backend list reload is stale', async () => {

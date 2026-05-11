@@ -90,6 +90,7 @@ describe('VetVisitsService', () => {
           veterinarian: { name: 'Dr. Soliz', license: null },
           occurredAt: '2026-05-10T10:00:00Z',
           nextControlAt: null,
+          parentVisitId: 'visit-parent-1',
           animalUuid: 'animal-1',
           targetAnimalCount: null,
           atencionNotas: 'Estable tras atención',
@@ -110,6 +111,7 @@ describe('VetVisitsService', () => {
       veterinarian: { name: 'Dr. Soliz', license: null },
       occurredAt: '2026-05-10T10:00:00Z',
       nextControlAt: null,
+      parentVisitId: 'visit-parent-1',
       animalUuid: 'animal-1',
       targetAnimalCount: null,
       atencionNotas: 'Estable tras atención',
@@ -149,5 +151,6 @@ describe('VetVisitsService', () => {
     expect(received?.[0].costo).toBeNull();
     expect(received?.[0].costCurrency).toBeNull();
     expect(received?.[0].treatmentPlan).toBeNull();
+    expect(received?.[0].parentVisitId).toBeNull();
   });
 });

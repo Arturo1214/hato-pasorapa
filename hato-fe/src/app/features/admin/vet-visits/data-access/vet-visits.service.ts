@@ -31,6 +31,7 @@ export interface VetVisitItem {
   veterinarian: VetVisitVeterinarian | null;
   occurredAt: string;
   nextControlAt: string | null;
+  parentVisitId: string | null;
   animalUuid: string | null;
   targetAnimalCount: number | null;
   atencionNotas: string | null;
@@ -76,6 +77,7 @@ function mapVetVisitItem(item: Record<string, unknown>): VetVisitItem {
     veterinarian: normalizeVeterinarian(item['veterinarian']),
     occurredAt: String(item['occurredAt']),
     nextControlAt: normalizeNullableString(item['nextControlAt']),
+    parentVisitId: normalizeNullableString(item['parentVisitId']),
     animalUuid: normalizeNullableString(item['animalUuid']),
     targetAnimalCount: typeof item['targetAnimalCount'] === 'number' ? item['targetAnimalCount'] : null,
     atencionNotas: normalizeNullableString(item['atencionNotas']),

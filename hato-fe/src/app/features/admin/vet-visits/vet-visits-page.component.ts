@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { finalize } from 'rxjs';
+import { concatMap, finalize } from 'rxjs';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -20,6 +20,10 @@ import {
   VetVisitFormDialogComponent,
   type VetVisitDialogResult,
 } from './vet-visit-form-dialog.component';
+import {
+  VetVisitCancelDialogComponent,
+  type VetVisitCancelDialogResult,
+} from './vet-visit-cancel-dialog.component';
 
 type VetVisitMode = VetVisitItem['mode'];
 type VetVisitStatus = VetVisitItem['status'];
@@ -111,7 +115,6 @@ export class VetVisitsPageComponent {
   readonly visitActions: DataTableAction[] = [
     { id: 'attend', label: 'Atender', icon: 'medical_services', visible: (row) => canAttend(row as VetVisitRow) },
     { id: 'reschedule', label: 'Reprogramar', icon: 'event_repeat', visible: (row) => canContinue(row as VetVisitRow) },
-    { id: 'finalize', label: 'Finalizar', icon: 'task_alt', visible: (row) => canClose(row as VetVisitRow) },
     { id: 'cancel', label: 'Cancelar', icon: 'cancel', color: 'warn', visible: (row) => canCancel(row as VetVisitRow) },
   ];
 
@@ -149,12 +152,51 @@ export class VetVisitsPageComponent {
 
   handleRowAction(event: DataTableRowActionEvent) {
     const row = event.row as VetVisitRow;
+    if (event.actionId === 'cancel') {
+      this.openCancelVisitDialog(row);
+      return;
+    }
+    if (event.actionId === 'attend') {
+      this.openAttendVisitDialog(row);
+      return;
+    }
+
     const data = {
       mode: row.mode,
       parentVisitId: row.visitId,
       targetAnimalCount: row.targetAnimalCount,
     };
     this.dialog.open(VetVisitFormDialogComponent, { width: 'min(92vw, 960px)', data });
+  }
+
+  private openCancelVisitDialog(row: VetVisitRow) {
+    this.dialog
+      .open(VetVisitCancelDialogComponent, { width: 'min(92vw, 32rem)' })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          this.cancelVisit(row, result);
+        }
+      });
+  }
+
+  private openAttendVisitDialog(row: VetVisitRow) {
+    this.dialog
+      .open(VetVisitFormDialogComponent, {
+        width: 'min(92vw, 960px)',
+        data: {
+          action: 'attend',
+          mode: row.mode,
+          parentVisitId: row.visitId,
+          targetAnimalCount: row.targetAnimalCount,
+        },
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          this.attendVisit(row, result);
+        }
+      });
   }
 
   private createVisit(result: VetVisitDialogResult) {
@@ -167,6 +209,64 @@ export class VetVisitsPageComponent {
         this.feedbackMessage.set(feedback.message);
         const currentFilter = toBackendFilter(this.visitFilters());
         this.loadVisits(currentFilter, toVetVisitItem(result));
+      });
+  }
+
+  private cancelVisit(row: VetVisitRow, result: VetVisitCancelDialogResult) {
+    this.submitting.set(true);
+    this.feedbackMessage.set(null);
+    const canceledVisit = toVetVisitItemFromRow(row, { status: 'CANCELED' });
+    this.healthEventsService
+      .createEvent(mapRowActionToCreateInput(row, {
+        action: 'cancel',
+        status: 'CANCELED',
+        cancelReason: result.cancelReason,
+        protocolStatus: 'CLOSED',
+      }))
+      .pipe(finalize(() => this.submitting.set(false)))
+      .subscribe((feedback) => {
+        this.feedbackMessage.set(feedback.message);
+        this.loadVisits(toBackendFilter(this.visitFilters()), canceledVisit);
+      });
+  }
+
+  private attendVisit(row: VetVisitRow, result: VetVisitDialogResult) {
+    this.submitting.set(true);
+    this.feedbackMessage.set(null);
+    const closesChain = result.followUpChoice === 'finalize';
+    const attendedStatus = closesChain ? 'FINALIZED' : 'ATTENDED';
+    const attendedVisit = toVetVisitItemFromRow(row, {
+      status: attendedStatus,
+      nextControlAt: result.nextDueAt,
+      atencionNotas: result.notes,
+      costo: result.cost?.amount ?? null,
+      costCurrency: result.cost?.currency ?? null,
+      treatmentPlan: result.treatmentPlan?.length ? result.treatmentPlan : null,
+    });
+    const attendedInput = mapDialogResultToCreateInput({ ...result, visitId: row.visitId, status: attendedStatus, parentVisitId: row.parentVisitId });
+
+    if (result.followUpChoice === 'schedule' && result.nextDueAt) {
+      const followUpResult = buildFollowUpDialogResult(row, result);
+      const followUpVisit = toVetVisitItem(followUpResult);
+      this.healthEventsService
+        .createEvent(attendedInput)
+        .pipe(
+          concatMap(() => this.healthEventsService.createEvent(mapDialogResultToCreateInput(followUpResult))),
+          finalize(() => this.submitting.set(false))
+        )
+        .subscribe((feedback) => {
+          this.feedbackMessage.set(feedback.message);
+          this.loadVisits(toBackendFilter(this.visitFilters()), followUpVisit);
+        });
+      return;
+    }
+
+    this.healthEventsService
+      .createEvent(attendedInput)
+      .pipe(finalize(() => this.submitting.set(false)))
+      .subscribe((feedback) => {
+        this.feedbackMessage.set(feedback.message);
+        this.loadVisits(toBackendFilter(this.visitFilters()), attendedVisit);
       });
   }
 }
@@ -217,6 +317,7 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
     },
     occurredAt: result.occurredAt,
     nextControlAt: result.nextDueAt,
+    parentVisitId: result.parentVisitId,
     animalUuid: result.animalUuid,
     targetAnimalCount: result.targetAnimalCount,
     atencionNotas: result.notes,
@@ -291,12 +392,8 @@ function canContinue(row: VetVisitRow) {
   return row.status === 'ATTENDED';
 }
 
-function canClose(row: VetVisitRow) {
-  return row.status === 'PENDING' || row.status === 'ATTENDED' || row.status === 'RESCHEDULED';
-}
-
 function canCancel(row: VetVisitRow) {
-  return row.status === 'PENDING' || row.status === 'RESCHEDULED';
+  return row.status !== 'FINALIZED' && row.status !== 'CANCELED';
 }
 
 function formatDateTime(value: unknown) {
@@ -317,19 +414,28 @@ function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
     checklist: [],
     clinicalNote: {
       reason: result.reason,
-      findings: '',
-      plan: '',
+      findings: result.findings ?? '',
+      plan: result.treatmentPlan ?? '',
     },
-    protocolStatus: protocolStatusFromVisitStatus(result.status, result.nextDueAt),
+    protocolStatus: protocolStatusFromVisitStatus(result.status, result.nextDueAt, result.followUpChoice),
     nextDueAt: result.nextDueAt,
     veterinarianName: result.veterinarianName,
     veterinarianLicense: result.veterinarianLicense,
     targetAnimalCount: result.targetAnimalCount,
     parentVisitId: result.parentVisitId,
+    cost: result.cost,
+    treatmentPlan: result.treatmentPlan,
+    followUpChoice: result.followUpChoice,
   });
 }
 
-function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], nextDueAt: string | null) {
+function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], nextDueAt: string | null, followUpChoice?: VetVisitDialogResult['followUpChoice']) {
+  if (followUpChoice === 'finalize') {
+    return 'CLOSED';
+  }
+  if (followUpChoice === 'schedule') {
+    return 'FOLLOW_UP_REQUIRED';
+  }
   if (status === 'FINALIZED' || status === 'CANCELED') {
     return 'CLOSED';
   }
@@ -337,4 +443,74 @@ function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], n
     return 'FOLLOW_UP_REQUIRED';
   }
   return 'STARTED';
+}
+
+function mapRowActionToCreateInput(
+  row: VetVisitRow,
+  overrides: Partial<Parameters<typeof mapVetVisitFormToCreateInput>[0]>
+) {
+  return mapVetVisitFormToCreateInput({
+    action: overrides.action,
+    animalUuid: row.animalUuid,
+    visitId: row.visitId,
+    mode: row.mode,
+    status: overrides.status ?? row.status,
+    occurredAt: row.occurredAt,
+    notes: overrides.notes ?? row.atencionNotas,
+    checklist: [],
+    clinicalNote: {
+      reason: overrides.clinicalNote?.reason ?? row.atencionNotas ?? 'Visita veterinaria',
+      findings: overrides.clinicalNote?.findings ?? '',
+      plan: overrides.clinicalNote?.plan ?? row.treatmentPlan ?? '',
+    },
+    protocolStatus: overrides.protocolStatus ?? protocolStatusFromVisitStatus(overrides.status ?? row.status, row.nextControlAt),
+    nextDueAt: overrides.nextDueAt ?? row.nextControlAt,
+    veterinarianName: row.veterinarian?.name ?? '',
+    veterinarianLicense: row.veterinarian?.license ?? null,
+    targetAnimalCount: row.targetAnimalCount,
+    parentVisitId: overrides.parentVisitId ?? row.parentVisitId,
+    cancelReason: overrides.cancelReason,
+    cost: overrides.cost,
+    treatmentPlan: overrides.treatmentPlan,
+    followUpChoice: overrides.followUpChoice,
+  });
+}
+
+function toVetVisitItemFromRow(row: VetVisitRow, overrides: Partial<VetVisitItem>): VetVisitItem {
+  return {
+    visitId: overrides.visitId ?? row.visitId,
+    mode: overrides.mode ?? row.mode,
+    status: overrides.status ?? row.status,
+    veterinarian: overrides.veterinarian ?? row.veterinarian,
+    occurredAt: overrides.occurredAt ?? row.occurredAt,
+    nextControlAt: overrides.nextControlAt ?? row.nextControlAt,
+    parentVisitId: overrides.parentVisitId ?? row.parentVisitId,
+    animalUuid: overrides.animalUuid ?? row.animalUuid,
+    targetAnimalCount: overrides.targetAnimalCount ?? row.targetAnimalCount,
+    atencionNotas: overrides.atencionNotas ?? row.atencionNotas,
+    costo: overrides.costo ?? row.costo,
+    costCurrency: overrides.costCurrency ?? row.costCurrency,
+    treatmentPlan: overrides.treatmentPlan ?? row.treatmentPlan,
+  };
+}
+
+function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialogResult): VetVisitDialogResult {
+  return {
+    mode: row.mode,
+    animalUuid: row.animalUuid,
+    visitId: createLocalVisitId(),
+    status: 'PENDING',
+    occurredAt: attendResult.nextDueAt ?? attendResult.occurredAt,
+    nextDueAt: attendResult.nextDueAt,
+    notes: null,
+    reason: attendResult.reason,
+    veterinarianName: attendResult.veterinarianName,
+    veterinarianLicense: attendResult.veterinarianLicense,
+    targetAnimalCount: row.targetAnimalCount,
+    parentVisitId: row.visitId,
+  };
+}
+
+function createLocalVisitId() {
+  return globalThis.crypto?.randomUUID?.() ?? `vet-follow-up-${Date.now()}`;
 }

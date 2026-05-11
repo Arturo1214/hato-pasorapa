@@ -120,13 +120,13 @@ Chain strategy: feature-branch-chain
 
 ### 4.1 Frontend — VetVisitsPageComponent: remove Finalizar, add cancel/attend
 
-- [ ] 4.1.1 **TDD RED**: Add spec — row actions for PROGRAMADA state show "Cancelar" and "Atender" (no "Finalizar")
-- [ ] 4.1.2 **GREEN**: In `handleRowAction()`, remove `finalize` case; add `cancel` → opens `VetVisitCancelDialogComponent`, then maps result to `createVetVisitEvent` with cancel metadata
-- [ ] 4.1.3 **GREEN**: In `handleRowAction()`, add `attend` → opens `VetVisitFormDialogComponent(action='attend')`, then maps result to `createVetVisitEvent` with clinical metadata + follow-up/finalize choice
-- [ ] 4.1.4 After successful attend with follow-up choice = "Programar próximo control": create second event (the linked follow-up visit) with `parentVisitId` = current visit's visitId, `status = 'PENDING'`, `nextControlAt` from form
-- [ ] 4.1.5 After successful attend with follow-up choice = "Finalizar": set `visit.status = 'FINALIZED'`, `protocol.status = 'CLOSED'`
+- [x] 4.1.1 **TDD RED**: Add spec — row actions for PROGRAMADA state show "Cancelar" and "Atender" (no "Finalizar")
+- [x] 4.1.2 **GREEN**: In `handleRowAction()`, remove `finalize` case; add `cancel` → opens `VetVisitCancelDialogComponent`, then maps result to `createVetVisitEvent` with cancel metadata
+- [x] 4.1.3 **GREEN**: In `handleRowAction()`, add `attend` → opens `VetVisitFormDialogComponent(action='attend')`, then maps result to `createVetVisitEvent` with clinical metadata + follow-up/finalize choice
+- [x] 4.1.4 After successful attend with follow-up choice = "Programar próximo control": create second event (the linked follow-up visit) with `parentVisitId` = current visit's visitId, `status = 'PENDING'`, `nextControlAt` from form
+- [x] 4.1.5 After successful attend with follow-up choice = "Finalizar": set `visit.status = 'FINALIZED'`, `protocol.status = 'CLOSED'`
 - [ ] 4.1.6 For ATENDIDA state rows, show "Reprogramar" (creates linked follow-up) and "Finalizar" (direct finalize via status update, not a modal)
-- [ ] 4.1.7 Ensure status transitions respect lifecycle: PROGRAMADA → ATENDIDA/CANCELADA; ATENDIDA → REPROGRAMADA/FINALIZADA/CANCELADA; REPROGRAMADA → ATENDIDA/FINALIZADA/CANCELADA
+- [x] 4.1.7 Ensure status transitions respect lifecycle: PROGRAMADA → ATENDIDA/CANCELADA; ATENDIDA → REPROGRAMADA/FINALIZADA/CANCELADA; REPROGRAMADA → ATENDIDA/FINALIZADA/CANCELADA
 
 ### 4.2 Frontend — VetVisitsPageComponent: follow-up chain integration
 
@@ -147,7 +147,7 @@ Chain strategy: feature-branch-chain
 
 - [x] 5.2.1 `vet-visit-cancel-dialog.component.spec.ts` — renders, validates min-length, returns cancelReason on confirm, null on cancel
 - [x] 5.2.2 `vet-visit-form-dialog.component.spec.ts` — action=attend shows all clinical fields, validates findings required, cost >= 0, treatmentPlan max 20 steps, follow-up vs finalize radio works
-- [ ] 5.2.3 `vet-visits-page.component.spec.ts` — row actions show correct buttons by state, cancel flow opens dialog and sends correct payload, attend flow opens dialog and creates follow-up event when selected
+- [x] 5.2.3 `vet-visits-page.component.spec.ts` — row actions show correct buttons by state, cancel flow opens dialog and sends correct payload, attend flow opens dialog and creates follow-up event when selected
 - [ ] 5.2.4 `vet-visit-form.mapper.spec.ts` — cancel action mapping, attend action mapping, legacy plan normalization
 
 ---

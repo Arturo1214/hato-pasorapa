@@ -76,6 +76,8 @@ export interface AnimalListFilters {
   ownerGanaderoId?: string;
   category?: AnimalCategory | null;
   active?: boolean | null;
+  page?: number | null;
+  size?: number | null;
 }
 
 export interface AnimalGenealogy {
@@ -219,6 +221,10 @@ export class AnimalsService {
 
   listAnimals(filters: AnimalListFilters = {}): Observable<AnimalItem[]> {
     return from(this.listAnimalsInternal(filters));
+  }
+
+  listActiveAnimals(ownerGanaderoId: string, page = 0, size = 10, visible?: string | null): Observable<AnimalItem[]> {
+    return from(this.listAnimalsInternal({ ownerGanaderoId, active: true, page, size, visible: visible ?? undefined }));
   }
 
   getAnimal(uuid: string): Observable<AnimalItem> {
@@ -616,7 +622,7 @@ function buildListQuery(filters: AnimalListFilters) {
     params.push(`category.equals=${filters.category}`);
   }
 
-  params.push('page=0', 'size=20', 'sort=updatedAt,desc');
+  params.push(`page=${filters.page ?? 0}`, `size=${filters.size ?? 20}`, 'sort=updatedAt,desc');
   return `?${params.join('&')}`;
 }
 

@@ -1,408 +1,273 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
-import {
-  AbstractControl,
-  FormArray,
-  FormBuilder,
-  ReactiveFormsModule,
-  Validators,
-  type ValidationErrors,
-  type ValidatorFn,
-} from '@angular/forms';
+import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { finalize, firstValueFrom } from 'rxjs';
-import {
-  FIELD_VET_CHECKLIST_CODES,
-  FIELD_VET_PROTOCOL_STATUSES,
-  type FieldVetChecklistCode,
-  type FieldVetChecklistItem,
-} from '../../../core/offline/offline-types';
-import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
+import { MatDialog } from '@angular/material/dialog';
+import { MatIconModule } from '@angular/material/icon';
+import { finalize } from 'rxjs';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
+  type DataTableAction,
   type DataTableColumn,
+  type DataTableRow,
+  type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
-import { AnimalsHealthEventsService, type AnimalHealthEventItem } from '../animals/data-access/animals-health-events.service';
-import { AuthService } from '../../../core/auth/data-access/auth.service';
+import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
 import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mapper';
+import { VetVisitsService, type VetVisitFilter, type VetVisitItem } from './data-access/vet-visits.service';
+import {
+  VetVisitFormDialogComponent,
+  type VetVisitDialogResult,
+} from './vet-visit-form-dialog.component';
+
+type VetVisitMode = VetVisitItem['mode'];
+type VetVisitStatus = VetVisitItem['status'];
+
+interface VetVisitRow extends DataTableRow, VetVisitItem {
+  modeLabel: string;
+  statusLabel: string;
+  veterinarianName: string;
+}
 
 @Component({
   selector: 'app-vet-visits-page',
   standalone: true,
-  imports: [
-    CommonModule,
-    ReactiveFormsModule,
-    RouterLink,
-    MatButtonModule,
-    MatCardModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    FormErrorsComponent,
-    DataTableComponent,
-  ],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule, DataTableComponent],
   template: `
     <section class="admin-page">
-      <mat-card appearance="outlined">
-        <div class="card-title-row">
-          <div>
-            <h2>Filtros</h2>
-            <p>Listá por animal y, si querés, cerrá la vista a un visitId puntual.</p>
-          </div>
-          <a mat-stroked-button [routerLink]="backToAnimalsLink()">Volver a animales</a>
+      <mat-card appearance="outlined" class="toolbar-card">
+        <div class="toolbar-card__content">
+          <p>Listado central de campañas y visitas específicas, con filtros operativos y acciones por estado.</p>
+          <button mat-flat-button color="primary" type="button" (click)="openNewVisitDialog()">
+            <mat-icon>add</mat-icon>
+            Nueva Visita
+          </button>
         </div>
-
-        <form [formGroup]="filtersForm" class="form-grid">
-          <mat-form-field appearance="outline">
-            <mat-label>UUID animal *</mat-label>
-            <input matInput formControlName="animalUuid" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>visitId</mat-label>
-            <input matInput formControlName="visitId" />
-          </mat-form-field>
-
-          <div class="form-actions inline-actions">
-            <button mat-flat-button color="primary" type="button" (click)="loadVisits()">Cargar visitas</button>
-          </div>
-        </form>
-      </mat-card>
-
-      <mat-card appearance="outlined">
-        <div class="card-title-row">
-          <div>
-            <h2>Registrar visita</h2>
-            <p>El operationId lo genera el servicio; acá definís un visitId independiente y reutilizable.</p>
-          </div>
-          <button mat-stroked-button type="button" (click)="regenerateVisitId()">Regenerar visitId</button>
-        </div>
-
-        <form [formGroup]="form" class="form-grid" (ngSubmit)="submitForm()">
-          <mat-form-field appearance="outline">
-            <mat-label>UUID animal *</mat-label>
-            <input matInput formControlName="animalUuid" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>visitId *</mat-label>
-            <input matInput formControlName="visitId" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Fecha/hora *</mat-label>
-            <input matInput type="datetime-local" formControlName="occurredAt" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Estado protocolo *</mat-label>
-            <mat-select formControlName="protocolStatus">
-              @for (status of protocolStatuses; track status) {
-                <mat-option [value]="status">{{ status }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Próximo control</mat-label>
-            <input matInput type="datetime-local" formControlName="nextDueAt" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Notas</mat-label>
-            <input matInput formControlName="notes" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Motivo *</mat-label>
-            <input matInput formControlName="reason" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Hallazgos *</mat-label>
-            <input matInput formControlName="findings" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Plan *</mat-label>
-            <input matInput formControlName="plan" />
-          </mat-form-field>
-
-          <div class="checklist-grid" formArrayName="checklist">
-            @for (control of checklistControls.controls; track $index) {
-              <div class="checklist-card" [formGroupName]="$index">
-                <mat-checkbox formControlName="ok">{{ checklistCodes[$index] }}</mat-checkbox>
-                <input matInput placeholder="Observación opcional" formControlName="note" />
-              </div>
-            }
-          </div>
-
-          <app-form-errors [control]="form.controls.animalUuid" [messages]="messages.animalUuid" />
-          <app-form-errors [control]="form.controls.visitId" [messages]="messages.visitId" />
-          <app-form-errors [control]="form.controls.occurredAt" [messages]="messages.occurredAt" />
-          <app-form-errors [control]="form.controls.reason" [messages]="messages.reason" />
-          <app-form-errors [control]="form.controls.findings" [messages]="messages.findings" />
-          <app-form-errors [control]="form.controls.plan" [messages]="messages.plan" />
-
-          @if (showProtocolError()) {
-            <div class="form-alert" role="alert">Cuando el protocolo queda FOLLOW_UP_REQUIRED necesitás nextDueAt.</div>
-          }
-
-          <div class="form-actions">
-            <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || submitting()">
-              {{ submitting() ? 'Guardando…' : 'Registrar visita veterinaria' }}
-            </button>
-          </div>
-        </form>
       </mat-card>
 
       @if (feedbackMessage()) {
         <mat-card appearance="outlined"><p>{{ feedbackMessage() }}</p></mat-card>
       }
 
-      @if (visits().length) {
-        <mat-card appearance="outlined" class="table-card">
-          <h2>Listado</h2>
-          <app-data-table
-            [columns]="visitColumns"
-            [data]="visits()"
-            [filters]="visitFilters()"
-            emptyMessage="No hay visitas para los filtros seleccionados."
-            (filterChange)="visitFilters.set($event)"
-          />
-        </mat-card>
-      }
+      <mat-card appearance="outlined" class="table-card">
+        <app-data-table
+          [columns]="visitColumns"
+          [data]="visitRows()"
+          [actions]="visitActions"
+          [filters]="visitFilters()"
+          [loading]="loading()"
+          emptyMessage="No hay visitas veterinarias para los filtros seleccionados."
+          (filterChange)="handleFiltersChange($event)"
+          (rowAction)="handleRowAction($event)"
+        />
+      </mat-card>
     </section>
   `,
   styles: [
     `
-      .admin-page {
-        display: grid;
-        gap: 1rem;
-        padding: 1rem;
-      }
-
-      .card-title-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        align-items: start;
-        margin-bottom: 1rem;
-      }
-
-      .form-grid {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-
-      .checklist-grid,
-      .form-actions,
-      .form-alert {
-        grid-column: 1 / -1;
-      }
-
-      .checklist-grid {
-        display: grid;
-        gap: 0.75rem;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      }
-
-      .checklist-card {
-        display: grid;
-        gap: 0.5rem;
-        padding: 0.75rem;
-        border: 1px solid #ddd;
-        border-radius: 0.75rem;
-      }
-
-      .form-alert {
-        color: #b3261e;
-        font-weight: 600;
-      }
-
-      .inline-actions {
-        align-self: end;
-      }
-
-      .table-card {
-        padding: 0.75rem;
-      }
+      .admin-page { display: grid; gap: 1rem; padding: 1rem; }
+      .toolbar-card__content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .toolbar-card__content p { margin: 0; color: var(--mat-sys-on-surface-variant); }
+      .toolbar-card__content button { border-radius: 999px; }
+      .toolbar-card__content mat-icon { margin-inline-end: .25rem; }
+      .table-card { padding: .75rem; }
+      @media (max-width: 720px) { .toolbar-card__content { align-items: stretch; flex-direction: column; } }
     `,
   ],
 })
 export class VetVisitsPageComponent {
-  private readonly formBuilder = inject(FormBuilder);
-  private readonly route = inject(ActivatedRoute);
-  private readonly animalsHealthEventsService = inject(AnimalsHealthEventsService);
-  private readonly authService = inject(AuthService);
+  private readonly vetVisitsService = inject(VetVisitsService);
+  private readonly healthEventsService = inject(AnimalsHealthEventsService);
+  private readonly dialog = inject(MatDialog);
 
-  readonly checklistCodes = FIELD_VET_CHECKLIST_CODES;
-  readonly protocolStatuses = FIELD_VET_PROTOCOL_STATUSES;
-  readonly visits = signal<AnimalHealthEventItem[]>([]);
+  readonly loading = signal(false);
   readonly submitting = signal(false);
   readonly feedbackMessage = signal<string | null>(null);
   readonly visitFilters = signal<Record<string, string>>({});
-  readonly backToAnimalsLink = computed(() => this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/animales' : '/admin/animales');
+  readonly visits = signal<VetVisitItem[]>([]);
+  readonly visitRows = signal<VetVisitRow[]>([]);
+
   readonly visitColumns: DataTableColumn[] = [
+    { key: 'visitId', label: 'Visita', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
     {
-      key: 'visitId',
-      label: 'Visita',
-      sortable: true,
-      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
-      formatter: (value, row) => String(value || (row as AnimalHealthEventItem).operationId),
-    },
-    { key: 'occurredAt', label: 'Fecha/hora', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
-    {
-      key: 'treatmentStatus',
-      label: 'Estado',
+      key: 'modeLabel',
+      label: 'Modo',
       sortable: true,
       filterType: DATA_TABLE_FILTER_TYPE.SELECT,
       filterOptions: [
-        { label: 'ACTIVE', value: 'active' },
-        { label: 'CLOSED', value: 'closed' },
+        { label: 'Campaña', value: 'Campaña' },
+        { label: 'Específica', value: 'Específica' },
       ],
-      formatter: (value) => (value === 'closed' ? 'CLOSED' : value === 'active' ? 'ACTIVE' : '—'),
     },
-    { key: 'nextDueAt', label: 'Próximo control', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
-    { key: 'notes', label: 'Notas', filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    { key: 'veterinarianName', label: 'Veterinario', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'statusLabel',
+      label: 'Estado',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.SELECT,
+      filterOptions: Object.entries(VISIT_STATUS_LABELS).map(([value, label]) => ({ value: label, label })),
+    },
+    { key: 'occurredAt', label: 'Fecha', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE, formatter: formatDateTime },
+    { key: 'nextControlAt', label: 'Siguiente Control', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE, formatter: formatDateTime },
   ];
 
-  readonly filtersForm = this.formBuilder.group({
-    animalUuid: ['', [Validators.required]],
-    visitId: [''],
-  });
-
-  readonly form = this.formBuilder.group(
-    {
-      animalUuid: ['', [Validators.required]],
-      visitId: [createUuid() as string, [Validators.required]],
-      occurredAt: [currentLocalDateTimeInput(), [Validators.required]],
-      protocolStatus: ['STARTED', [Validators.required]],
-      nextDueAt: [''],
-      notes: [''],
-      reason: ['', [Validators.required]],
-      findings: ['', [Validators.required]],
-      plan: ['', [Validators.required]],
-      checklist: this.formBuilder.array(this.checklistCodes.map((code) => this.createChecklistControl(code))),
-    },
-    { validators: [vetVisitProtocolValidator] }
-  );
-
-  readonly messages = {
-    animalUuid: { required: 'Seleccioná el animal de la visita.' },
-    visitId: { required: 'Necesitás un visitId explícito.' },
-    occurredAt: { required: 'Informá cuándo ocurrió la visita.' },
-    reason: { required: 'Completá el motivo clínico.' },
-    findings: { required: 'Completá los hallazgos clínicos.' },
-    plan: { required: 'Completá el plan clínico.' },
-  };
-
-  get checklistControls() {
-    return this.form.controls.checklist as FormArray;
-  }
+  readonly visitActions: DataTableAction[] = [
+    { id: 'attend', label: 'Atender', icon: 'medical_services', visible: (row) => canAttend(row as VetVisitRow) },
+    { id: 'reschedule', label: 'Reprogramar', icon: 'event_repeat', visible: (row) => canContinue(row as VetVisitRow) },
+    { id: 'finalize', label: 'Finalizar', icon: 'task_alt', visible: (row) => canClose(row as VetVisitRow) },
+    { id: 'cancel', label: 'Cancelar', icon: 'cancel', color: 'warn', visible: (row) => canCancel(row as VetVisitRow) },
+  ];
 
   constructor() {
-    const animalUuid = this.route.snapshot.queryParamMap.get('animalUuid') ?? '';
-    if (animalUuid) {
-      this.filtersForm.patchValue({ animalUuid });
-      this.form.patchValue({ animalUuid });
-      void this.loadVisits();
-    }
+    this.loadVisits();
   }
 
-  regenerateVisitId() {
-    this.form.patchValue({ visitId: createUuid() });
-  }
-
-  async loadVisits() {
-    const filters = this.filtersForm.getRawValue();
-    if (!filters.animalUuid) {
-      return;
-    }
-
-    this.visits.set(
-      await firstValueFrom(
-        this.animalsHealthEventsService.listEvents(filters.animalUuid, {
-          healthEventType: 'FIELD_VET_VISIT',
-          visitId: filters.visitId?.trim() || undefined,
-        })
-      )
-    );
-  }
-
-  submitForm() {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.form.updateValueAndValidity();
-      return;
-    }
-
-    this.submitting.set(true);
-    this.feedbackMessage.set(null);
-    this.animalsHealthEventsService
-      .createEvent(mapVetVisitFormToCreateInput(this.readFormValue()))
-      .pipe(finalize(() => this.submitting.set(false)))
-      .subscribe({
-        next: async (result) => {
-          this.feedbackMessage.set(result.message);
-          this.filtersForm.patchValue({ animalUuid: this.form.controls.animalUuid.value, visitId: this.form.controls.visitId.value });
-          await this.loadVisits();
-        },
+  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }) {
+    this.loading.set(true);
+    this.vetVisitsService
+      .listVetVisits(filter)
+      .pipe(finalize(() => this.loading.set(false)))
+      .subscribe((items) => {
+        this.visits.set(items);
+        this.visitRows.set(items.map(toVetVisitRow));
       });
   }
 
-  showProtocolError() {
-    return this.form.touched && this.form.hasError('nextDueAtRequired');
+  handleFiltersChange(filters: Record<string, string>) {
+    this.visitFilters.set(filters);
+    this.loadVisits(toBackendFilter(filters));
   }
 
-  private createChecklistControl(code: FieldVetChecklistCode) {
-    return this.formBuilder.group({
-      code: [code, [Validators.required]],
-      ok: [false],
-      note: [''],
-    });
+  openNewVisitDialog() {
+    this.dialog
+      .open(VetVisitFormDialogComponent, { width: 'min(92vw, 960px)' })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          this.createVisit(result);
+        }
+      });
   }
 
-  private readFormValue() {
-    const value = this.form.getRawValue();
-    return {
-      animalUuid: value.animalUuid ?? '',
-      visitId: value.visitId ?? '',
-      occurredAt: value.occurredAt ?? '',
-      notes: value.notes,
-      checklist: (value.checklist ?? []) as FieldVetChecklistItem[],
-      clinicalNote: {
-        reason: value.reason ?? '',
-        findings: value.findings ?? '',
-        plan: value.plan ?? '',
-      },
-      protocolStatus: value.protocolStatus as 'STARTED' | 'FOLLOW_UP_REQUIRED' | 'CLOSED',
-      nextDueAt: value.nextDueAt,
+  handleRowAction(event: DataTableRowActionEvent) {
+    const row = event.row as VetVisitRow;
+    const data = {
+      mode: row.mode,
+      parentVisitId: row.visitId,
+      targetAnimalCount: row.targetAnimalCount,
     };
+    this.dialog.open(VetVisitFormDialogComponent, { width: 'min(92vw, 960px)', data });
+  }
+
+  private createVisit(result: VetVisitDialogResult) {
+    this.submitting.set(true);
+    this.feedbackMessage.set(null);
+    this.healthEventsService
+      .createEvent(mapDialogResultToCreateInput(result))
+      .pipe(finalize(() => this.submitting.set(false)))
+      .subscribe((feedback) => {
+        this.feedbackMessage.set(feedback.message);
+        this.loadVisits(toBackendFilter(this.visitFilters()));
+      });
   }
 }
 
-const vetVisitProtocolValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const value = control.value as { protocolStatus?: string | null; nextDueAt?: string | null };
-  if (value.protocolStatus !== 'FOLLOW_UP_REQUIRED') {
-    return null;
-  }
-  return value.nextDueAt?.trim() ? null : { nextDueAtRequired: true };
+const VISIT_MODE_LABELS: Record<VetVisitMode, string> = {
+  GLOBAL: 'Campaña',
+  SPECIFIC: 'Específica',
 };
 
-function currentLocalDateTimeInput() {
-  return new Date().toISOString().slice(0, 16);
+const VISIT_STATUS_LABELS: Record<VetVisitStatus, string> = {
+  PENDING: 'Programada',
+  ATTENDED: 'Atendida',
+  RESCHEDULED: 'Reprogramada',
+  FINALIZED: 'Finalizada',
+  CANCELED: 'Cancelada',
+};
+
+function toVetVisitRow(item: VetVisitItem): VetVisitRow {
+  return {
+    ...item,
+    modeLabel: VISIT_MODE_LABELS[item.mode],
+    statusLabel: VISIT_STATUS_LABELS[item.status],
+    veterinarianName: item.veterinarian?.name ?? '—',
+  };
 }
 
-function createUuid() {
-  return globalThis.crypto?.randomUUID?.() ?? 'vet-visit-local-id';
+function toBackendFilter(filters: Record<string, string>): VetVisitFilter {
+  const mode = modeFromLabel(filters['mode'] || filters['modeLabel']);
+  const status = statusFromLabel(filters['status'] || filters['statusLabel']);
+  const veterinarian = filters['veterinarian'] || filters['veterinarianName'];
+  return {
+    page: 0,
+    size: 20,
+    ...(mode ? { mode } : {}),
+    ...(status ? { status } : {}),
+    ...(veterinarian?.trim() ? { veterinarian: veterinarian.trim() } : {}),
+  };
+}
+
+function modeFromLabel(value: string | undefined): VetVisitMode | undefined {
+  return Object.entries(VISIT_MODE_LABELS).find(([, label]) => label.toLowerCase() === value?.toLowerCase())?.[0] as VetVisitMode | undefined;
+}
+
+function statusFromLabel(value: string | undefined): VetVisitStatus | undefined {
+  return Object.entries(VISIT_STATUS_LABELS).find(([, label]) => label.toLowerCase() === value?.toLowerCase())?.[0] as VetVisitStatus | undefined;
+}
+
+function canAttend(row: VetVisitRow) {
+  return row.status === 'PENDING' || row.status === 'RESCHEDULED';
+}
+
+function canContinue(row: VetVisitRow) {
+  return row.status === 'ATTENDED';
+}
+
+function canClose(row: VetVisitRow) {
+  return row.status === 'ATTENDED' || row.status === 'RESCHEDULED';
+}
+
+function canCancel(row: VetVisitRow) {
+  return row.status !== 'FINALIZED' && row.status !== 'CANCELED';
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return '—';
+  }
+  return new Intl.DateTimeFormat('es-BO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
+  return mapVetVisitFormToCreateInput({
+    animalUuid: result.animalUuid,
+    visitId: result.visitId,
+    mode: result.mode,
+    status: result.status,
+    occurredAt: result.occurredAt,
+    notes: result.notes,
+    checklist: [],
+    clinicalNote: {
+      reason: result.reason,
+      findings: result.findings,
+      plan: result.plan,
+    },
+    protocolStatus: protocolStatusFromVisitStatus(result.status, result.nextDueAt),
+    nextDueAt: result.nextDueAt,
+    veterinarianName: result.veterinarianName,
+    veterinarianLicense: result.veterinarianLicense,
+    targetAnimalCount: result.targetAnimalCount,
+    parentVisitId: result.parentVisitId,
+  });
+}
+
+function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], nextDueAt: string | null) {
+  if (status === 'FINALIZED' || status === 'CANCELED') {
+    return 'CLOSED';
+  }
+  if (status === 'RESCHEDULED' || nextDueAt) {
+    return 'FOLLOW_UP_REQUIRED';
+  }
+  return 'STARTED';
 }

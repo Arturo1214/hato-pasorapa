@@ -9,6 +9,9 @@ export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): An
   const visitId = typeof raw['visitId'] === 'string' ? raw['visitId'] : readVisitIdFromMetadata(metadata);
   const nextDueAt = typeof raw['nextDueAt'] === 'string' ? raw['nextDueAt'] : readNextDueAt(metadata);
   const followUpStatus = typeof raw['followUpStatus'] === 'string' ? raw['followUpStatus'] : undefined;
+  const visitMode = readVisitMode(metadata);
+  const visitStatus = readVisitStatus(metadata);
+  const veterinarianName = readVeterinarianName(metadata);
 
   return {
     id: String(raw['id'] ?? raw['operationId'] ?? ''),
@@ -26,6 +29,9 @@ export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): An
     visitId,
     nextDueAt,
     treatmentStatus: normalizeFollowUpStatus(followUpStatus),
+    ...(visitMode ? { visitMode, visitProjection: visitMode === 'GLOBAL' ? 'CAMPAIGN' : 'SPECIFIC' } : {}),
+    ...(visitStatus ? { visitStatus } : {}),
+    ...(veterinarianName ? { veterinarianName } : {}),
   };
 }
 
@@ -143,6 +149,35 @@ function readVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {
   }
   const visitId = (metadata.visit as Record<string, unknown>)['visitId'];
   return typeof visitId === 'string' && visitId.trim() ? visitId.trim() : null;
+}
+
+function readVisitMode(metadata: AnimalHealthEventOfflineMetadata) {
+  const visit = readVisitBlock(metadata);
+  const mode = visit?.['mode'];
+  return mode === 'GLOBAL' || mode === 'SPECIFIC' ? mode : undefined;
+}
+
+function readVisitStatus(metadata: AnimalHealthEventOfflineMetadata) {
+  const visit = readVisitBlock(metadata);
+  const status = visit?.['status'];
+  return typeof status === 'string' && status.trim() ? status.trim() : undefined;
+}
+
+function readVeterinarianName(metadata: AnimalHealthEventOfflineMetadata) {
+  const visit = readVisitBlock(metadata);
+  const veterinarian = visit?.['veterinarian'];
+  if (typeof veterinarian !== 'object' || veterinarian === null) {
+    return undefined;
+  }
+  const name = (veterinarian as Record<string, unknown>)['name'];
+  return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+}
+
+function readVisitBlock(metadata: AnimalHealthEventOfflineMetadata): Record<string, unknown> | null {
+  if (!('visit' in metadata) || typeof metadata.visit !== 'object' || metadata.visit === null) {
+    return null;
+  }
+  return metadata.visit as Record<string, unknown>;
 }
 
 function readProtocolStatus(item: AnimalHealthEventItem) {

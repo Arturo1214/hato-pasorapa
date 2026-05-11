@@ -88,6 +88,62 @@ describe('animal-health-events-timeline.adapter', () => {
     expect(timeline[1].treatmentStatus).toBe('active');
   });
 
+  it('should project global field vet visits as campaign entries with veterinarian names', () => {
+    const globalVisit = normalizeAnimalHealthEventItem({
+      id: 'global-visit-1',
+      animalUuid: 'animal-1',
+      healthEventType: 'FIELD_VET_VISIT',
+      occurredAt: '2026-05-01T10:00:00.000Z',
+      operationId: 'global-visit-1',
+      metadata: {
+        visit: {
+          visitId: 'VISIT-GLOBAL',
+          mode: 'GLOBAL',
+          status: 'PENDING',
+          veterinarian: { name: 'Dra. Luna' },
+        },
+        checklist: [{ code: 'TEMPERATURE', ok: true }],
+        clinicalNote: { reason: 'Campaña', findings: 'Sin hallazgos', plan: 'Seguimiento' },
+        protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-08T10:00:00.000Z' },
+      },
+    });
+
+    const [projected] = decorateAnimalHealthTimeline([globalVisit], []);
+
+    expect(projected.visitProjection).toBe('CAMPAIGN');
+    expect(projected.visitMode).toBe('GLOBAL');
+    expect(projected.visitStatus).toBe('PENDING');
+    expect(projected.veterinarianName).toBe('Dra. Luna');
+  });
+
+  it('should project specific field vet visits as specific entries', () => {
+    const specificVisit = normalizeAnimalHealthEventItem({
+      id: 'specific-visit-1',
+      animalUuid: 'animal-1',
+      healthEventType: 'FIELD_VET_VISIT',
+      occurredAt: '2026-05-01T10:00:00.000Z',
+      operationId: 'specific-visit-1',
+      metadata: {
+        visit: {
+          visitId: 'VISIT-SPECIFIC',
+          mode: 'SPECIFIC',
+          status: 'ATTENDED',
+          veterinarian: { name: 'Dr. Río' },
+        },
+        checklist: [{ code: 'APPETITE', ok: true }],
+        clinicalNote: { reason: 'Control', findings: 'Ok', plan: 'Alta' },
+        protocol: { status: 'CLOSED' },
+      },
+    });
+
+    const [projected] = decorateAnimalHealthTimeline([specificVisit], []);
+
+    expect(projected.visitProjection).toBe('SPECIFIC');
+    expect(projected.visitMode).toBe('SPECIFIC');
+    expect(projected.visitStatus).toBe('ATTENDED');
+    expect(projected.veterinarianName).toBe('Dr. Río');
+  });
+
   it('should filter by visitId when requested', () => {
     const item = normalizeAnimalHealthEventItem({
       id: 'visit-1',

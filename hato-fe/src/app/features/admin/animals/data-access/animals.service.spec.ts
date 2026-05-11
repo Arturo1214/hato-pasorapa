@@ -111,6 +111,31 @@ describe('AnimalsService', () => {
     ]);
   });
 
+  it('should list latest active animals for veterinary autocomplete with owner scope and pagination', async () => {
+    const get = vi.fn(() => of({ content: [createAnimal({ uuid: 'animal-latest', arete: 'BO-010' })] }));
+    const { service } = setup({ online: true, http: { get: get as never } });
+
+    await expect(firstValueFrom(service.listActiveAnimals('ganadero-uuid-1', 0, 10))).resolves.toEqual([
+      expect.objectContaining({ uuid: 'animal-latest', arete: 'BO-010', active: true, syncStatus: 'synced' }),
+    ]);
+
+    const [requestedUrl, options] = get.mock.calls[0] as unknown as [string, { headers: HttpHeaders }];
+    expect(requestedUrl).toBe('/api/animals?ownerGanaderoId.equals=ganadero-uuid-1&active.equals=true&page=0&size=10&sort=updatedAt,desc');
+    expect(options.headers.get('Authorization')).toBe('Bearer token');
+  });
+
+  it('should list active animals using visible search for arete marca or tatuaje', async () => {
+    const get = vi.fn(() => of({ content: [createAnimal({ uuid: 'animal-search', marca: 'M-77', tatuaje: 'T-88' })] }));
+    const { service } = setup({ online: true, http: { get: get as never } });
+
+    await expect(firstValueFrom(service.listActiveAnimals('ganadero-uuid-1', 1, 5, 'M-77'))).resolves.toEqual([
+      expect.objectContaining({ uuid: 'animal-search', marca: 'M-77', active: true, syncStatus: 'synced' }),
+    ]);
+
+    const [requestedUrl] = get.mock.calls[0] as unknown as [string];
+    expect(requestedUrl).toBe('/api/animals?visible.contains=M-77&ownerGanaderoId.equals=ganadero-uuid-1&active.equals=true&page=1&size=5&sort=updatedAt,desc');
+  });
+
   it('should filter local snapshots offline and expose pending/conflict sync markers by animal uuid', async () => {
     const { service, store } = setup({ online: false });
     await store.saveSnapshot({

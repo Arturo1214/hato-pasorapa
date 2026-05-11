@@ -202,6 +202,43 @@ describe('calendar alerts projection', () => {
       title: 'Fecha probable de parto',
     }));
   });
+
+  it('should classify global and specific veterinary controls with Spanish labels', () => {
+    const state = projectCalendarAlerts({
+      animals: [animalSnapshot],
+      now: '2026-05-01T08:00:00.000Z',
+      preferences: { horizonDays: 7, notificationsEnabled: true, snoozedUntil: null },
+      healthEvents: [
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-global', {
+          id: 'vet-global',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          notes: 'Campaña anual',
+          metadata: {
+            visit: { visitId: 'VISIT-GLOBAL', mode: 'GLOBAL', status: 'PENDING', veterinarian: { name: 'Dra. Luna' } },
+            protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-02T09:00:00.000Z' },
+          },
+        }),
+        snapshot('ANIMAL_HEALTH_EVENT', 'vet-specific', {
+          id: 'vet-specific',
+          animalUuid: 'animal-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          notes: 'Control puntual',
+          metadata: {
+            visit: { visitId: 'VISIT-SPECIFIC', mode: 'SPECIFIC', status: 'RESCHEDULED', veterinarian: { name: 'Dr. Río' } },
+            protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-03T09:00:00.000Z' },
+          },
+        }),
+      ],
+      reproductionEvents: [],
+      animalEvents: [],
+    });
+
+    expect(state.items.map((item) => ({ sourceId: item.sourceId, title: item.title, visitMode: item.visitMode }))).toEqual([
+      { sourceId: 'vet-global', title: 'Control Veterinario - Campaña', visitMode: 'GLOBAL' },
+      { sourceId: 'vet-specific', title: 'Control Veterinario - Específica', visitMode: 'SPECIFIC' },
+    ]);
+  });
 });
 
 function snapshot(entityType: OfflineSnapshotRecord['entityType'], entityId: string, payload: Record<string, unknown>): OfflineSnapshotRecord {

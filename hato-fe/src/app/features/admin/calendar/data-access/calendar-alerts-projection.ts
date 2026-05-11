@@ -84,6 +84,7 @@ function toHealthAgendaItems(
 
   const animalLabel = buildAnimalLabel(animalsByUuid.get(event.animalUuid) ?? {}, event.animalUuid);
   const status = classifyCalendarAlertStatus(dueAt, now);
+  const visitMode = readVisitMode(event);
   return [
     {
       id: `health:${event.id}`,
@@ -93,10 +94,11 @@ function toHealthAgendaItems(
       sourceId: event.id,
       dueAt,
       status,
-      title: healthEventTitle(event.healthEventType),
+      title: healthEventTitle(event.healthEventType, visitMode),
       detail: `${animalLabel}${event.notes ? ` · ${event.notes}` : ''}`,
       priorityScore: computeCalendarPriority('ANIMAL_HEALTH_EVENT', status),
       sortKey: buildCalendarSortKey('ANIMAL_HEALTH_EVENT', event.id),
+      ...(visitMode ? { visitMode } : {}),
     },
   ];
 }
@@ -182,7 +184,11 @@ function normalizeDueAt(value: string | null | undefined) {
   return parseCalendarDate(value)?.toISOString() ?? null;
 }
 
-function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventType']) {
+function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventType'], visitMode?: 'GLOBAL' | 'SPECIFIC') {
+  if (type === 'FIELD_VET_VISIT' && visitMode) {
+    return visitMode === 'GLOBAL' ? 'Control Veterinario - Campaña' : 'Control Veterinario - Específica';
+  }
+
   return (
     {
       VACCINATION: 'Vacunación pendiente',
@@ -194,6 +200,14 @@ function healthEventTitle(type: AnimalHealthEventSnapshotPayload['healthEventTyp
       FIELD_VET_VISIT: 'Control veterinario de campo',
     } as const
   )[type];
+}
+
+function readVisitMode(event: AnimalHealthEventSnapshotPayload) {
+  if (!('visit' in event.metadata) || typeof event.metadata.visit !== 'object' || event.metadata.visit === null) {
+    return undefined;
+  }
+  const mode = (event.metadata.visit as Record<string, unknown>)['mode'];
+  return mode === 'GLOBAL' || mode === 'SPECIFIC' ? mode : undefined;
 }
 
 function reproductionEventTitle(type: AnimalReproductionEventSnapshotPayload['reproductionEventType']) {

@@ -57,15 +57,15 @@ Chain strategy: feature-branch-chain
 
 ## Phase 4: Frontend — Page Redesign + Calendar + Animal Timeline
 
-- [ ] 4.1 RED: Write failing test in `vet-visits-page.component.spec.ts` — test table loads, columns show Spanish labels, filters work
-- [ ] 4.2 GREEN: Redesign `vet-visits-page.component.ts`: replace animalUuid filter with global list (no `animalUuid` required), add Spanish column headers (`Visita`, `Modo`, `Veterinario`, `Estado`, `Fecha`, `Siguiente Control`), toolbar with "Nueva Visita" button, `app-data-table` with filter inputs for `modo`/`estado`/`veterinario`
-- [ ] 4.3 Add lifecycle action buttons to table rows: "Atender", "Reprogramar", "Finalizar", "Cancelar" per `visit.status`
-- [ ] 4.4 Update `animals-health-events.service.ts`: extend `AnimalHealthEventItem` interface with `visitMode?: 'GLOBAL'|'ESPECIFICA'`, `visitStatus?: string`, `veterinarianName?: string`
-- [ ] 4.5 RED: Write `animal-health-events-timeline.adapter.spec.ts` — test CAMPAIGN entry projection from global visit metadata, SPECIFIC entry from specific visit
-- [ ] 4.6 GREEN: Update `animal-health-events-timeline.adapter.ts` to read `visit.mode` → `'CAMPAIGN'` | `'SPECIFIC'` and expose `veterinarianName` from `visit.veterinarian.name`
-- [ ] 4.7 RED: Write `calendar-alerts-projection.spec.ts` — test global/specific classification, Spanish label "Control Veterinario - Campanha" for GLOBAL
-- [ ] 4.8 GREEN: Update `calendar-alerts-projection.ts`: read `visit.mode` from metadata, apply distinct label for GLOBAL, pass mode flag to agenda item
-- [ ] 4.9 Update `animals.service.ts`: add `listActiveAnimals(ownerId, page, size)` for autocomplete with latest 10 by default, search by `arete`/`marca`/`tatuaje`
+- [x] 4.1 RED: Write failing test in `vet-visits-page.component.spec.ts` — test table loads, columns show Spanish labels, filters work
+- [x] 4.2 GREEN: Redesign `vet-visits-page.component.ts`: replace animalUuid filter with global list (no `animalUuid` required), add Spanish column headers (`Visita`, `Modo`, `Veterinario`, `Estado`, `Fecha`, `Siguiente Control`), toolbar with "Nueva Visita" button, `app-data-table` with filter inputs for `modo`/`estado`/`veterinario`
+- [x] 4.3 Add lifecycle action buttons to table rows: "Atender", "Reprogramar", "Finalizar", "Cancelar" per `visit.status`
+- [x] 4.4 Update `animals-health-events.service.ts`: extend `AnimalHealthEventItem` interface with `visitMode?: 'GLOBAL'|'ESPECIFICA'`, `visitStatus?: string`, `veterinarianName?: string`
+- [x] 4.5 RED: Write `animal-health-events-timeline.adapter.spec.ts` — test CAMPAIGN entry projection from global visit metadata, SPECIFIC entry from specific visit
+- [x] 4.6 GREEN: Update `animal-health-events-timeline.adapter.ts` to read `visit.mode` → `'CAMPAIGN'` | `'SPECIFIC'` and expose `veterinarianName` from `visit.veterinarian.name`
+- [x] 4.7 RED: Write `calendar-alerts-projection.spec.ts` — test global/specific classification, Spanish label "Control Veterinario - Campanha" for GLOBAL
+- [x] 4.8 GREEN: Update `calendar-alerts-projection.ts`: read `visit.mode` from metadata, apply distinct label for GLOBAL, pass mode flag to agenda item
+- [x] 4.9 Update `animals.service.ts`: add `listActiveAnimals(ownerId, page, size)` for autocomplete with latest 10 by default, search by `arete`/`marca`/`tatuaje`
 
 ## Phase 5: Integration + Fan-out (Global Campaign)
 

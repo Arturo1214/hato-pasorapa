@@ -44,6 +44,10 @@ export interface AnimalHealthEventItem {
   treatmentStatus?: 'active' | 'closed';
   visitId?: string | null;
   nextDueAt?: string | null;
+  visitMode?: 'GLOBAL' | 'SPECIFIC';
+  visitStatus?: string;
+  veterinarianName?: string;
+  visitProjection?: 'CAMPAIGN' | 'SPECIFIC';
 }
 
 export interface AnimalHealthEventListFilters {

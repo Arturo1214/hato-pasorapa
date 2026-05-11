@@ -367,6 +367,7 @@ export interface CalendarDerivedAgendaItem {
   detail?: string;
   priorityScore: number;
   sortKey: string;
+  visitMode?: 'GLOBAL' | 'SPECIFIC';
 }
 
 export interface CalendarDerivedWindows {
@@ -580,6 +581,10 @@ export interface AnimalHealthEventSnapshotPayload extends AnimalHealthEventOffli
   treatmentStatus?: 'active' | 'closed';
   visitId?: string | null;
   nextDueAt?: string | null;
+  visitMode?: 'GLOBAL' | 'SPECIFIC';
+  visitStatus?: string;
+  veterinarianName?: string;
+  visitProjection?: 'CAMPAIGN' | 'SPECIFIC';
 }
 
 export const ANIMAL_REPRODUCTION_EVENT_TYPES = ['SERVICE', 'PREGNANCY_DIAGNOSIS', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH'] as const;

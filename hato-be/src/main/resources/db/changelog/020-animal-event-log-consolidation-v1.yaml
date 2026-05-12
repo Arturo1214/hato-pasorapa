@@ -1,0 +1,149 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-animal-event-log-consolidation-v1
+      author: pasorapa
+      changes:
+        - createTable:
+            tableName: animal_event_logs
+            columns:
+              - column:
+                  name: event_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_animal_event_logs
+                    nullable: false
+              - column:
+                  name: animal_uuid
+                  type: UUID
+              - column:
+                  name: event_category
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: occurred_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: client_created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notes
+                  type: VARCHAR(500)
+              - column:
+                  name: performed_by_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_channel
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: operation_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: metadata_json
+                  type: CLOB
+              - column:
+                  name: visit_id
+                  type: VARCHAR(80)
+              - column:
+                  name: parent_visit_id
+                  type: VARCHAR(80)
+              - column:
+                  name: visit_status
+                  type: VARCHAR(30)
+              - column:
+                  name: protocol_status
+                  type: VARCHAR(30)
+              - column:
+                  name: next_due_at
+                  type: TIMESTAMP
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: animal_event_logs
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_animal_event_logs_animal_uuid
+        - addUniqueConstraint:
+            tableName: animal_event_logs
+            columnNames: operation_id
+            constraintName: uk_animal_event_logs_operation_id
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_animal_occurred_event
+            columns:
+              - column:
+                  name: animal_uuid
+              - column:
+                  name: occurred_at
+              - column:
+                  name: event_id
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_category_type_updated_event
+            columns:
+              - column:
+                  name: event_category
+              - column:
+                  name: event_type
+              - column:
+                  name: updated_at
+              - column:
+                  name: event_id
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_operation_id
+            columns:
+              - column:
+                  name: operation_id
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_vet_projection
+            columns:
+              - column:
+                  name: visit_id
+              - column:
+                  name: parent_visit_id
+              - column:
+                  name: visit_status
+              - column:
+                  name: next_due_at
+        - sql:
+            sql: |
+              INSERT INTO animal_event_logs (event_id, animal_uuid, event_category, event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at)
+              SELECT event_id, animal_uuid, 'GENERAL', event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_events
+        - sql:
+            sql: |
+              INSERT INTO animal_event_logs (event_id, animal_uuid, event_category, event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at)
+              SELECT event_id, animal_uuid, 'HEALTH', health_event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_health_events
+        - sql:
+            sql: |
+              INSERT INTO animal_event_logs (event_id, animal_uuid, event_category, event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at)
+              SELECT event_id, animal_uuid, 'REPRODUCTION', reproduction_event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_reproduction_events

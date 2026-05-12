@@ -37,3 +37,5 @@ databaseChangeLog:
       file: db/changelog/018-animal-breed-catalog-v1.yaml
   - include:
       file: db/changelog/019-animal-characteristics-breed-v1.yaml
+  - include:
+      file: db/changelog/020-animal-event-log-consolidation-v1.yaml

@@ -1,6 +1,7 @@
 package bo.pasorapa.hato.support;
 
 import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
@@ -25,6 +26,7 @@ public class IntegrationDatabaseCleaner {
     private final AnimalReproductionEventRepository animalReproductionEventRepository;
     private final AnimalHealthEventRepository animalHealthEventRepository;
     private final AnimalEventRepository animalEventRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final HerdCostLedgerRepository herdCostLedgerRepository;
     private final HerdProductivityLedgerRepository herdProductivityLedgerRepository;
     private final HerdLotAssignmentRepository herdLotAssignmentRepository;
@@ -41,6 +43,7 @@ public class IntegrationDatabaseCleaner {
             AnimalReproductionEventRepository animalReproductionEventRepository,
             AnimalHealthEventRepository animalHealthEventRepository,
             AnimalEventRepository animalEventRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             HerdCostLedgerRepository herdCostLedgerRepository,
             HerdProductivityLedgerRepository herdProductivityLedgerRepository,
             HerdLotAssignmentRepository herdLotAssignmentRepository,
@@ -55,6 +58,7 @@ public class IntegrationDatabaseCleaner {
         this.animalReproductionEventRepository = animalReproductionEventRepository;
         this.animalHealthEventRepository = animalHealthEventRepository;
         this.animalEventRepository = animalEventRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.herdCostLedgerRepository = herdCostLedgerRepository;
         this.herdProductivityLedgerRepository = herdProductivityLedgerRepository;
         this.herdLotAssignmentRepository = herdLotAssignmentRepository;
@@ -69,6 +73,7 @@ public class IntegrationDatabaseCleaner {
         syncConflictAuditLedgerRepository.deleteAll();
         syncOperationReceiptRepository.deleteAll();
         operationLogRepository.deleteAll();
+        animalEventLogRepository.deleteAll();
         animalReproductionEventRepository.deleteAll();
         animalHealthEventRepository.deleteAll();
         animalEventRepository.deleteAll();

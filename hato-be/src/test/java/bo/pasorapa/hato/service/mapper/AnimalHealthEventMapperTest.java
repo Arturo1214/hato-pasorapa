@@ -1,10 +1,16 @@
 package bo.pasorapa.hato.service.mapper;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +20,96 @@ import org.junit.jupiter.api.Test;
 class AnimalHealthEventMapperTest {
 
     private final AnimalHealthEventMapper mapper = new AnimalHealthEventMapper(new ObjectMapper());
+
+    @Test
+    void shouldMapHealthEntityToUnifiedLogWithHealthCategoryAndMetadataPreserved() {
+        UUID animalUuid = UUID.fromString("11111111-1111-4111-8111-111111111111");
+        Animal animal = new Animal();
+        animal.setUuid(animalUuid);
+        AnimalHealthEvent event = new AnimalHealthEvent();
+        event.setEventId(UUID.fromString("22222222-2222-4222-8222-222222222222"));
+        event.setAnimal(animal);
+        event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);
+        event.setOccurredAt(LocalDateTime.parse("2026-05-10T08:00:00"));
+        event.setClientCreatedAt(LocalDateTime.parse("2026-05-10T08:01:00"));
+        event.setNotes("Visita proyectada");
+        event.setPerformedByUserId(UUID.fromString("33333333-3333-4333-8333-333333333333"));
+        event.setSourceChannel("OFFLINE");
+        event.setOperationId(UUID.fromString("44444444-4444-4444-8444-444444444444"));
+        event.setMetadataJson(mapper.writeMetadataJson(validFieldVetMetadata("VISIT-LOG-1", "STARTED", "2026-05-12T08:00:00Z")));
+        event.setCreatedAt(LocalDateTime.parse("2026-05-10T08:02:00"));
+        event.setUpdatedAt(LocalDateTime.parse("2026-05-10T08:03:00"));
+
+        AnimalEventLog log = mapper.toAnimalEventLog(event);
+
+        assertEquals(event.getEventId(), log.getEventId());
+        assertEquals(animalUuid, log.getAnimal().getUuid());
+        assertEquals(AnimalEventCategory.HEALTH, log.getEventCategory());
+        assertEquals("FIELD_VET_VISIT", log.getEventType());
+        assertEquals("VISIT-LOG-1", log.getVisitId());
+        assertEquals("PROGRAMADA", log.getVisitStatus());
+        assertEquals("STARTED", log.getProtocolStatus());
+        assertEquals(OffsetDateTime.parse("2026-05-12T08:00:00Z").toLocalDateTime(), log.getNextDueAt());
+        assertEquals(mapper.readMetadataJson(event.getMetadataJson()), mapper.readMetadataJson(log.getMetadataJson()));
+    }
+
+    @Test
+    void shouldMapHealthRequestToUnifiedLogAndRejectCrossCategoryTypes() {
+        UUID animalUuid = UUID.fromString("55555555-5555-4555-8555-555555555555");
+        Animal animal = new Animal();
+        animal.setUuid(animalUuid);
+        var request = mapper.toRequest(
+                Map.of(
+                        "animalUuid", animalUuid.toString(),
+                        "healthEventType", "VACCINATION",
+                        "occurredAt", "2026-05-10T08:00:00Z",
+                        "performedByUserId", "66666666-6666-4666-8666-666666666666",
+                        "sourceChannel", "OFFLINE",
+                        "operationId", "77777777-7777-4777-8777-777777777777",
+                        "metadata", Map.of("productName", "Brucelosis")),
+                OffsetDateTime.parse("2026-05-10T08:01:00Z"));
+
+        AnimalEventLog log = mapper.toAnimalEventLog(animal, request, request.performedByUserId());
+
+        assertEquals(AnimalEventCategory.HEALTH, log.getEventCategory());
+        assertEquals("VACCINATION", log.getEventType());
+        assertEquals("Brucelosis", mapper.readMetadataJson(log.getMetadataJson()).get("productName"));
+        assertThrows(IllegalArgumentException.class, () -> mapper.validateHealthEventType("SOLD"));
+    }
+
+    @Test
+    void shouldMapUnifiedHealthLogBackToHealthResponsePreservingFieldVetBlocks() {
+        UUID animalUuid = UUID.fromString("88888888-8888-4888-8888-888888888888");
+        Animal animal = new Animal();
+        animal.setUuid(animalUuid);
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(validFieldVetMetadata("VISIT-LOG-DTO", "STARTED", null));
+        metadata.put("cost", Map.of("amount", 150, "currency", "BOB"));
+        metadata.put("treatmentPlan", List.of(Map.of("description", "Antibiótico", "order", 1)));
+        metadata.put("cancelReason", "Control cancelado por clima");
+        AnimalEventLog log = new AnimalEventLog();
+        log.setEventId(UUID.fromString("99999999-9999-4999-8999-999999999999"));
+        log.setAnimal(animal);
+        log.setEventCategory(AnimalEventCategory.HEALTH);
+        log.setEventType("FIELD_VET_VISIT");
+        log.setOccurredAt(LocalDateTime.parse("2026-05-10T08:00:00"));
+        log.setClientCreatedAt(LocalDateTime.parse("2026-05-10T08:01:00"));
+        log.setNotes("Visita desde log");
+        log.setPerformedByUserId(UUID.fromString("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"));
+        log.setSourceChannel("OFFLINE");
+        log.setOperationId(UUID.fromString("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"));
+        log.setMetadataJson(mapper.writeMetadataJson(metadata));
+        log.setVisitId("VISIT-LOG-DTO");
+        log.setCreatedAt(LocalDateTime.parse("2026-05-10T08:02:00"));
+        log.setUpdatedAt(LocalDateTime.parse("2026-05-10T08:03:00"));
+
+        var response = mapper.toAnimalHealthEventDto(log);
+
+        assertEquals("VISIT-LOG-DTO", response.visitId());
+        assertEquals(Map.of("amount", 150, "currency", "BOB"), response.metadata().get("cost"));
+        assertEquals(List.of(Map.of("description", "Antibiótico", "order", 1)), response.metadata().get("treatmentPlan"));
+        assertEquals("Control cancelado por clima", response.metadata().get("cancelReason"));
+        assertEquals("FIELD_VET_VISIT", response.healthEventType().name());
+    }
 
     @Test
     void shouldMapVaccinationPayloadWithTypedMetadata() {

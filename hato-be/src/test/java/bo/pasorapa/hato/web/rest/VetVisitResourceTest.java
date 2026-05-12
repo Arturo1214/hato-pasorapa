@@ -15,6 +15,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -55,6 +56,9 @@ class VetVisitResourceTest {
 
     @Inject
     AnimalHealthEventRepository animalHealthEventRepository;
+
+    @Inject
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -309,6 +313,7 @@ class VetVisitResourceTest {
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
             event.setUpdatedAt(event.getCreatedAt());
             animalHealthEventRepository.persist(event);
+            animalEventLogRepository.persist(mapper.toAnimalEventLog(event));
         });
     }
 

@@ -9,6 +9,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
@@ -46,10 +47,16 @@ class AnimalHealthEventServiceTest {
     AnimalHealthEventRepository animalHealthEventRepository;
 
     @Inject
+    AnimalEventLogRepository animalEventLogRepository;
+
+    @Inject
     GanaderoRepository ganaderoRepository;
 
     @Inject
     AnimalHealthEventMapper animalHealthEventMapper;
+
+    @Inject
+    AnimalHealthEventCompatibilityView animalHealthEventCompatibilityView;
 
     @Inject
     IntegrationDatabaseCleaner integrationDatabaseCleaner;
@@ -336,6 +343,47 @@ class AnimalHealthEventServiceTest {
 
         filter.status = "CANCELED";
         assertEquals(1, animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter).total());
+    }
+
+    @Test
+    void shouldProjectLatestFieldVetVisitRowsFromUnifiedLogByVisitId() {
+        UUID animalUuid = UUID.fromString("31e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-UNIFIED-LATEST", "SPECIFIC", "PROGRAMADA", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-UNIFIED-LATEST", "SPECIFIC", "CANCELADA", "Dra. Camila", 1, "2026-05-10T09:00:00");
+
+        var latest = animalEventLogRepository.findByVisitIdRoot("VISIT-UNIFIED-LATEST");
+
+        assertEquals(1, latest.size());
+        assertEquals("VISIT-UNIFIED-LATEST", latest.get(0).getVisitId());
+        assertEquals("CANCELADA", latest.get(0).getVisitStatus());
+        assertEquals(animalUuid, latest.get(0).getAnimal().getUuid());
+    }
+
+    @Test
+    void shouldReadLegacyHealthEventsThroughCompatibilityViewDuringTransition() {
+        UUID animalUuid = UUID.fromString("33e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedLegacyOnlyFieldVetEvent(animalUuid, "VISIT-COMPAT-LEGACY", "SPECIFIC", "PROGRAMADA", "Dra. Compat", 1, "2026-05-10T08:00:00");
+
+        var events = animalHealthEventCompatibilityView.findByVisitId("VISIT-COMPAT-LEGACY");
+
+        assertEquals(1, events.size());
+        assertEquals("VISIT-COMPAT-LEGACY", animalHealthEventMapper.readVisitId(animalHealthEventMapper.readMetadataJson(events.get(0).getMetadataJson())));
+        assertEquals(0, animalEventLogRepository.findByVisitIdRoot("VISIT-COMPAT-LEGACY").size());
+    }
+
+    @Test
+    void shouldReturnUnifiedVisitChildrenOrderedByOccurrence() {
+        UUID animalUuid = UUID.fromString("32e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-UNIFIED-PARENT", "SPECIFIC", "ATENDIDA", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-UNIFIED-CHILD-2", "SPECIFIC", "PROGRAMADA", "Dra. Camila", 1, "2026-05-12T08:00:00", null, null, "VISIT-UNIFIED-PARENT", null, "STARTED");
+        seedFieldVetEvent(animalUuid, "VISIT-UNIFIED-CHILD-1", "SPECIFIC", "PROGRAMADA", "Dra. Camila", 1, "2026-05-11T08:00:00", null, null, "VISIT-UNIFIED-PARENT", null, "STARTED");
+
+        var children = animalEventLogRepository.findByParentVisitId("VISIT-UNIFIED-PARENT");
+
+        assertEquals(List.of("VISIT-UNIFIED-CHILD-1", "VISIT-UNIFIED-CHILD-2"), children.stream().map(item -> item.getVisitId()).toList());
     }
 
     @Test
@@ -810,6 +858,45 @@ class AnimalHealthEventServiceTest {
             event.setOccurredAt(LocalDateTime.parse(occurredAt));
             event.setClientCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
             event.setNotes("Visita veterinaria");
+            event.setPerformedByUserId(USER_ID);
+            event.setSourceChannel("OFFLINE");
+            event.setOperationId(UUID.randomUUID());
+            event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(metadata));
+            event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
+            event.setUpdatedAt(event.getCreatedAt());
+            animalHealthEventRepository.persist(event);
+            animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(event));
+        });
+    }
+
+    private void seedLegacyOnlyFieldVetEvent(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            String veterinarianName,
+            int targetAnimalCount,
+            String occurredAt) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("visit", Map.of(
+                    "visitId", visitId,
+                    "mode", mode,
+                    "status", status,
+                    "veterinarian", Map.of("name", veterinarianName),
+                    "targetAnimalCount", targetAnimalCount,
+                    "atencionNotas", "Compatibilidad"));
+            metadata.put("checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)));
+            metadata.put("clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguimiento"));
+            metadata.put("protocol", Map.of("status", "STARTED"));
+
+            var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
+            event.setEventId(UUID.randomUUID());
+            event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
+            event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);
+            event.setOccurredAt(LocalDateTime.parse(occurredAt));
+            event.setClientCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
+            event.setNotes("Solo legacy");
             event.setPerformedByUserId(USER_ID);
             event.setSourceChannel("OFFLINE");
             event.setOperationId(UUID.randomUUID());

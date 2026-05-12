@@ -1,7 +1,9 @@
 package bo.pasorapa.hato.service.mapper;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventResponse;
@@ -73,6 +75,73 @@ public class AnimalHealthEventMapper {
         event.setOperationId(request.operationId());
         event.setMetadataJson(writeMetadataJson(request.metadata()));
         return event;
+    }
+
+    public AnimalEventLog toAnimalEventLog(AnimalHealthEvent event) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setEventId(event.getEventId());
+        log.setAnimal(event.getAnimal());
+        log.setEventCategory(AnimalEventCategory.HEALTH);
+        log.setEventType(validateHealthEventType(event.getHealthEventType().name()).name());
+        log.setOccurredAt(event.getOccurredAt());
+        log.setClientCreatedAt(event.getClientCreatedAt());
+        log.setNotes(event.getNotes());
+        log.setPerformedByUserId(event.getPerformedByUserId());
+        log.setSourceChannel(event.getSourceChannel());
+        log.setOperationId(event.getOperationId());
+        log.setMetadataJson(event.getMetadataJson());
+        log.setCreatedAt(event.getCreatedAt());
+        log.setUpdatedAt(event.getUpdatedAt());
+        applyVetProjection(log, readMetadataJson(event.getMetadataJson()));
+        return log;
+    }
+
+    public AnimalEventLog toAnimalEventLog(Animal animal, AnimalHealthEventRequest request, UUID effectivePerformedByUserId) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setAnimal(animal);
+        log.setEventCategory(AnimalEventCategory.HEALTH);
+        log.setEventType(validateHealthEventType(request.healthEventType().name()).name());
+        log.setOccurredAt(request.occurredAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setClientCreatedAt(request.clientCreatedAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setNotes(request.notes());
+        log.setPerformedByUserId(effectivePerformedByUserId);
+        log.setSourceChannel(request.sourceChannel());
+        log.setOperationId(request.operationId());
+        log.setMetadataJson(writeMetadataJson(request.metadata()));
+        applyVetProjection(log, request.metadata());
+        return log;
+    }
+
+    public AnimalHealthEvent toAnimalHealthEvent(AnimalEventLog log) {
+        if (log.getEventCategory() != AnimalEventCategory.HEALTH) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_CATEGORY_INVALID_FOR_HEALTH");
+        }
+        AnimalHealthEvent event = new AnimalHealthEvent();
+        event.setEventId(log.getEventId());
+        event.setAnimal(log.getAnimal());
+        event.setHealthEventType(validateHealthEventType(log.getEventType()));
+        event.setOccurredAt(log.getOccurredAt());
+        event.setClientCreatedAt(log.getClientCreatedAt());
+        event.setNotes(log.getNotes());
+        event.setPerformedByUserId(log.getPerformedByUserId());
+        event.setSourceChannel(log.getSourceChannel());
+        event.setOperationId(log.getOperationId());
+        event.setMetadataJson(log.getMetadataJson());
+        event.setCreatedAt(log.getCreatedAt());
+        event.setUpdatedAt(log.getUpdatedAt());
+        return event;
+    }
+
+    public AnimalHealthEventResponse toAnimalHealthEventDto(AnimalEventLog log) {
+        return toResponse(toAnimalHealthEvent(log), log.getVisitId(), null, log.getNextDueAt() == null ? null : log.getNextDueAt().atOffset(ZoneOffset.UTC));
+    }
+
+    public AnimalHealthEventType validateHealthEventType(String eventType) {
+        try {
+            return AnimalHealthEventType.valueOf(eventType);
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_HEALTH_TYPE_INVALID");
+        }
     }
 
     public AnimalHealthEventResponse toResponse(AnimalHealthEvent event) {
@@ -228,6 +297,19 @@ public class AnimalHealthEventMapper {
             return requireOffsetDateTime(metadata.get("nextDueAt"), "ANIMAL_HEALTH_EVENT_NEXT_DUE_AT_INVALID");
         }
         return null;
+    }
+
+    private void applyVetProjection(AnimalEventLog log, Map<String, Object> metadata) {
+        if (!AnimalHealthEventType.FIELD_VET_VISIT.name().equals(log.getEventType())) {
+            return;
+        }
+        Map<String, Object> visit = readOptionalMap(metadata.get("visit"));
+        log.setVisitId(visit == null ? null : readOptionalText(visit.get("visitId")));
+        log.setParentVisitId(visit == null ? null : readOptionalText(visit.get("parentVisitId")));
+        log.setVisitStatus(visit == null ? null : readOptionalText(visit.get("status")));
+        log.setProtocolStatus(readFieldVetProtocolStatus(metadata));
+        OffsetDateTime nextDueAt = readNextDueAt(metadata);
+        log.setNextDueAt(nextDueAt == null ? null : nextDueAt.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
     }
 
     public String readOptionalText(Object value) {

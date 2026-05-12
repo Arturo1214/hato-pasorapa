@@ -7,6 +7,7 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository.VetVisitQuery;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -34,6 +35,7 @@ import java.util.UUID;
 public class AnimalHealthEventService {
 
     private final AnimalHealthEventRepository animalHealthEventRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final AnimalRepository animalRepository;
     private final UserRepository userRepository;
     private final GanaderoRepository ganaderoRepository;
@@ -41,11 +43,13 @@ public class AnimalHealthEventService {
 
     public AnimalHealthEventService(
             AnimalHealthEventRepository animalHealthEventRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository,
             AnimalHealthEventMapper animalHealthEventMapper) {
         this.animalHealthEventRepository = animalHealthEventRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.userRepository = userRepository;
         this.ganaderoRepository = ganaderoRepository;
@@ -76,6 +80,8 @@ public class AnimalHealthEventService {
         AnimalHealthEvent event = animalHealthEventMapper.toEntity(animal, request, effectivePerformedByUserId);
         animalHealthEventRepository.persist(event);
         animalHealthEventRepository.flush();
+        animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(event));
+        animalEventLogRepository.flush();
         return event;
     }
 
@@ -139,7 +145,7 @@ public class AnimalHealthEventService {
                 filter.occurredTo == null ? null : filter.occurredTo.toLocalDateTime(),
                 Integer.MAX_VALUE,
                 0);
-        List<VetVisitItemDto> groupedItems = groupVetVisits(animalHealthEventRepository.findFieldVetVisitsByOwner(ownerId, query).items()).stream()
+        List<VetVisitItemDto> groupedItems = groupVetVisits(toHealthEvents(animalEventLogRepository.findFieldVetVisitsByOwner(ownerId, query))).stream()
                 .filter(item -> filter.normalizedStatus() == null || filter.normalizedStatus().equalsIgnoreCase(item.status()))
                 .toList();
         int fromIndex = Math.min(filter.offset(), groupedItems.size());
@@ -149,7 +155,7 @@ public class AnimalHealthEventService {
 
     public List<VetVisitItemDto> getVisitChainDetail(String visitId, UUID currentUserId, boolean ganaderoScoped) {
         UUID ownerId = ganaderoScoped ? resolveAuthenticatedGanaderoId(currentUserId) : null;
-        List<AnimalHealthEvent> selectedEvents = filterEventsByOwner(animalHealthEventRepository.findByVisitId(visitId), ownerId);
+        List<AnimalHealthEvent> selectedEvents = filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByVisitIdRoot(visitId)), ownerId);
         if (selectedEvents.isEmpty()) {
             return List.of();
         }
@@ -164,8 +170,8 @@ public class AnimalHealthEventService {
         }
 
         List<AnimalHealthEvent> chainEvents = new ArrayList<>();
-        chainEvents.addAll(filterEventsByOwner(animalHealthEventRepository.findByVisitId(rootVisitId), ownerId));
-        chainEvents.addAll(filterEventsByOwner(animalHealthEventRepository.findByParentVisitId(rootVisitId), ownerId));
+        chainEvents.addAll(filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByVisitIdRoot(rootVisitId)), ownerId));
+        chainEvents.addAll(filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByParentVisitId(rootVisitId)), ownerId));
 
         return groupVetVisitItems(chainEvents).stream()
                 .sorted(Comparator.comparing((VetVisitItemDto item) -> item.parentVisitId() == null ? 0 : 1)
@@ -183,6 +189,10 @@ public class AnimalHealthEventService {
                         && event.getAnimal().getOwnerGanadero() != null
                         && ownerId.equals(event.getAnimal().getOwnerGanadero().getId()))
                 .toList();
+    }
+
+    private List<AnimalHealthEvent> toHealthEvents(List<bo.pasorapa.hato.domain.AnimalEventLog> logs) {
+        return logs.stream().map(animalHealthEventMapper::toAnimalHealthEvent).toList();
     }
 
     private void requireAnimalOwnedByAuthenticatedGanadero(UUID animalUuid, UUID currentUserId) {

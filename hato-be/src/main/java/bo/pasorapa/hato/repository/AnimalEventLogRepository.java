@@ -2,6 +2,8 @@ package bo.pasorapa.hato.repository;
 
 import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +29,91 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
 
     public Optional<AnimalEventLog> findByOperationId(UUID operationId) {
         return find("operationId", operationId).firstResultOptional();
+    }
+
+    public Optional<AnimalEventLog> findByEventIdOrOperationId(AnimalEventCategory category, UUID eventUuid) {
+        return find("eventCategory = ?1 and (eventId = ?2 or operationId = ?2)", category, eventUuid).firstResultOptional();
+    }
+
+    public List<AnimalEventLog> listGeneralHistory(UUID animalUuid, AnimalEventType eventType, LocalDateTime occurredFrom, LocalDateTime occurredTo) {
+        StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.uuid = ?2");
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalEventCategory.GENERAL);
+        params.add(animalUuid);
+        if (eventType != null) {
+            query.append(" and log.eventType = ?").append(params.size() + 1);
+            params.add(eventType.name());
+        }
+        if (occurredFrom != null) {
+            query.append(" and log.occurredAt >= ?").append(params.size() + 1);
+            params.add(occurredFrom);
+        }
+        if (occurredTo != null) {
+            query.append(" and log.occurredAt <= ?").append(params.size() + 1);
+            params.add(occurredTo);
+        }
+        query.append(" order by log.occurredAt asc, log.createdAt asc, log.eventId asc");
+        return find(query.toString(), params.toArray()).list();
+    }
+
+    public List<AnimalEventLog> findGeneralByAnimalUuidForProjection(UUID animalUuid) {
+        return find(
+                        "from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.uuid = ?2 order by log.occurredAt asc, log.clientCreatedAt asc, log.operationId asc",
+                        AnimalEventCategory.GENERAL,
+                        animalUuid)
+                .list();
+    }
+
+    public List<AnimalEventLog> listReproductionHistory(
+            UUID animalUuid,
+            AnimalReproductionEventType reproductionEventType,
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo) {
+        StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.uuid = ?2");
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalEventCategory.REPRODUCTION);
+        params.add(animalUuid);
+        if (reproductionEventType != null) {
+            query.append(" and log.eventType = ?").append(params.size() + 1);
+            params.add(reproductionEventType.name());
+        }
+        if (occurredFrom != null) {
+            query.append(" and log.occurredAt >= ?").append(params.size() + 1);
+            params.add(occurredFrom);
+        }
+        if (occurredTo != null) {
+            query.append(" and log.occurredAt <= ?").append(params.size() + 1);
+            params.add(occurredTo);
+        }
+        query.append(" order by log.occurredAt desc, log.clientCreatedAt desc, log.operationId desc");
+        return find(query.toString(), params.toArray()).list();
+    }
+
+    public List<AnimalEventLog> listChangedSince(AnimalEventCategory category, LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
+        if (cursorUpdatedAt == null) {
+            return find("from AnimalEventLog where eventCategory = ?1 order by updatedAt asc, eventId asc", category).page(0, limitPlusOne).list();
+        }
+        UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
+        return find(
+                        "from AnimalEventLog where eventCategory = ?1 and (updatedAt > ?2 or (updatedAt = ?2 and eventId > ?3)) order by updatedAt asc, eventId asc",
+                        category,
+                        cursorUpdatedAt,
+                        effectiveCursorId)
+                .page(0, limitPlusOne)
+                .list();
+    }
+
+    public List<AnimalEventLog> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
+        if (cursorUpdatedAt == null) {
+            return find("from AnimalEventLog order by updatedAt asc, eventId asc").page(0, limitPlusOne).list();
+        }
+        UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
+        return find(
+                        "from AnimalEventLog where updatedAt > ?1 or (updatedAt = ?1 and eventId > ?2) order by updatedAt asc, eventId asc",
+                        cursorUpdatedAt,
+                        effectiveCursorId)
+                .page(0, limitPlusOne)
+                .list();
     }
 
     public List<AnimalEventLog> findByVisitIdRoot(String visitId) {

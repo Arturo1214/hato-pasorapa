@@ -7,10 +7,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -43,6 +45,9 @@ class AnimalEventServiceTest {
 
     @Inject
     AnimalEventRepository animalEventRepository;
+
+    @Inject
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -162,6 +167,49 @@ class AnimalEventServiceTest {
                 OffsetDateTime.parse("2026-04-27T18:01:00Z")), authenticatedUserId);
 
         assertEquals(authenticatedUserId, created.getPerformedByUserId());
+    }
+
+    @Test
+    void shouldPersistGeneralEventsOnlyInUnifiedLogAndKeepListContract() {
+        UUID animalUuid = UUID.fromString("70544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        UUID operationId = UUID.fromString("71544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        seedAnimal(animalUuid, OWNER_A, true);
+
+        AnimalEvent created = animalEventService.create(fromRequest(
+                animalUuid,
+                AnimalEventType.OBSERVATION,
+                "2026-05-11T10:00:00Z",
+                Map.of("reasonCode", "GENERAL_NOTE"),
+                operationId,
+                USER_ID));
+        var listed = animalEventService.list(animalUuid, AnimalEventType.OBSERVATION, null, null);
+
+        assertEquals(operationId, created.getOperationId());
+        assertEquals(0, animalEventRepository.count());
+        assertEquals(1, animalEventLogRepository.count("eventCategory", AnimalEventCategory.GENERAL));
+        assertEquals(1, listed.size());
+        assertEquals(AnimalEventType.OBSERVATION, listed.getFirst().type());
+        assertEquals(operationId, listed.getFirst().operationId());
+    }
+
+    @Test
+    void shouldEnforceGeneralIdempotencyFromUnifiedLogOperationId() {
+        UUID animalUuid = UUID.fromString("72544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        UUID operationId = UUID.fromString("73544b7e-b0cf-4ba7-aee0-6e2094b88b76");
+        seedAnimal(animalUuid, OWNER_A, true);
+        AnimalEventRequest request = fromRequest(
+                animalUuid,
+                AnimalEventType.OBSERVATION,
+                "2026-05-11T11:00:00Z",
+                Map.of("reasonCode", "GENERAL_NOTE"),
+                operationId,
+                USER_ID);
+
+        AnimalEvent created = animalEventService.create(request);
+        AnimalEvent replayed = animalEventService.create(request);
+
+        assertEquals(created.getEventId(), replayed.getEventId());
+        assertEquals(1, animalEventLogRepository.count("operationId", operationId));
     }
 
     @Test

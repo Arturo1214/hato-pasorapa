@@ -1,7 +1,9 @@
 package bo.pasorapa.hato.service.mapper;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventResponse;
@@ -66,6 +68,71 @@ public class AnimalReproductionEventMapper {
         event.setOperationId(request.operationId());
         event.setMetadataJson(writeMetadataJson(request.metadata()));
         return event;
+    }
+
+    public AnimalEventLog toAnimalEventLog(AnimalReproductionEvent event) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setEventId(event.getEventId());
+        log.setAnimal(event.getAnimal());
+        log.setEventCategory(AnimalEventCategory.REPRODUCTION);
+        log.setEventType(validateReproductionEventType(event.getReproductionEventType().name()).name());
+        log.setOccurredAt(event.getOccurredAt());
+        log.setClientCreatedAt(event.getClientCreatedAt());
+        log.setNotes(event.getNotes());
+        log.setPerformedByUserId(event.getPerformedByUserId());
+        log.setSourceChannel(event.getSourceChannel());
+        log.setOperationId(event.getOperationId());
+        log.setMetadataJson(event.getMetadataJson());
+        log.setCreatedAt(event.getCreatedAt());
+        log.setUpdatedAt(event.getUpdatedAt());
+        return log;
+    }
+
+    public AnimalEventLog toAnimalEventLog(Animal animal, AnimalReproductionEventRequest request, UUID effectivePerformedByUserId) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setAnimal(animal);
+        log.setEventCategory(AnimalEventCategory.REPRODUCTION);
+        log.setEventType(validateReproductionEventType(request.reproductionEventType().name()).name());
+        log.setOccurredAt(request.occurredAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setClientCreatedAt(request.clientCreatedAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setNotes(request.notes());
+        log.setPerformedByUserId(effectivePerformedByUserId);
+        log.setSourceChannel(request.sourceChannel());
+        log.setOperationId(request.operationId());
+        log.setMetadataJson(writeMetadataJson(request.metadata()));
+        return log;
+    }
+
+    public AnimalReproductionEvent toAnimalReproductionEvent(AnimalEventLog log) {
+        if (log.getEventCategory() != AnimalEventCategory.REPRODUCTION) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_CATEGORY_INVALID_FOR_REPRODUCTION");
+        }
+        AnimalReproductionEvent event = new AnimalReproductionEvent();
+        event.setEventId(log.getEventId());
+        event.setAnimal(log.getAnimal());
+        event.setReproductionEventType(validateReproductionEventType(log.getEventType()));
+        event.setOccurredAt(log.getOccurredAt());
+        event.setClientCreatedAt(log.getClientCreatedAt());
+        event.setNotes(log.getNotes());
+        event.setPerformedByUserId(log.getPerformedByUserId());
+        event.setSourceChannel(log.getSourceChannel());
+        event.setOperationId(log.getOperationId());
+        event.setMetadataJson(log.getMetadataJson());
+        event.setCreatedAt(log.getCreatedAt());
+        event.setUpdatedAt(log.getUpdatedAt());
+        return event;
+    }
+
+    public AnimalReproductionEventResponse toAnimalReproductionEventDto(AnimalEventLog log) {
+        return toResponse(toAnimalReproductionEvent(log));
+    }
+
+    public AnimalReproductionEventType validateReproductionEventType(String eventType) {
+        try {
+            return AnimalReproductionEventType.valueOf(eventType);
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_REPRODUCTION_TYPE_INVALID");
+        }
     }
 
     public AnimalReproductionEventResponse toResponse(AnimalReproductionEvent event) {

@@ -4,14 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -45,6 +48,9 @@ class AnimalReproductionEventServiceTest {
 
     @Inject
     AnimalReproductionEventRepository animalReproductionEventRepository;
+
+    @Inject
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -82,7 +88,28 @@ class AnimalReproductionEventServiceTest {
 
         assertEquals(operationId, created.getOperationId());
         assertEquals(created.getEventId(), replayed.getEventId());
-        assertEquals(1, animalReproductionEventRepository.count());
+        assertEquals(1, animalEventLogRepository.count("eventCategory", AnimalEventCategory.REPRODUCTION));
+        assertEquals(0, animalReproductionEventRepository.count());
+    }
+
+    @Test
+    void shouldReadReproductionEventsFromUnifiedLogOnly() {
+        UUID animalUuid = UUID.fromString("30303030-3030-4030-8030-303030303030");
+        UUID operationId = UUID.fromString("31313131-3131-4131-8131-313131313131");
+        seedAnimal(animalUuid, "AR-repro-log");
+
+        AnimalReproductionEvent created = animalReproductionEventService.create(request(
+                animalUuid,
+                AnimalReproductionEventType.SERVICE,
+                operationId,
+                "Servicio unified",
+                Map.of("serviceMethod", "NATURAL")), USER_ID);
+        var listed = animalReproductionEventService.list(animalUuid, AnimalReproductionEventType.SERVICE, null, null);
+
+        assertEquals(operationId, created.getOperationId());
+        assertEquals(1, listed.size());
+        assertEquals(AnimalReproductionEventType.SERVICE, listed.getFirst().reproductionEventType());
+        assertEquals(operationId, listed.getFirst().operationId());
     }
 
     @Test

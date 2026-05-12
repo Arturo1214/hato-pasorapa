@@ -2,6 +2,7 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.AnimalImage;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
@@ -14,8 +15,10 @@ import bo.pasorapa.hato.domain.HerdProductivityLedger;
 import bo.pasorapa.hato.domain.SyncConflictAuditLedger;
 import bo.pasorapa.hato.domain.SyncOperationReceipt;
 import bo.pasorapa.hato.domain.User;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
@@ -101,6 +104,7 @@ public class SyncService {
 
     private final AnimalRepository animalRepository;
     private final AdminNotificationRepository adminNotificationRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final AnimalEventRepository animalEventRepository;
     private final AnimalHealthEventRepository animalHealthEventRepository;
     private final AnimalImageRepository animalImageRepository;
@@ -131,6 +135,7 @@ public class SyncService {
     public SyncService(
             AnimalRepository animalRepository,
             AdminNotificationRepository adminNotificationRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             AnimalEventRepository animalEventRepository,
             AnimalHealthEventRepository animalHealthEventRepository,
             AnimalImageRepository animalImageRepository,
@@ -159,6 +164,7 @@ public class SyncService {
             ObjectMapper objectMapper) {
         this.animalRepository = animalRepository;
         this.adminNotificationRepository = adminNotificationRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.animalEventRepository = animalEventRepository;
         this.animalHealthEventRepository = animalHealthEventRepository;
         this.animalImageRepository = animalImageRepository;
@@ -272,6 +278,12 @@ public class SyncService {
                     cursorUpdatedAt,
                     cursorId,
                     entry -> new PullCursorItem(toPullItem(entry), entry.getUpdatedAt().atOffset(ZoneOffset.UTC), entry.getEntryId().toString()));
+            case ANIMAL_EVENT_LOG -> buildPullResponse(
+                    entityType,
+                    animalEventLogRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    cursorUpdatedAt,
+                    cursorId,
+                    event -> new PullCursorItem(toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_EVENT -> buildPullResponse(
                     entityType,
                     animalEventRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
@@ -547,16 +559,20 @@ public class SyncService {
                     case CREATE, UPDATE -> persistReceipt(operation, handleCostLedgerUpsert(operation), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
+                case ANIMAL_EVENT_LOG -> switch (operation.opType()) {
+                    case CREATE -> persistReceipt(operation, handleAnimalEventLogCreate(operation, currentUserId), currentUserId);
+                    default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
+                };
                 case ANIMAL_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalEventCreate(operation, currentUserId), currentUserId);
+                    case CREATE -> persistReceipt(operation, handleAnimalEventLogCreate(operation, currentUserId), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_HEALTH_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalHealthEventCreate(operation, currentUserId), currentUserId);
+                    case CREATE -> persistReceipt(operation, handleAnimalEventLogCreate(operation, currentUserId), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_REPRODUCTION_EVENT -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalReproductionEventCreate(operation, currentUserId), currentUserId);
+                    case CREATE -> persistReceipt(operation, handleAnimalEventLogCreate(operation, currentUserId), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_IMAGE -> switch (operation.opType()) {
@@ -794,6 +810,34 @@ public class SyncService {
         AnimalEventRequest request = syncPayloadMapper.toAnimalEventRequest(operation.payload(), operation.clientCreatedAt());
         AnimalEvent event = animalEventService.create(request, currentUserId);
         return noConflict(operation, event.getOperationId().toString(), 0);
+    }
+
+    private SyncOperationResult handleAnimalEventLogCreate(SyncOperationRequest operation, UUID currentUserId) {
+        Map<String, Object> canonical = syncPayloadMapper.toAnimalEventLogPayload(operation.entityType(), operation.payload());
+        UUID operationId = syncPayloadMapper.parseUuid(String.valueOf(canonical.get("operationId")));
+        AnimalEventLog existing = operationId == null ? null : animalEventLogRepository.findByOperationId(operationId).orElse(null);
+        if (existing != null) {
+            return noConflict(operation, existing.getOperationId().toString(), 0);
+        }
+
+        String category = String.valueOf(canonical.get("eventCategory"));
+        return switch (AnimalEventCategory.valueOf(category)) {
+            case GENERAL -> {
+                AnimalEventRequest request = syncPayloadMapper.toAnimalEventRequest(canonical, operation.clientCreatedAt());
+                AnimalEvent event = animalEventService.create(request, currentUserId);
+                yield noConflict(operation, event.getOperationId().toString(), 0);
+            }
+            case HEALTH -> {
+                AnimalHealthEventRequest request = syncPayloadMapper.toAnimalHealthEventRequest(canonical, operation.clientCreatedAt());
+                AnimalHealthEvent event = animalHealthEventService.create(request, currentUserId);
+                yield noConflict(operation, event.getOperationId().toString(), 0);
+            }
+            case REPRODUCTION -> {
+                AnimalReproductionEventRequest request = syncPayloadMapper.toAnimalReproductionEventRequest(canonical, operation.clientCreatedAt());
+                AnimalReproductionEvent event = animalReproductionEventService.create(request, currentUserId);
+                yield noConflict(operation, event.getOperationId().toString(), 0);
+            }
+        };
     }
 
     private SyncOperationResult handleAnimalHealthEventCreate(SyncOperationRequest operation, UUID currentUserId) {
@@ -1199,6 +1243,33 @@ public class SyncService {
         item.put("updatedAt", entry.getUpdatedAt().atOffset(ZoneOffset.UTC));
         item.put("createdAt", entry.getCreatedAt().atOffset(ZoneOffset.UTC));
         return item;
+    }
+
+    private Map<String, Object> toPullItem(AnimalEventLog event) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", event.getOperationId().toString());
+        item.put("eventId", event.getEventId().toString());
+        item.put("animalUuid", event.getAnimal() == null ? null : event.getAnimal().getUuid().toString());
+        item.put("eventCategory", event.getEventCategory().name());
+        item.put("eventType", event.getEventType());
+        item.put("occurredAt", event.getOccurredAt().atOffset(ZoneOffset.UTC));
+        item.put("notes", event.getNotes());
+        item.put("performedByUserId", event.getPerformedByUserId().toString());
+        item.put("sourceChannel", event.getSourceChannel());
+        item.put("operationId", event.getOperationId().toString());
+        item.put("metadata", readEventLogMetadata(event));
+        item.put("clientCreatedAt", event.getClientCreatedAt().atOffset(ZoneOffset.UTC));
+        item.put("createdAt", event.getCreatedAt().atOffset(ZoneOffset.UTC));
+        item.put("updatedAt", event.getUpdatedAt().atOffset(ZoneOffset.UTC));
+        return item;
+    }
+
+    private Map<String, Object> readEventLogMetadata(AnimalEventLog event) {
+        return switch (event.getEventCategory()) {
+            case GENERAL -> animalEventMapper.readMetadataJson(event.getMetadataJson());
+            case HEALTH -> animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
+            case REPRODUCTION -> animalReproductionEventMapper.readMetadataJson(event.getMetadataJson());
+        };
     }
 
     private <T> PullSyncResponse buildPullResponse(

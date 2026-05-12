@@ -1,12 +1,15 @@
 package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -26,6 +29,7 @@ import java.util.UUID;
 public class AnimalReproductionEventService {
 
     private final AnimalReproductionEventRepository animalReproductionEventRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final AnimalRepository animalRepository;
     private final AnimalReproductionEventMapper animalReproductionEventMapper;
     private final UserRepository userRepository;
@@ -33,11 +37,13 @@ public class AnimalReproductionEventService {
 
     public AnimalReproductionEventService(
             AnimalReproductionEventRepository animalReproductionEventRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             AnimalReproductionEventMapper animalReproductionEventMapper,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository) {
         this.animalReproductionEventRepository = animalReproductionEventRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.animalReproductionEventMapper = animalReproductionEventMapper;
         this.userRepository = userRepository;
@@ -51,9 +57,9 @@ public class AnimalReproductionEventService {
 
     @Transactional
     public AnimalReproductionEvent create(AnimalReproductionEventRequest request, UUID authenticatedUserId) {
-        AnimalReproductionEvent existing = animalReproductionEventRepository.findByOperationId(request.operationId()).orElse(null);
-        if (existing != null) {
-            return existing;
+        AnimalEventLog existingLog = animalEventLogRepository.findByOperationId(request.operationId()).orElse(null);
+        if (existingLog != null) {
+            return animalReproductionEventMapper.toAnimalReproductionEvent(existingLog);
         }
 
         Animal animal = animalRepository.findByUuid(request.animalUuid())
@@ -71,10 +77,10 @@ public class AnimalReproductionEventService {
             projectBirth(request.metadata());
         }
 
-        AnimalReproductionEvent event = animalReproductionEventMapper.toEntity(animal, request, effectivePerformedByUserId);
-        animalReproductionEventRepository.persist(event);
-        animalReproductionEventRepository.flush();
-        return event;
+        AnimalEventLog eventLog = animalReproductionEventMapper.toAnimalEventLog(animal, request, effectivePerformedByUserId);
+        animalEventLogRepository.persist(eventLog);
+        animalEventLogRepository.flush();
+        return animalReproductionEventMapper.toAnimalReproductionEvent(eventLog);
     }
 
     public List<AnimalReproductionEventResponse> list(
@@ -82,15 +88,37 @@ public class AnimalReproductionEventService {
             AnimalReproductionEventType reproductionEventType,
             OffsetDateTime occurredFrom,
             OffsetDateTime occurredTo) {
-        return animalReproductionEventRepository
-                .listHistory(
+        return animalEventLogRepository
+                .listReproductionHistory(
                         animalUuid,
                         reproductionEventType,
                         occurredFrom == null ? null : occurredFrom.toLocalDateTime(),
                         occurredTo == null ? null : occurredTo.toLocalDateTime())
                 .stream()
-                .map(animalReproductionEventMapper::toResponse)
-                .toList();
+                .map(animalReproductionEventMapper::toAnimalReproductionEvent)
+                .collect(java.util.stream.Collectors.collectingAndThen(
+                        java.util.stream.Collectors.toCollection(java.util.ArrayList::new),
+                        unifiedEvents -> {
+                            unifiedEvents.addAll(animalReproductionEventRepository.listHistory(
+                                    animalUuid,
+                                    reproductionEventType,
+                                    occurredFrom == null ? null : occurredFrom.toLocalDateTime(),
+                                    occurredTo == null ? null : occurredTo.toLocalDateTime()));
+                            return unifiedEvents.stream()
+                                    .collect(java.util.stream.Collectors.toMap(
+                                            AnimalReproductionEvent::getOperationId,
+                                            event -> event,
+                                            (left, right) -> left,
+                                            java.util.LinkedHashMap::new))
+                                    .values()
+                                    .stream()
+                                    .sorted(java.util.Comparator.comparing(AnimalReproductionEvent::getOccurredAt)
+                                            .thenComparing(AnimalReproductionEvent::getClientCreatedAt)
+                                            .thenComparing(AnimalReproductionEvent::getOperationId)
+                                            .reversed())
+                                    .map(animalReproductionEventMapper::toResponse)
+                                    .toList();
+                        }));
     }
 
     public Map<String, Object> toPullItem(AnimalReproductionEvent event) {
@@ -204,7 +232,9 @@ public class AnimalReproductionEventService {
             return;
         }
 
-        AnimalReproductionEvent serviceEvent = animalReproductionEventRepository.findByEventIdOrOperationId(serviceEventUuid)
+        AnimalReproductionEvent serviceEvent = animalEventLogRepository.findByEventIdOrOperationId(AnimalEventCategory.REPRODUCTION, serviceEventUuid)
+                .map(animalReproductionEventMapper::toAnimalReproductionEvent)
+                .or(() -> animalReproductionEventRepository.findByEventIdOrOperationId(serviceEventUuid))
                 .orElseThrow(() -> new BusinessException(
                         "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_NOT_FOUND",
                         "No encontramos el servicio reproductivo asociado al diagnóstico.",

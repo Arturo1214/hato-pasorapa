@@ -21,6 +21,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
@@ -73,6 +74,9 @@ class SyncServiceTest {
 
     @Inject
     AnimalRepository animalRepository;
+
+    @Inject
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     AnimalEventRepository animalEventRepository;
@@ -262,8 +266,58 @@ class SyncServiceTest {
 
         assertEquals("no_conflict", firstResponse.results().getFirst().classification());
         assertEquals("no_conflict", replayResponse.results().getFirst().classification());
-        assertEquals(1, animalEventRepository.count());
+        assertEquals(1, animalEventLogRepository.count());
+        assertEquals(0, animalEventRepository.count());
         assertEquals(targetOwnerId, projected.getOwnerGanadero().getId());
+    }
+
+    @Test
+    void shouldKeepDuplicatePayloadOperationIdGlobalAcrossEventCategories() {
+        UUID animalUuid = UUID.fromString("01020304-0506-4708-890a-0b0c0d0e0f10");
+        UUID payloadOperationId = UUID.fromString("11121314-1516-4718-991a-1b1c1d1e1f10");
+        UUID generalSyncOperationId = UUID.fromString("21222324-2526-4728-892a-2b2c2d2e2f10");
+        UUID healthSyncOperationId = UUID.fromString("31323334-3536-4738-893a-3b3c3d3e3f10");
+        UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
+        seedAnimal(animalUuid, "BO-EVENT-LOG-IDEMP", 0L, LocalDateTime.of(2026, 5, 11, 10, 0));
+
+        PushSyncResponse response = syncService.push(new PushSyncRequest(List.of(
+                new SyncOperationRequest(
+                        generalSyncOperationId,
+                        SyncEntityType.ANIMAL_EVENT,
+                        generalSyncOperationId.toString(),
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalUuid.toString(),
+                                "type", "OBSERVATION",
+                                "occurredAt", "2026-05-11T10:05:00Z",
+                                "notes", "Observación offline",
+                                "performedByUserId", actorId.toString(),
+                                "sourceChannel", "OFFLINE",
+                                "operationId", payloadOperationId.toString(),
+                                "metadata", Map.of("reasonCode", "GENERAL_NOTE")),
+                        0,
+                        OffsetDateTime.parse("2026-05-11T10:05:00Z"),
+                        OffsetDateTime.parse("2026-05-11T10:05:00Z")),
+                new SyncOperationRequest(
+                        healthSyncOperationId,
+                        SyncEntityType.ANIMAL_HEALTH_EVENT,
+                        healthSyncOperationId.toString(),
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalUuid.toString(),
+                                "healthEventType", "VACCINATION",
+                                "occurredAt", "2026-05-11T10:06:00Z",
+                                "notes", "Vacuna replay",
+                                "performedByUserId", actorId.toString(),
+                                "sourceChannel", "OFFLINE",
+                                "operationId", payloadOperationId.toString(),
+                                "metadata", Map.of("productName", "Brucelosis")),
+                        0,
+                        OffsetDateTime.parse("2026-05-11T10:06:00Z"),
+                        OffsetDateTime.parse("2026-05-11T10:06:00Z")))), actorId);
+
+        assertEquals(List.of("no_conflict", "no_conflict"), response.results().stream().map(result -> result.classification()).toList());
+        assertEquals(1, animalEventLogRepository.count("operationId", payloadOperationId));
     }
 
     @Test
@@ -846,6 +900,7 @@ class SyncServiceTest {
         UUID calfUuid = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         UUID operationId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
         UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
+        seedUser(actorId, "repro-sync-admin", "repro-sync-admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
         seedAnimal(motherUuid, "BO-REPRO-1", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
         seedAnimal(calfUuid, "BO-CALF-1", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
 
@@ -874,15 +929,17 @@ class SyncServiceTest {
         PushSyncResponse firstResponse = syncService.push(request, actorId);
         PushSyncResponse replayResponse = syncService.push(request, actorId);
         PullSyncResponse pullResponse = syncService.pull(
-                SyncEntityType.ANIMAL_REPRODUCTION_EVENT,
+                SyncEntityType.ANIMAL_EVENT_LOG,
                 OffsetDateTime.of(2026, 4, 26, 10, 0, 0, 0, ZoneOffset.UTC),
                 "00000000-0000-0000-0000-000000000001");
         Animal calf = QuarkusTransaction.requiringNew().call(() -> animalRepository.findByUuid(calfUuid).orElseThrow());
 
         assertEquals("no_conflict", firstResponse.results().getFirst().classification());
         assertEquals("no_conflict", replayResponse.results().getFirst().classification());
-        assertEquals(1, animalReproductionEventRepository.count());
-        assertEquals("BIRTH", pullResponse.items().getFirst().get("reproductionEventType"));
+        assertEquals(1, animalEventLogRepository.count());
+        assertEquals(0, animalReproductionEventRepository.count());
+        assertEquals("BIRTH", pullResponse.items().getFirst().get("eventType"));
+        assertEquals("REPRODUCTION", pullResponse.items().getFirst().get("eventCategory"));
         assertEquals(motherUuid, calf.getMotherAnimalUuid());
     }
 

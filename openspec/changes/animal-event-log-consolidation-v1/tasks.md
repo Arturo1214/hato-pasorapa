@@ -64,35 +64,35 @@ Chain strategy: stacked-to-main
 ## Phase 2: General + Reproduction Services + Sync Mapper (PR 2)
 
 ### 2.1 Category Mapper — GENERAL (TDD RED first)
-- [ ] 2.1.1 Write failing `AnimalEventMapperTest`: `toAnimalEventLog(entity) → eventCategory=GENERAL, eventType=SOLD/DECEASED/LOST/TRANSFERRED/OBSERVATION`
-- [ ] 2.1.2 Write failing test: invalid category-type pair `GENERAL + VACCINATION` throws `IllegalArgumentException`
-- [ ] 2.1.3 Implement `AnimalEventMapper` mapping general events to unified log; reject cross-category types
-- [ ] 2.1.4 Write failing test: `toAnimalEventDto(log) → general event DTO with audit fields preserved`
-- [ ] 2.1.5 Implement `toAnimalEventDto` from `AnimalEventLog` for `GENERAL` rows
+- [x] 2.1.1 Write failing `AnimalEventMapperTest`: `toAnimalEventLog(entity) → eventCategory=GENERAL, eventType=SOLD/DECEASED/LOST/TRANSFERRED/OBSERVATION`
+- [x] 2.1.2 Write failing test: invalid category-type pair `GENERAL + VACCINATION` throws `IllegalArgumentException`
+- [x] 2.1.3 Implement `AnimalEventMapper` mapping general events to unified log; reject cross-category types
+- [x] 2.1.4 Write failing test: `toAnimalEventDto(log) → general event DTO with audit fields preserved`
+- [x] 2.1.5 Implement `toAnimalEventDto` from `AnimalEventLog` for `GENERAL` rows
 
 ### 2.2 Category Mapper — REPRODUCTION (TDD RED first)
-- [ ] 2.2.1 Write failing `AnimalReproductionEventMapperTest`: `toAnimalEventLog(entity) → eventCategory=REPRODUCTION, eventType=SERVICE/PREGNANCY_CONFIRMED/PREGNANCY_LOSS/BIRTH`
-- [ ] 2.2.2 Write failing test: invalid category-type pair `REPRODUCTION + SOLD` throws `IllegalArgumentException`
-- [ ] 2.2.3 Implement `AnimalReproductionEventMapper` mapping reproduction events to unified log
-- [ ] 2.2.4 Write failing test: `toAnimalReproductionEventDto(log) → reproduction metadata schema unchanged`
-- [ ] 2.2.5 Implement `toAnimalReproductionEventDto` from `AnimalEventLog` for `REPRODUCTION` rows
+- [x] 2.2.1 Write failing `AnimalReproductionEventMapperTest`: `toAnimalEventLog(entity) → eventCategory=REPRODUCTION, eventType=SERVICE/PREGNANCY_CONFIRMED/PREGNANCY_LOSS/BIRTH`
+- [x] 2.2.2 Write failing test: invalid category-type pair `REPRODUCTION + SOLD` throws `IllegalArgumentException`
+- [x] 2.2.3 Implement `AnimalReproductionEventMapper` mapping reproduction events to unified log
+- [x] 2.2.4 Write failing test: `toAnimalReproductionEventDto(log) → reproduction metadata schema unchanged`
+- [x] 2.2.5 Implement `toAnimalReproductionEventDto` from `AnimalEventLog` for `REPRODUCTION` rows
 
 ### 2.3 Service Updates — General & Reproduction
-- [ ] 2.3.1 Update `AnimalEventService` write path: persist via `AnimalEventLogRepository`, delegate to `AnimalEventMapper`
-- [ ] 2.3.2 Update `AnimalEventService` read path: query unified log, map via `toAnimalEventDto`
-- [ ] 2.3.3 Update `AnimalReproductionEventService` write path: persist via `AnimalEventLogRepository`, delegate to `AnimalReproductionEventMapper`
-- [ ] 2.3.4 Update `AnimalReproductionEventService` read path: query unified log, map via `toAnimalReproductionEventDto`
+- [x] 2.3.1 Update `AnimalEventService` write path: persist via `AnimalEventLogRepository`, delegate to `AnimalEventMapper`
+- [x] 2.3.2 Update `AnimalEventService` read path: query unified log, map via `toAnimalEventDto`
+- [x] 2.3.3 Update `AnimalReproductionEventService` write path: persist via `AnimalEventLogRepository`, delegate to `AnimalReproductionEventMapper`
+- [x] 2.3.4 Update `AnimalReproductionEventService` read path: query unified log, map via `toAnimalReproductionEventDto`
 
 ### 2.4 Sync Mapper Update
-- [ ] 2.4.1 Add `SyncEntityType.ANIMAL_EVENT_LOG` to `SyncEntityType.java`
-- [ ] 2.4.2 Modify `SyncPayloadMapper` to accept legacy `ANIMAL_EVENT`, `ANIMAL_HEALTH_EVENT`, `ANIMAL_REPRODUCTION_EVENT` payloads and map to unified `ANIMAL_EVENT_LOG` canonical form
-- [ ] 2.4.3 Write failing `SyncPayloadMapperTest`: legacy health payload maps to `eventCategory=HEALTH` with idempotency via `operationId`
-- [ ] 2.4.4 Write failing test: duplicate `operationId` across categories does not create duplicate rows (idempotency)
-- [ ] 2.4.5 Update `SyncService` push/push to read/write `ANIMAL_EVENT_LOG` canonical type
+- [x] 2.4.1 Add `SyncEntityType.ANIMAL_EVENT_LOG` to `SyncEntityType.java`
+- [x] 2.4.2 Modify `SyncPayloadMapper` to accept legacy `ANIMAL_EVENT`, `ANIMAL_HEALTH_EVENT`, `ANIMAL_REPRODUCTION_EVENT` payloads and map to unified `ANIMAL_EVENT_LOG` canonical form
+- [x] 2.4.3 Write failing `SyncPayloadMapperTest`: legacy health payload maps to `eventCategory=HEALTH` with idempotency via `operationId`
+- [x] 2.4.4 Write failing test: duplicate `operationId` across categories does not create duplicate rows (idempotency)
+- [x] 2.4.5 Update `SyncService` push/push to read/write `ANIMAL_EVENT_LOG` canonical type
 
 ### 2.5 Compatibility Cleanup Prep
-- [ ] 2.5.1 Remove dual-write path: `AnimalEventService`, `AnimalReproductionEventService` now only write to unified log (compatibility view remains for reads only during transition)
-- [ ] 2.5.2 Verify: `./mvnw test -Dquarkus.profile=test` — all event category tests pass
+- [x] 2.5.1 Remove dual-write path: `AnimalEventService`, `AnimalReproductionEventService` now only write to unified log (compatibility view remains for reads only during transition)
+- [x] 2.5.2 Verify: `./mvnw test -Dquarkus.profile=test` — all event category tests pass
 
 ---
 

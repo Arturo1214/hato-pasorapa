@@ -2,6 +2,8 @@ package bo.pasorapa.hato.service.mapper;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventResponse;
@@ -59,6 +61,75 @@ public class AnimalEventMapper {
         event.setOperationId(request.operationId());
         event.setMetadataJson(writeMetadataJson(request.metadata()));
         return event;
+    }
+
+    public AnimalEventLog toAnimalEventLog(AnimalEvent event) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setEventId(event.getEventId());
+        log.setAnimal(event.getAnimal());
+        log.setEventCategory(AnimalEventCategory.GENERAL);
+        log.setEventType(validateGeneralEventType(event.getType().name()).name());
+        log.setOccurredAt(event.getOccurredAt());
+        log.setClientCreatedAt(event.getClientCreatedAt());
+        log.setNotes(event.getNotes());
+        log.setPerformedByUserId(event.getPerformedByUserId());
+        log.setSourceChannel(event.getSourceChannel());
+        log.setOperationId(event.getOperationId());
+        log.setMetadataJson(event.getMetadataJson());
+        log.setCreatedAt(event.getCreatedAt());
+        log.setUpdatedAt(event.getUpdatedAt());
+        return log;
+    }
+
+    public AnimalEventLog toAnimalEventLog(Animal animal, AnimalEventRequest request, UUID effectivePerformedByUserId) {
+        AnimalEventLog log = new AnimalEventLog();
+        log.setAnimal(animal);
+        log.setEventCategory(AnimalEventCategory.GENERAL);
+        log.setEventType(validateGeneralEventType(request.type().name()).name());
+        log.setOccurredAt(request.occurredAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setClientCreatedAt(request.clientCreatedAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime());
+        log.setNotes(readOptionalText(request.notes()));
+        log.setPerformedByUserId(effectivePerformedByUserId);
+        log.setSourceChannel(normalizeSourceChannel(request.sourceChannel()));
+        log.setOperationId(request.operationId());
+        log.setMetadataJson(writeMetadataJson(request.metadata()));
+        return log;
+    }
+
+    public AnimalEvent toAnimalEvent(AnimalEventLog log) {
+        if (log.getEventCategory() != AnimalEventCategory.GENERAL) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_CATEGORY_INVALID_FOR_GENERAL");
+        }
+        AnimalEvent event = new AnimalEvent();
+        event.setEventId(log.getEventId());
+        event.setAnimal(log.getAnimal());
+        event.setType(validateGeneralEventType(log.getEventType()));
+        event.setOccurredAt(log.getOccurredAt());
+        event.setClientCreatedAt(log.getClientCreatedAt());
+        event.setNotes(log.getNotes());
+        event.setPerformedByUserId(log.getPerformedByUserId());
+        event.setSourceChannel(log.getSourceChannel());
+        event.setOperationId(log.getOperationId());
+        event.setMetadataJson(log.getMetadataJson());
+        event.setCreatedAt(log.getCreatedAt());
+        event.setUpdatedAt(log.getUpdatedAt());
+        return event;
+    }
+
+    public AnimalEventResponse toAnimalEventDto(AnimalEventLog log) {
+        return toResponse(toAnimalEvent(log));
+    }
+
+    public AnimalEventType validateGeneralEventType(String eventType) {
+        try {
+            AnimalEventType parsed = AnimalEventType.valueOf(eventType);
+            if (parsed == AnimalEventType.CASTRATION) {
+                throw new IllegalArgumentException("ANIMAL_EVENT_LOG_GENERAL_TYPE_INVALID");
+            }
+            return parsed;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("ANIMAL_EVENT_LOG_GENERAL_TYPE_INVALID");
+        }
     }
 
     public AnimalEventResponse toResponse(AnimalEvent event) {
@@ -121,7 +192,7 @@ public class AnimalEventMapper {
         }
     }
 
-    private String writeMetadataJson(Map<String, Object> metadata) {
+    public String writeMetadataJson(Map<String, Object> metadata) {
         try {
             return objectMapper.writeValueAsString(metadata);
         } catch (Exception exception) {

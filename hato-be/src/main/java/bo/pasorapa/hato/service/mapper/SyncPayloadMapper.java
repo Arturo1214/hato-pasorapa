@@ -18,6 +18,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,6 +36,7 @@ public class SyncPayloadMapper {
             Map.entry(SyncEntityType.LOT_ASSIGNMENT, Set.of(SyncOperationType.CREATE, SyncOperationType.UPDATE)),
             Map.entry(SyncEntityType.PRODUCTIVITY_LEDGER, Set.of(SyncOperationType.CREATE, SyncOperationType.UPDATE)),
             Map.entry(SyncEntityType.COST_LEDGER, Set.of(SyncOperationType.CREATE, SyncOperationType.UPDATE)),
+            Map.entry(SyncEntityType.ANIMAL_EVENT_LOG, Set.of(SyncOperationType.CREATE)),
             Map.entry(SyncEntityType.ANIMAL_EVENT, Set.of(SyncOperationType.CREATE)),
             Map.entry(SyncEntityType.ANIMAL_HEALTH_EVENT, Set.of(SyncOperationType.CREATE)),
             Map.entry(SyncEntityType.ANIMAL_REPRODUCTION_EVENT, Set.of(SyncOperationType.CREATE)),
@@ -80,6 +82,9 @@ public class SyncPayloadMapper {
             policyEntry(SyncEntityType.COST_LEDGER, SyncOperationType.UPDATE,
                     actions(ManualResolutionAction.ACCEPT_SERVER, ManualResolutionAction.RETRY_LOCAL, ManualResolutionAction.DISCARD_LOCAL),
                     "La identidad de costo es estable; sólo persiste la versión más nueva del ledger."),
+            policyEntry(SyncEntityType.ANIMAL_EVENT_LOG, SyncOperationType.CREATE,
+                    actions(ManualResolutionAction.RETRY_LOCAL, ManualResolutionAction.DISCARD_LOCAL),
+                    "El ledger unificado conserva idempotencia global por operationId; reintentá el payload original o descartalo."),
             policyEntry(SyncEntityType.ANIMAL_EVENT, SyncOperationType.CREATE,
                     actions(ManualResolutionAction.RETRY_LOCAL, ManualResolutionAction.DISCARD_LOCAL),
                     "Los eventos operativos se resuelven reintentando el payload original o descartándolo."),
@@ -250,6 +255,44 @@ public class SyncPayloadMapper {
             Map<String, Object> payload,
             java.time.OffsetDateTime clientCreatedAt) {
         return animalReproductionEventMapper.toRequest(payload, clientCreatedAt);
+    }
+
+    public Map<String, Object> toAnimalEventLogPayload(SyncEntityType sourceEntityType, Map<String, Object> payload) {
+        String eventCategory = switch (sourceEntityType) {
+            case ANIMAL_EVENT_LOG -> requireText(payload.get("eventCategory"), "ANIMAL_EVENT_LOG_CATEGORY_REQUIRED").toUpperCase();
+            case ANIMAL_EVENT -> "GENERAL";
+            case ANIMAL_HEALTH_EVENT -> "HEALTH";
+            case ANIMAL_REPRODUCTION_EVENT -> "REPRODUCTION";
+            default -> throw new IllegalArgumentException("ANIMAL_EVENT_LOG_SOURCE_ENTITY_INVALID");
+        };
+        String eventType = switch (eventCategory) {
+            case "GENERAL" -> requireText(payload.get("eventType") != null ? payload.get("eventType") : payload.get("type"), "ANIMAL_EVENT_TYPE_REQUIRED");
+            case "HEALTH" -> requireText(payload.get("eventType") != null ? payload.get("eventType") : payload.get("healthEventType"), "ANIMAL_HEALTH_EVENT_TYPE_REQUIRED");
+            case "REPRODUCTION" -> requireText(payload.get("eventType") != null ? payload.get("eventType") : payload.get("reproductionEventType"), "ANIMAL_REPRODUCTION_EVENT_TYPE_REQUIRED");
+            default -> throw new IllegalArgumentException("ANIMAL_EVENT_LOG_CATEGORY_INVALID");
+        };
+
+        Map<String, Object> canonical = new LinkedHashMap<>();
+        canonical.put("entityType", SyncEntityType.ANIMAL_EVENT_LOG.name());
+        canonical.put("animalUuid", payload.get("animalUuid"));
+        canonical.put("eventCategory", eventCategory);
+        canonical.put("eventType", eventType);
+        switch (eventCategory) {
+            case "GENERAL" -> canonical.put("type", eventType);
+            case "HEALTH" -> canonical.put("healthEventType", eventType);
+            case "REPRODUCTION" -> canonical.put("reproductionEventType", eventType);
+            default -> throw new IllegalArgumentException("ANIMAL_EVENT_LOG_CATEGORY_INVALID");
+        }
+        canonical.put("occurredAt", payload.get("occurredAt"));
+        canonical.put("notes", payload.get("notes"));
+        canonical.put("performedByUserId", payload.get("performedByUserId"));
+        canonical.put("sourceChannel", payload.get("sourceChannel"));
+        canonical.put("operationId", payload.get("operationId"));
+        canonical.put("metadata", payload.get("metadata") == null ? Map.of() : payload.get("metadata"));
+        if (payload.get("clientCreatedAt") != null) {
+            canonical.put("clientCreatedAt", payload.get("clientCreatedAt"));
+        }
+        return canonical;
     }
 
     public AnimalImageRequest toAnimalImageRequest(Map<String, Object> payload, java.time.OffsetDateTime clientCreatedAt) {

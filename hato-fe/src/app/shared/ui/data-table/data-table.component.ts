@@ -316,7 +316,7 @@ export class DataTableComponent {
   private readonly paginator = viewChild(MatPaginator);
   private readonly sort = viewChild(MatSort);
   readonly filters = input<Record<string, string>>({});
-  readonly dataSource = new MatTableDataSource<DataTableRow>([]);
+  dataSource = this.createDataSource([]);
 
   readonly displayedColumns = computed(() => {
     const keys = this.columns().map((column) => column.key);
@@ -324,25 +324,13 @@ export class DataTableComponent {
   });
 
   constructor() {
-    this.dataSource.filterPredicate = (row, serializedFilters) => {
-      const filters = JSON.parse(serializedFilters || '{}') as Record<string, string>;
-
-      return this.columns().every((column) => {
-        const filterValue = filters[column.key]?.trim().toLowerCase();
-        if (!filterValue) {
-          return true;
-        }
-
-        const rawValue = (row as Record<string, unknown>)[column.key];
-        return (
-          this.displayValue(row, column).toLowerCase().includes(filterValue) ||
-          String(rawValue ?? '').toLowerCase().includes(filterValue)
-        );
-      });
-    };
-
     effect(() => {
-      this.dataSource.data = [...this.data()];
+      const nextDataSource = this.createDataSource([...this.data()]);
+      nextDataSource.paginator = this.paginator() ?? null;
+      nextDataSource.sort = this.sort() ?? null;
+      nextDataSource.filter = JSON.stringify(this.filters());
+      nextDataSource.paginator?.firstPage();
+      this.dataSource = nextDataSource;
     });
 
     effect(() => {
@@ -404,6 +392,27 @@ export class DataTableComponent {
 
   handlePage(event: PageEvent) {
     this.pageChange.emit(event);
+  }
+
+  private createDataSource(data: DataTableRow[]) {
+    const dataSource = new MatTableDataSource<DataTableRow>(data);
+    dataSource.filterPredicate = (row, serializedFilters) => {
+      const filters = JSON.parse(serializedFilters || '{}') as Record<string, string>;
+
+      return this.columns().every((column) => {
+        const filterValue = filters[column.key]?.trim().toLowerCase();
+        if (!filterValue) {
+          return true;
+        }
+
+        const rawValue = (row as Record<string, unknown>)[column.key];
+        return (
+          this.displayValue(row, column).toLowerCase().includes(filterValue) ||
+          String(rawValue ?? '').toLowerCase().includes(filterValue)
+        );
+      });
+    };
+    return dataSource;
   }
 }
 

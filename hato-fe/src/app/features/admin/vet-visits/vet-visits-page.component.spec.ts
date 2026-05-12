@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { VetVisitsPageComponent } from './vet-visits-page.component';
@@ -8,6 +9,7 @@ import { AnimalsHealthEventsService } from '../animals/data-access/animals-healt
 import { VetVisitCancelDialogComponent } from './vet-visit-cancel-dialog.component';
 import { VetVisitDetailDialogComponent } from './vet-visit-detail-dialog.component';
 import { VetVisitFormDialogComponent, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
+import { DataTableComponent } from '../../../shared/ui/data-table/data-table.component';
 
 describe('VetVisitsPageComponent', () => {
   const visits: VetVisitItem[] = [
@@ -410,6 +412,27 @@ describe('VetVisitsPageComponent', () => {
       chainStatus: 'OPEN',
       nextControlAt: '2026-05-15T00:00:00.000Z',
     }));
+  });
+
+  it('should refresh the visible DataTable page immediately when attend reload returns different backend rows', async () => {
+    const { fixture, component } = await configure({
+      dialogResults: [attendResult],
+      listResponses: [visits, backendRowsAfterAttendWithFollowUp],
+    });
+    const dataTable = fixture.debugElement.query(By.directive(DataTableComponent)).componentInstance as DataTableComponent;
+    dataTable.dataSource.paginator!.pageSize = 2;
+    dataTable.dataSource.paginator!.pageIndex = 1;
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(dataTable.dataSource.paginator?.pageIndex).toBe(0);
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('VISIT-GLOBAL-CHILD-BACKEND');
+    expect(text).toContain('Atendida');
+    expect(text).not.toContain('0 de 5');
   });
 
   it('should expose only Ver on attended parents with an active follow-up and keep pending children actionable', async () => {

@@ -120,9 +120,42 @@ describe('VetVisitsPageComponent', () => {
     nextDueAt: null,
   };
 
-  const configure = async (options: { dialogResults?: unknown[]; dialogResult?: typeof newVisitResult } = {}) => {
+  const backendRowsAfterAttendWithFollowUp: VetVisitItem[] = [
+    {
+      visitId: 'VISIT-GLOBAL-CHILD-BACKEND',
+      mode: 'GLOBAL',
+      status: 'PENDING',
+      veterinarian: { name: 'Dra. Luna', license: 'MV-1' },
+      occurredAt: '2026-05-15T00:00:00.000Z',
+      nextControlAt: null,
+      parentVisitId: 'VISIT-GLOBAL',
+      cancelReason: null,
+      chainStatus: null,
+      animalUuid: null,
+      targetAnimalCount: 12,
+      atencionNotas: null,
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
+      findings: null,
+    },
+    {
+      ...visits[0],
+      status: 'ATTENDED',
+      chainStatus: 'OPEN',
+      nextControlAt: '2026-05-15T00:00:00.000Z',
+      atencionNotas: 'Aplicar antibiótico y observar evolución.',
+      findings: 'Animal estable con signos leves de infección.',
+    },
+    visits[1],
+    visits[2],
+    visits[3],
+  ];
+
+  const configure = async (options: { dialogResults?: unknown[]; dialogResult?: typeof newVisitResult; listResponses?: VetVisitItem[][] } = {}) => {
+    const listResponses = [...(options.listResponses ?? [visits])];
     const vetVisitsService = {
-      listVetVisits: vi.fn(() => of(visits)),
+      listVetVisits: vi.fn(() => of(listResponses.shift() ?? listResponses.at(-1) ?? visits)),
       getVetVisitChain: vi.fn((visitId: string) => of(visits.filter((visit) => visit.visitId === visitId || visit.parentVisitId === visitId))),
     };
     const dialogResults = [...(options.dialogResults ?? (options.dialogResult ? [options.dialogResult] : []))];
@@ -206,7 +239,7 @@ describe('VetVisitsPageComponent', () => {
     const canceledActions = component.visitActions.filter((action) => !action.visible || action.visible(visits[2]));
 
     expect(pendingActions.map((action) => action.label)).toEqual(['Ver', 'Atender', 'Cancelar']);
-    expect(attendedActions.map((action) => action.label)).toEqual(['Ver', 'Cancelar']);
+    expect(attendedActions.map((action) => action.label)).toEqual(['Ver']);
     expect(canceledActions.map((action) => action.label)).toEqual(['Ver']);
     expect(component.visitActions.map((action) => action.label)).not.toContain('Reprogramar');
     expect(component.visitColumns[3].filterOptions?.map((option) => option.label)).not.toContain('Reprogramada');
@@ -347,22 +380,46 @@ describe('VetVisitsPageComponent', () => {
         }),
       }),
     );
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual(['VISIT-GLOBAL', 'VISIT-SPECIFIC', 'VISIT-CANCELED', 'VISIT-CLOSED']);
+  });
+
+  it('should reload from backend after attend scheduling and replace optimistic follow-up rows', async () => {
+    const { component, vetVisitsService } = await configure({
+      dialogResults: [attendResult],
+      listResponses: [visits, backendRowsAfterAttendWithFollowUp],
+    });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+
+    expect(vetVisitsService.listVetVisits).toHaveBeenCalledTimes(2);
     expect(component.visitRows().map((visit) => visit.visitId)).toEqual([
+      'VISIT-GLOBAL-CHILD-BACKEND',
       'VISIT-GLOBAL',
-      expect.stringMatching(/^vet-follow-up-|^[0-9a-f-]{36}$/),
       'VISIT-SPECIFIC',
       'VISIT-CANCELED',
       'VISIT-CLOSED',
     ]);
-    expect(component.visitRows().filter((visit) => visit.visitId === 'VISIT-GLOBAL')).toEqual([
-      expect.objectContaining({ status: 'ATTENDED', statusLabel: 'Atendida' }),
-    ]);
-    expect(component.visitRows()[1]).toEqual(expect.objectContaining({
+    expect(component.visitRows()[0]).toEqual(expect.objectContaining({
       status: 'PENDING',
       statusLabel: 'Programada',
-      occurredAt: '2026-05-15T00:00:00.000Z',
-      nextControlAt: null,
+      parentVisitId: 'VISIT-GLOBAL',
     }));
+    expect(component.visitRows()[1]).toEqual(expect.objectContaining({
+      status: 'ATTENDED',
+      statusLabel: 'Atendida',
+      chainStatus: 'OPEN',
+      nextControlAt: '2026-05-15T00:00:00.000Z',
+    }));
+  });
+
+  it('should expose only Ver on attended parents with an active follow-up and keep pending children actionable', async () => {
+    const { component } = await configure({ listResponses: [backendRowsAfterAttendWithFollowUp] });
+
+    const pendingChildActions = component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[0]));
+    const attendedParentActions = component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[1]));
+
+    expect(pendingChildActions.map((action) => action.label)).toEqual(['Ver', 'Atender', 'Cancelar']);
+    expect(attendedParentActions.map((action) => action.label)).toEqual(['Ver']);
   });
 
   it('should create a finalized chain event when attend flow chooses finalize', async () => {

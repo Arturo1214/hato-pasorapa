@@ -81,3 +81,4 @@ Chain strategy: stacked-to-main
 - [ ] 4.4 Confirm no direct row `Finalizar` action exists anywhere in the feature
 - [ ] 4.5 Confirm "Finalizada" label in UI only appears as chain status (`CLOSED`), never as a row status dropdown option
 - [x] 4.6 Bugfix regression: GLOBAL list projection chooses attended/closed lifecycle rows over stale scheduled fan-out rows for the same `visitId`
+- [x] 4.7 Bugfix regression: FE attend flow reloads canonical backend rows after scheduling a follow-up and limits row actions to `Ver` for attended parents with active follow-up

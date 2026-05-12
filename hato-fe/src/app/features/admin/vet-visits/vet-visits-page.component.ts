@@ -254,23 +254,11 @@ export class VetVisitsPageComponent {
   private attendVisit(row: VetVisitRow, result: VetVisitDialogResult) {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
-    const closesChain = result.followUpChoice === 'finalize';
     const attendedStatus = 'ATTENDED';
-    const attendedVisit = toVetVisitItemFromRow(row, {
-      status: attendedStatus,
-      chainStatus: closesChain ? 'CLOSED' : 'OPEN',
-      nextControlAt: result.nextDueAt,
-      atencionNotas: result.notes,
-      findings: result.findings ?? null,
-      costo: result.cost?.amount ?? null,
-      costCurrency: result.cost?.currency ?? null,
-      treatmentPlan: result.treatmentPlan?.length ? result.treatmentPlan : null,
-    });
     const attendedInput = mapDialogResultToCreateInput({ ...result, visitId: row.visitId, status: attendedStatus, parentVisitId: row.parentVisitId });
 
     if (result.followUpChoice === 'schedule' && result.nextDueAt) {
       const followUpResult = buildFollowUpDialogResult(row, result);
-      const followUpVisit = toVetVisitItem(followUpResult);
       this.healthEventsService
         .createEvent(attendedInput)
         .pipe(
@@ -279,7 +267,7 @@ export class VetVisitsPageComponent {
         )
         .subscribe((feedback) => {
           this.feedbackMessage.set(feedback.message);
-          this.loadVisits(toBackendFilter(this.visitFilters()), [attendedVisit, followUpVisit]);
+          this.loadVisits(toBackendFilter(this.visitFilters()));
         });
       return;
     }
@@ -289,7 +277,7 @@ export class VetVisitsPageComponent {
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
-        this.loadVisits(toBackendFilter(this.visitFilters()), attendedVisit);
+        this.loadVisits(toBackendFilter(this.visitFilters()));
       });
   }
 }
@@ -434,7 +422,7 @@ function canAttend(row: VetVisitRow) {
 }
 
 function canCancel(row: VetVisitRow) {
-  return row.status !== 'CANCELED' && row.chainStatus !== 'CLOSED';
+  return row.status === 'PENDING' && row.chainStatus !== 'CLOSED';
 }
 
 function formatDateTime(value: unknown) {

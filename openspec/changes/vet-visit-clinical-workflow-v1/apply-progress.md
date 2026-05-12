@@ -3,7 +3,7 @@
 **Change**: vet-visit-clinical-workflow-v1
 **Mode**: Strict TDD
 **Artifact store**: hybrid
-**PR boundary**: PR 1 complete; PR 2 complete; PR 3 / Phase 3 `vet-visit-fe-detail` complete; Phase 4 bugfix regression applied for BE list projection.
+**PR boundary**: PR 1 complete; PR 2 complete; PR 3 / Phase 3 `vet-visit-fe-detail` complete; Phase 4 bugfix regressions applied for BE list projection and FE table refresh/action state.
 **Review strategy**: chained PR slice, `stacked-to-main`; PR 3 targets the PR 2 branch.
 
 ## Completed Tasks
@@ -42,6 +42,7 @@
 - [x] 3.10 Add page specs for `Ver` visibility, terminal guards, detail fetch/dialog open, and absent `Reprogramar`
 - [x] 3.11 Verify focused FE tests with Node 20.19.6
 - [x] 4.6 Fix BE vet visit list projection so grouped GLOBAL rows prefer the latest lifecycle state (`ATTENDED`/`CLOSED`) over stale scheduled fan-out rows for the same `visitId`
+- [x] 4.7 Fix FE attend flow so schedule-next actions reload and render canonical backend rows instead of merging local optimistic parent/child rows; attended parents with active follow-up now expose only `Ver`, while pending child rows remain `Ver`/`Atender`/`Cancelar`
 
 ## TDD Cycle Evidence
 
@@ -62,12 +63,13 @@
 | 3.9 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 44/44 baseline passing | ✅ Existing cancel spec asserts `protocol.status=CLOSED`; preserved while changing guards | ✅ 49/49 focused tests passed | ✅ Cancel row still writes cancelReason and closes protocol | ➖ No refactor needed |
 | 3.11 | Focused Angular command | Verification | ✅ 44/44 baseline passing | N/A | ✅ 49 tests passing | N/A | N/A |
 | 4.6 | `hato-be/src/test/java/bo/pasorapa/hato/service/AnimalHealthEventServiceTest.java` | Service integration | ✅ 41/41 focused BE baseline passing | ✅ Failed with `expected: <ATTENDED> but was: <PENDING>` | ✅ 42/42 focused BE tests passed | ✅ Global fan-out has stale future scheduled rows + later closed attended rows; status filter excludes stale `PENDING` and includes `ATTENDED` | ✅ Extracted lifecycle comparator and distinct-animal target count fallback |
+| 4.7 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 49/49 focused FE baseline passing | ✅ 3 failing assertions: attended active parent still showed `Cancelar`, and schedule-next merge inserted local follow-up beside backend rows | ✅ 51/51 focused FE tests passed | ✅ Backend child replacement + attended active parent actions + pending child actions | ✅ Removed unused optimistic attend-row projections; create flow keeps existing stale-list fallback |
 
 ## Test Summary
 - **Total tests written this PR3 slice**: 5
-- **Total tests written this PR3 slice**: 5; **Phase 4 bugfix regression tests**: 1
-- **Total focused FE tests passing**: 49; **Total focused BE tests passing after bugfix**: 42
-- **Layers used**: Angular component/page (4 new cases), Angular service unit (1 new case), BE service integration (1 regression)
+- **Total tests written this PR3 slice**: 5; **Phase 4 bugfix regression tests**: 3 (1 BE, 2 FE)
+- **Total focused FE tests passing**: 51; **Total focused BE tests passing after bugfix**: 42
+- **Layers used**: Angular component/page (6 new cases), Angular service unit (1 new case), BE service integration (1 regression)
 - **Approval tests**: None — behavior change, not pure refactor
 - **Pure functions created**: 2 (`normalizeVetVisitCollection`, `normalizeNestedClinicalFindings`)
 
@@ -79,6 +81,9 @@
 5. Phase 4 RED run: `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -Dtest=AnimalHealthEventServiceTest test` from `hato-be/` → ❌ expected failure: global projection returned stale `PENDING` instead of `ATTENDED`
 6. Phase 4 GREEN run: `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -Dtest=AnimalHealthEventServiceTest test` from `hato-be/` → ✅ 16 tests passing
 7. Phase 4 required focused BE run: `JAVA_HOME=$(/usr/libexec/java_home -v 21) ./mvnw -Dtest=AnimalHealthEventServiceTest,VetVisitResourceTest,AnimalHealthEventMapperTest test` from `hato-be/` → ✅ 42 tests passing
+8. Phase 4 FE safety net: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` from `hato-fe/` → ✅ 49 tests passing
+9. Phase 4 FE RED run: same command after regression specs → ❌ expected failures: attended active parent exposed `Cancelar`; schedule-next local merge inserted a generated follow-up row alongside backend rows
+10. Phase 4 FE GREEN run: same command → ✅ 51 tests passing
 
 ## Files Changed
 - `hato-fe/src/app/features/admin/vet-visits/vet-visit-detail-dialog.component.ts` — created read-only chain/history dialog for clinical details and linked child follow-ups.
@@ -89,6 +94,8 @@
 - `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — covered action visibility, terminal guards, detail fetch/dialog open, and removed `Reprogramar`/`RESCHEDULED` options.
 - `hato-be/src/main/java/bo/pasorapa/hato/service/AnimalHealthEventService.java` — added lifecycle-aware representative selection for grouped vet visits and chain-detail root resolution; target count fallback now counts distinct animals instead of rows.
 - `hato-be/src/test/java/bo/pasorapa/hato/service/AnimalHealthEventServiceTest.java` — added regression for GLOBAL fan-out rows where scheduled rows must not override later attended/closed lifecycle state.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` — attend flow now reloads canonical backend rows without optimistic local merge; cancel guard is restricted to pending rows.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — added FE regressions for backend-row replacement after scheduling follow-up and active-parent/pending-child action visibility.
 - `openspec/changes/vet-visit-clinical-workflow-v1/tasks.md` — marked Phase 3 complete with focused FE test command.
 - `openspec/changes/vet-visit-clinical-workflow-v1/apply-progress.md` — persisted cumulative apply progress through PR3.
 
@@ -97,6 +104,7 @@
 - `canAttend` blocks closed chains and only allows `PENDING`; pending rows with missing chain status remain attendable for legacy compatibility.
 - No direct row `Finalizar` or `Reprogramar` action remains in the page action list.
 - BE grouping now treats visit lifecycle rank as the representative selector before occurrence timestamp, so a scheduled future occurrence cannot mask an attended/closed append-only row with the same `visitId`.
+- FE attend/schedule-next no longer overlays local generated follow-up IDs onto a successful backend reload; this prevents stale action visibility when the API already returns the canonical parent/child chain.
 
 ## Remaining Tasks
-- Phase 4 full BE suite, full FE suite, and manual smoke remain pending for a later run; focused BE regression is complete.
+- Phase 4 full BE suite, full FE suite, and manual smoke remain pending for a later run; focused BE and FE regressions are complete.

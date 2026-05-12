@@ -445,7 +445,7 @@ public class AnimalHealthEventService {
         String visitId = animalHealthEventMapper.readVisitId(metadata);
         String visitStatus = normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(metadata));
         if (visitStatus != null) {
-            validateFieldVetVisitLifecycle(animalUuid, visitId, visitStatus);
+            validateFieldVetVisitLifecycle(animalUuid, visitId, readText(readVisit(metadata).get("parentVisitId")), visitStatus);
             return;
         }
 
@@ -500,7 +500,7 @@ public class AnimalHealthEventService {
         return expectedStatus.equals(animalHealthEventMapper.readFieldVetProtocolStatus(metadata));
     }
 
-    private void validateFieldVetVisitLifecycle(UUID animalUuid, String visitId, String nextStatus) {
+    private void validateFieldVetVisitLifecycle(UUID animalUuid, String visitId, String parentVisitId, String nextStatus) {
         List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByVisit(animalUuid, visitId, null, null);
         String currentStatus = timeline.stream()
                 .map(event -> normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(
@@ -510,6 +510,7 @@ public class AnimalHealthEventService {
                 .orElse(null);
 
         if (currentStatus == null) {
+            validateExistingFollowUpVisitIdIsReused(animalUuid, visitId, parentVisitId, nextStatus);
             return;
         }
         if (isTerminalVisitStatus(currentStatus)) {
@@ -522,6 +523,30 @@ public class AnimalHealthEventService {
             throw new BusinessException(
                     "ANIMAL_HEALTH_EVENT_VET_VISIT_INVALID_TRANSITION",
                     "La transición de estado de la visita veterinaria no es válida.",
+                    Response.Status.BAD_REQUEST);
+        }
+    }
+
+    private void validateExistingFollowUpVisitIdIsReused(UUID animalUuid, String visitId, String parentVisitId, String nextStatus) {
+        if (parentVisitId == null || !("ATENDIDA".equals(nextStatus) || "CANCELADA".equals(nextStatus))) {
+            return;
+        }
+
+        boolean hasDifferentPendingChildForParent = animalHealthEventRepository.findByParentVisitId(parentVisitId).stream()
+                .filter(event -> event.getAnimal() != null && animalUuid.equals(event.getAnimal().getUuid()))
+                .map(event -> animalHealthEventMapper.readMetadataJson(event.getMetadataJson()))
+                .map(this::readVisit)
+                .anyMatch(visit -> {
+                    String existingVisitId = readText(visit.get("visitId"));
+                    String existingStatus = normalizeVisitStatus(readText(visit.get("status")));
+                    return existingVisitId != null
+                            && !existingVisitId.equals(visitId)
+                            && "PROGRAMADA".equals(existingStatus);
+                });
+        if (hasDifferentPendingChildForParent) {
+            throw new BusinessException(
+                    "ANIMAL_HEALTH_EVENT_VET_FOLLOW_UP_VISIT_ID_MISMATCH",
+                    "La atención de seguimiento debe reutilizar el visitId de la visita programada seleccionada.",
                     Response.Status.BAD_REQUEST);
         }
     }

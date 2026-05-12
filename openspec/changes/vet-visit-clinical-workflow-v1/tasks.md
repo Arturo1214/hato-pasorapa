@@ -84,3 +84,6 @@ Chain strategy: stacked-to-main
 - [x] 4.7 Bugfix regression: FE attend flow reloads canonical backend rows after scheduling a follow-up and limits row actions to `Ver` for attended parents with active follow-up
 - [x] 4.8 Bugfix regression: shared DataTable replaces its Material data source and resets pagination when canonical backend rows change after attend reload
 - [x] 4.9 Bugfix regression: FE attended-now create path creates the pending child follow-up, reloads canonical backend rows before table update, and uses parent/child fallback only when the backend list is stale
+- [x] 4.10 Bugfix regression: attending/finalizing an existing pending follow-up reuses the selected child `visitId` and never trusts a dialog-generated sibling `visitId`
+- [x] 4.11 Backend guard: reject attended/canceled follow-up lifecycle events that create a new sibling `visitId` while a pending child exists for the same parent
+- [ ] 4.12 Scalability follow-up: replace JSON/CLOB in-memory vet visit grouping with a queryable read model or persisted visit lifecycle fields so `/api/vet-visits` can paginate after grouping without scanning all matching events

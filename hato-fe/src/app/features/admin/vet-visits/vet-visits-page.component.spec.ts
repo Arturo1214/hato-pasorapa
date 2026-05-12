@@ -214,6 +214,25 @@ describe('VetVisitsPageComponent', () => {
     visits[3],
   ];
 
+  const pendingGlobalFollowUp: VetVisitItem = {
+    visitId: 'VISIT-GLOBAL-CHILD-PENDING',
+    mode: 'GLOBAL',
+    status: 'PENDING',
+    veterinarian: { name: 'Dra. Luna', license: 'MV-1' },
+    occurredAt: '2026-05-15T00:00:00.000Z',
+    nextControlAt: null,
+    parentVisitId: 'VISIT-GLOBAL',
+    cancelReason: null,
+    chainStatus: null,
+    animalUuid: null,
+    targetAnimalCount: 12,
+    atencionNotas: null,
+    costo: null,
+    costCurrency: null,
+    treatmentPlan: null,
+    findings: null,
+  };
+
   const configure = async (options: { dialogResults?: unknown[]; dialogResult?: VetVisitDialogResult; listResponses?: VetVisitItem[][] } = {}) => {
     const listResponses = [...(options.listResponses ?? [visits])];
     const vetVisitsService = {
@@ -516,6 +535,55 @@ describe('VetVisitsPageComponent', () => {
         metadata: expect.objectContaining({
           visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'ATTENDED' }),
           protocol: expect.objectContaining({ status: 'CLOSED' }),
+        }),
+      }),
+    );
+  });
+
+  it('should finalize an existing pending follow-up by reusing the selected child visitId', async () => {
+    const dialogGeneratedResult: VetVisitDialogResult = {
+      ...finalizeAttendResult,
+      visitId: 'VISIT-DIALOG-GENERATED-SHOULD-NOT-BE-USED',
+      parentVisitId: null,
+    };
+    const { component, dialog, healthEventsService } = await configure({
+      dialogResults: [dialogGeneratedResult],
+      listResponses: [[pendingGlobalFollowUp, ...visits]],
+    });
+
+    component.handleRowAction({ actionId: 'attend', row: component.visitRows()[0] });
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      VetVisitFormDialogComponent,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'attend',
+          creationMode: 'attendedNow',
+          visitId: 'VISIT-GLOBAL-CHILD-PENDING',
+          parentVisitId: 'VISIT-GLOBAL',
+        }),
+      }),
+    );
+    expect(healthEventsService.createEvent).toHaveBeenCalledTimes(1);
+    expect(healthEventsService.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({
+            visitId: 'VISIT-GLOBAL-CHILD-PENDING',
+            parentVisitId: 'VISIT-GLOBAL',
+            status: 'ATTENDED',
+          }),
+          protocol: expect.objectContaining({ status: 'CLOSED' }),
+        }),
+      }),
+    );
+    expect(healthEventsService.createEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({
+            visitId: 'VISIT-DIALOG-GENERATED-SHOULD-NOT-BE-USED',
+            status: 'PENDING',
+          }),
         }),
       }),
     );

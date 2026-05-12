@@ -191,6 +191,7 @@ export class VetVisitsPageComponent {
         width: 'min(92vw, 960px)',
         data: {
           action: 'attend',
+          creationMode: 'attendedNow',
           visitId: row.visitId,
           status: 'ATTENDED',
           mode: row.mode,

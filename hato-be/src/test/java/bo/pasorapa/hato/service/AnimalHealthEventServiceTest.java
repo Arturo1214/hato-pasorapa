@@ -608,6 +608,36 @@ class AnimalHealthEventServiceTest {
         assertEquals("ANIMAL_HEALTH_EVENT_VET_VISIT_CLOSED", exception.code());
     }
 
+    @Test
+    void shouldRejectAttendingFollowUpWithNewSiblingVisitIdWhenPendingChildExists() {
+        UUID animalUuid = UUID.fromString("21e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-FOLLOW-UP-PARENT", "GLOBAL", "ATENDIDA", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(
+                animalUuid,
+                "VISIT-FOLLOW-UP-CHILD-PENDING",
+                "GLOBAL",
+                "PROGRAMADA",
+                "Dra. Camila",
+                1,
+                "2026-05-12T08:00:00",
+                null,
+                null,
+                "VISIT-FOLLOW-UP-PARENT",
+                null,
+                "STARTED");
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> animalHealthEventService.create(request(
+                animalUuid,
+                AnimalHealthEventType.FIELD_VET_VISIT,
+                UUID.fromString("77777777-7777-4777-8777-777777777777"),
+                "Finalización con sibling nuevo inválida",
+                fieldVetMetadata("VISIT-FOLLOW-UP-SIBLING-NEW", "ATENDIDA", null, "VISIT-FOLLOW-UP-PARENT", "CLOSED"),
+                "2026-05-12T09:00:00Z"), USER_ID));
+
+        assertEquals("ANIMAL_HEALTH_EVENT_VET_FOLLOW_UP_VISIT_ID_MISMATCH", exception.code());
+    }
+
     private AnimalHealthEventRequest request(
             UUID animalUuid,
             AnimalHealthEventType type,
@@ -632,19 +662,28 @@ class AnimalHealthEventServiceTest {
     }
 
     private Map<String, Object> fieldVetMetadata(String visitId, String status, String nextDueAt) {
+        return fieldVetMetadata(visitId, status, nextDueAt, null, toProtocolStatus(status));
+    }
+
+    private Map<String, Object> fieldVetMetadata(String visitId, String status, String nextDueAt, String parentVisitId, String protocolStatusValue) {
         LinkedHashMap<String, Object> protocol = new LinkedHashMap<>();
-        protocol.put("status", toProtocolStatus(status));
+        protocol.put("status", protocolStatusValue);
         if (nextDueAt != null) {
             protocol.put("nextDueAt", nextDueAt);
         }
 
+        LinkedHashMap<String, Object> visit = new LinkedHashMap<>();
+        visit.put("visitId", visitId);
+        visit.put("mode", "SPECIFIC");
+        visit.put("status", toVisitStatus(status));
+        visit.put("veterinarian", Map.of("name", "Dra. Salud"));
+        visit.put("atencionNotas", "Notas clínicas");
+        if (parentVisitId != null) {
+            visit.put("parentVisitId", parentVisitId);
+        }
+
         return Map.of(
-                "visit", Map.of(
-                        "visitId", visitId,
-                        "mode", "SPECIFIC",
-                        "status", toVisitStatus(status),
-                        "veterinarian", Map.of("name", "Dra. Salud"),
-                        "atencionNotas", "Notas clínicas"),
+                "visit", visit,
                 "checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true), Map.of("code", "APPETITE", "ok", false, "note", "Disminuido")),
                 "clinicalNote", Map.of("reason", "Control", "findings", "Leve fiebre", "plan", "Seguir tratamiento"),
                 "protocol", protocol);

@@ -3,7 +3,7 @@
 **Change**: vet-visit-clinical-workflow-v1
 **Mode**: Strict TDD
 **Artifact store**: hybrid
-**PR boundary**: PR 1 complete; PR 2 complete; PR 3 / Phase 3 `vet-visit-fe-detail` complete; Phase 4 bugfix regressions applied for BE list projection and FE table refresh/action state.
+**PR boundary**: PR 1 complete; PR 2 complete; PR 3 / Phase 3 `vet-visit-fe-detail` complete; Phase 4 bugfix regressions applied for BE list projection, FE table refresh/action state, and attended-now create follow-up creation.
 **Review strategy**: chained PR slice, `stacked-to-main`; PR 3 targets the PR 2 branch.
 
 ## Completed Tasks
@@ -44,6 +44,7 @@
 - [x] 4.6 Fix BE vet visit list projection so grouped GLOBAL rows prefer the latest lifecycle state (`ATTENDED`/`CLOSED`) over stale scheduled fan-out rows for the same `visitId`
 - [x] 4.7 Fix FE attend flow so schedule-next actions reload and render canonical backend rows instead of merging local optimistic parent/child rows; attended parents with active follow-up now expose only `Ver`, while pending child rows remain `Ver`/`Atender`/`Cancelar`
 - [x] 4.8 Fix shared DataTable refresh so canonical backend row changes replace the Material data source reference and reset pagination after attend reloads
+- [x] 4.9 Fix FE attended-now create flow so scheduling next control creates the pending child follow-up, reloads canonical backend rows before visible state updates, and uses parent/child fallback only when the backend list is stale
 
 ## TDD Cycle Evidence
 
@@ -66,11 +67,12 @@
 | 4.6 | `hato-be/src/test/java/bo/pasorapa/hato/service/AnimalHealthEventServiceTest.java` | Service integration | ✅ 41/41 focused BE baseline passing | ✅ Failed with `expected: <ATTENDED> but was: <PENDING>` | ✅ 42/42 focused BE tests passed | ✅ Global fan-out has stale future scheduled rows + later closed attended rows; status filter excludes stale `PENDING` and includes `ATTENDED` | ✅ Extracted lifecycle comparator and distinct-animal target count fallback |
 | 4.7 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 49/49 focused FE baseline passing | ✅ 3 failing assertions: attended active parent still showed `Cancelar`, and schedule-next merge inserted local follow-up beside backend rows | ✅ 51/51 focused FE tests passed | ✅ Backend child replacement + attended active parent actions + pending child actions | ✅ Removed unused optimistic attend-row projections; create flow keeps existing stale-list fallback |
 | 4.8 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page + shared table | ✅ 51/51 focused FE baseline passing | ✅ Failed because `app-data-table` kept the same `MatTableDataSource` reference after canonical rows changed | ✅ 52/52 focused vet-visits tests passed; ✅ 8/8 shared DataTable tests passed | ✅ Different backend row count/status after attend reload plus paginator reset from page 1 to page 0 | ✅ Extracted DataTable data-source factory and reattached filter/paginator/sort per row input refresh |
+| 4.9 | `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` | Angular component/page | ✅ 52/52 focused FE baseline passing | ✅ Failed with only 1 create call for attended-now schedule and stale reload missing child fallback | ✅ 55/55 focused FE tests passed | ✅ Backend canonical child replacement, stale-list parent/child fallback, and scheduled create canonical reload | ✅ Extracted reusable `reloadVisits$` and create-specific follow-up/fallback builders |
 
 ## Test Summary
-- **Total tests written this PR3 slice**: 5; **Phase 4 bugfix regression tests**: 4 (1 BE, 3 FE)
-- **Total focused FE tests passing**: 52; **Shared DataTable tests passing**: 8; **Total focused BE tests passing after bugfix**: 42
-- **Layers used**: Angular component/page (7 new cases), Angular service unit (1 new case), BE service integration (1 regression)
+- **Total tests written this PR3 slice**: 5; **Phase 4 bugfix regression tests**: 7 (1 BE, 6 FE)
+- **Total focused FE tests passing**: 55; **Shared DataTable tests passing**: 8; **Total focused BE tests passing after bugfix**: 42
+- **Layers used**: Angular component/page (10 new cases), Angular service unit (1 new case), BE service integration (1 regression)
 - **Approval tests**: None — behavior change, not pure refactor
 - **Pure functions created**: 2 (`normalizeVetVisitCollection`, `normalizeNestedClinicalFindings`)
 
@@ -89,6 +91,8 @@
 12. Phase 4 FE table-refresh RED run: same command after DOM/DataTable regression → ❌ expected failure: `MatTableDataSource` reference was reused after backend rows changed
 13. Phase 4 FE table-refresh GREEN run: same command → ✅ 52 tests passing
 14. Shared table regression guard: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/shared/ui/data-table --watch=false` from `hato-fe/` → ✅ 8 tests passing
+15. Phase 4 attended-now create RED run: `PATH="$HOME/.nvm/versions/node/v20.19.6/bin:$PATH" npm test -- --include src/app/features/admin/vet-visits --watch=false` from `hato-fe/` → ❌ expected failures: create path only wrote parent event and stale fallback lacked pending child
+16. Phase 4 attended-now create GREEN run: same command → ✅ 55 tests passing
 
 ## Files Changed
 - `hato-fe/src/app/features/admin/vet-visits/vet-visit-detail-dialog.component.ts` — created read-only chain/history dialog for clinical details and linked child follow-ups.
@@ -102,6 +106,8 @@
 - `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` — attend flow now reloads canonical backend rows without optimistic local merge; cancel guard is restricted to pending rows.
 - `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — added FE regressions for backend-row replacement after scheduling follow-up, active-parent/pending-child action visibility, and visible DataTable refresh after canonical backend rows change.
 - `hato-fe/src/app/shared/ui/data-table/data-table.component.ts` — DataTable now replaces `MatTableDataSource` when input rows change, reapplies filter/sort/paginator, and resets pagination to the first page.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.ts` — attended-now create with scheduled next control now creates parent + pending child, waits for canonical reload, and appends local parent/child only as stale-list fallback without duplicating backend children.
+- `hato-fe/src/app/features/admin/vet-visits/vet-visits-page.component.spec.ts` — added regressions for attended-now create child creation, stale-list fallback actionability, and scheduled create canonical reload.
 - `openspec/changes/vet-visit-clinical-workflow-v1/tasks.md` — marked Phase 3 complete with focused FE test command.
 - `openspec/changes/vet-visit-clinical-workflow-v1/apply-progress.md` — persisted cumulative apply progress through PR3.
 
@@ -112,6 +118,8 @@
 - BE grouping now treats visit lifecycle rank as the representative selector before occurrence timestamp, so a scheduled future occurrence cannot mask an attended/closed append-only row with the same `visitId`.
 - FE attend/schedule-next no longer overlays local generated follow-up IDs onto a successful backend reload; this prevents stale action visibility when the API already returns the canonical parent/child chain.
 - Shared DataTable previously mutated the existing `MatTableDataSource` in place; replacing the data source reference on row input changes gives Material table/paginator a fresh identity and prevents stale visible pages after action-triggered reloads.
+- Root cause for the recurring missing follow-up was path-level divergence: attended-now create reused the mapper to set the parent as `ATTENDED`/`FOLLOW_UP_REQUIRED`, but only the existing-row attend path performed the second `createEvent` for the child `PENDING` visit.
+- Create mutations now chain backend reload through `reloadVisits$`; visible rows update from canonical list first, with local saved parent/child rows only filling gaps when the list endpoint is stale.
 
 ## Remaining Tasks
 - Phase 4 full BE suite, full FE suite, and manual smoke remain pending for a later run; focused BE and FE regressions are complete.

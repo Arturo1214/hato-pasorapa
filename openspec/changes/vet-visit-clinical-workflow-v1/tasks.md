@@ -83,3 +83,4 @@ Chain strategy: stacked-to-main
 - [x] 4.6 Bugfix regression: GLOBAL list projection chooses attended/closed lifecycle rows over stale scheduled fan-out rows for the same `visitId`
 - [x] 4.7 Bugfix regression: FE attend flow reloads canonical backend rows after scheduling a follow-up and limits row actions to `Ver` for attended parents with active follow-up
 - [x] 4.8 Bugfix regression: shared DataTable replaces its Material data source and resets pagination when canonical backend rows change after attend reload
+- [x] 4.9 Bugfix regression: FE attended-now create path creates the pending child follow-up, reloads canonical backend rows before table update, and uses parent/child fallback only when the backend list is stale

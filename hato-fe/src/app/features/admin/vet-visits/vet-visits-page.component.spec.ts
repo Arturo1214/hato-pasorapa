@@ -122,6 +122,66 @@ describe('VetVisitsPageComponent', () => {
     nextDueAt: null,
   };
 
+  const attendedNowCreateResult: VetVisitDialogResult = {
+    ...newVisitResult,
+    mode: 'SPECIFIC',
+    creationMode: 'attendedNow',
+    animalUuid: 'animal-2',
+    visitId: 'VISIT-ATTENDED-NOW',
+    status: 'ATTENDED',
+    occurredAt: '2026-05-12T14:30:00.000Z',
+    nextDueAt: '2026-05-13T00:00:00.000Z',
+    notes: 'Tratamiento iniciado en corral.',
+    reason: 'Cojera leve',
+    veterinarianName: 'Dra. Seguimiento',
+    veterinarianLicense: 'MV-FOLLOW',
+    targetAnimalCount: null,
+    findings: 'Inflamación leve en pata posterior.',
+    cost: { amount: 90, currency: 'BOB' },
+    treatmentPlan: ['Antiinflamatorio', 'Reposo 24 horas'],
+    followUpChoice: 'schedule',
+  };
+
+  const backendRowsAfterAttendedNowCreate: VetVisitItem[] = [
+    {
+      visitId: 'VISIT-ATTENDED-NOW-CHILD-BACKEND',
+      mode: 'SPECIFIC',
+      status: 'PENDING',
+      veterinarian: { name: 'Dra. Seguimiento', license: 'MV-FOLLOW' },
+      occurredAt: '2026-05-13T00:00:00.000Z',
+      nextControlAt: null,
+      parentVisitId: 'VISIT-ATTENDED-NOW',
+      cancelReason: null,
+      chainStatus: null,
+      animalUuid: 'animal-2',
+      targetAnimalCount: null,
+      atencionNotas: null,
+      costo: null,
+      costCurrency: null,
+      treatmentPlan: null,
+      findings: null,
+    },
+    {
+      visitId: 'VISIT-ATTENDED-NOW',
+      mode: 'SPECIFIC',
+      status: 'ATTENDED',
+      veterinarian: { name: 'Dra. Seguimiento', license: 'MV-FOLLOW' },
+      occurredAt: '2026-05-12T14:30:00.000Z',
+      nextControlAt: '2026-05-13T00:00:00.000Z',
+      parentVisitId: null,
+      cancelReason: null,
+      chainStatus: 'OPEN',
+      animalUuid: 'animal-2',
+      targetAnimalCount: null,
+      atencionNotas: 'Tratamiento iniciado en corral.',
+      costo: 90,
+      costCurrency: 'BOB',
+      treatmentPlan: ['Antiinflamatorio', 'Reposo 24 horas'],
+      findings: 'Inflamación leve en pata posterior.',
+    },
+    ...visits,
+  ];
+
   const backendRowsAfterAttendWithFollowUp: VetVisitItem[] = [
     {
       visitId: 'VISIT-GLOBAL-CHILD-BACKEND',
@@ -154,7 +214,7 @@ describe('VetVisitsPageComponent', () => {
     visits[3],
   ];
 
-  const configure = async (options: { dialogResults?: unknown[]; dialogResult?: typeof newVisitResult; listResponses?: VetVisitItem[][] } = {}) => {
+  const configure = async (options: { dialogResults?: unknown[]; dialogResult?: VetVisitDialogResult; listResponses?: VetVisitItem[][] } = {}) => {
     const listResponses = [...(options.listResponses ?? [visits])];
     const vetVisitsService = {
       listVetVisits: vi.fn(() => of(listResponses.shift() ?? listResponses.at(-1) ?? visits)),
@@ -459,6 +519,84 @@ describe('VetVisitsPageComponent', () => {
         }),
       }),
     );
+  });
+
+  it('should create attended-now parent plus pending follow-up child when scheduling next control from create', async () => {
+    const { component, healthEventsService, vetVisitsService } = await configure({
+      dialogResult: attendedNowCreateResult,
+      listResponses: [visits, backendRowsAfterAttendedNowCreate],
+    });
+
+    component.openNewVisitDialog();
+
+    expect(healthEventsService.createEvent).toHaveBeenCalledTimes(2);
+    expect(healthEventsService.createEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({ visitId: 'VISIT-ATTENDED-NOW', status: 'ATTENDED' }),
+          clinicalNote: expect.objectContaining({ findings: 'Inflamación leve en pata posterior.' }),
+          protocol: expect.objectContaining({ status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-13T00:00:00.000Z' }),
+        }),
+      }),
+    );
+    expect(healthEventsService.createEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        animalUuid: 'animal-2',
+        metadata: expect.objectContaining({
+          visit: expect.objectContaining({
+            visitId: expect.stringMatching(/^vet-follow-up-|[0-9a-f-]{36}$/),
+            parentVisitId: 'VISIT-ATTENDED-NOW',
+            status: 'PENDING',
+          }),
+          protocol: { status: 'STARTED' },
+        }),
+      }),
+    );
+    expect(vetVisitsService.listVetVisits).toHaveBeenCalledTimes(2);
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual([
+      'VISIT-ATTENDED-NOW-CHILD-BACKEND',
+      'VISIT-ATTENDED-NOW',
+      'VISIT-GLOBAL',
+      'VISIT-SPECIFIC',
+      'VISIT-CANCELED',
+      'VISIT-CLOSED',
+    ]);
+  });
+
+  it('should keep fallback parent and pending child actionable when attended-now create reload is stale', async () => {
+    const { component } = await configure({ dialogResult: attendedNowCreateResult });
+
+    component.openNewVisitDialog();
+
+    expect(component.visitRows().slice(0, 2).map((visit) => visit.statusLabel)).toEqual(['Atendida', 'Programada']);
+    expect(component.visitRows()[1]).toEqual(expect.objectContaining({
+      parentVisitId: 'VISIT-ATTENDED-NOW',
+      status: 'PENDING',
+    }));
+    expect(component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[0])).map((action) => action.label)).toEqual(['Ver']);
+    expect(component.visitActions.filter((action) => !action.visible || action.visible(component.visitRows()[1])).map((action) => action.label)).toEqual(['Ver', 'Atender', 'Cancelar']);
+  });
+
+  it('should reload canonical backend rows immediately after scheduled create before updating the visible table', async () => {
+    const backendRowsAfterCreate = [{ ...visits[0], visitId: 'VISIT-NEW', veterinarian: { name: 'Dra. Nueva', license: 'MV-NEW' } }, ...visits];
+    const { component, vetVisitsService } = await configure({
+      dialogResult: newVisitResult,
+      listResponses: [visits, backendRowsAfterCreate],
+    });
+
+    component.openNewVisitDialog();
+
+    expect(vetVisitsService.listVetVisits).toHaveBeenCalledTimes(2);
+    expect(component.visitRows().map((visit) => visit.visitId)).toEqual([
+      'VISIT-NEW',
+      'VISIT-GLOBAL',
+      'VISIT-SPECIFIC',
+      'VISIT-CANCELED',
+      'VISIT-CLOSED',
+    ]);
+    expect(component.visitRows()[0].veterinarianName).toBe('Dra. Nueva');
   });
 
   it('should keep a newly saved visit visible when the central backend list reload is stale', async () => {

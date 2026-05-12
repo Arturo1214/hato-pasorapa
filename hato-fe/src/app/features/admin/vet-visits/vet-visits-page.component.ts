@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { concatMap, finalize } from 'rxjs';
+import { concatMap, finalize, map } from 'rxjs';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -124,15 +124,7 @@ export class VetVisitsPageComponent {
   }
 
   loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
-    this.loading.set(true);
-    this.vetVisitsService
-      .listVetVisits(filter)
-      .pipe(finalize(() => this.loading.set(false)))
-      .subscribe((items) => {
-        const visibleItems = mergeRecentlySavedVisit(items, recentlySavedVisit, filter);
-        this.visits.set(visibleItems);
-        this.visitRows.set(visibleItems.map(toVetVisitRow));
-      });
+    this.reloadVisits$(filter, recentlySavedVisit).subscribe();
   }
 
   handleFiltersChange(filters: Record<string, string>) {
@@ -223,13 +215,25 @@ export class VetVisitsPageComponent {
   private createVisit(result: VetVisitDialogResult) {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
+    const currentFilter = toBackendFilter(this.visitFilters());
+    const recentlySavedVisits = buildRecentlySavedVisitsForCreate(result);
     this.healthEventsService
       .createEvent(mapDialogResultToCreateInput(result))
-      .pipe(finalize(() => this.submitting.set(false)))
+      .pipe(
+        concatMap((feedback) => {
+          if (result.creationMode === 'attendedNow' && result.followUpChoice === 'schedule' && result.nextDueAt) {
+            const followUpResult = buildFollowUpDialogResultFromCreate(result);
+            return this.healthEventsService
+              .createEvent(mapDialogResultToCreateInput(followUpResult))
+              .pipe(concatMap(() => this.reloadVisits$(currentFilter, recentlySavedVisits)), map(() => feedback));
+          }
+
+          return this.reloadVisits$(currentFilter, recentlySavedVisits).pipe(map(() => feedback));
+        }),
+        finalize(() => this.submitting.set(false))
+      )
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
-        const currentFilter = toBackendFilter(this.visitFilters());
-        this.loadVisits(currentFilter, toVetVisitItem(result));
       });
   }
 
@@ -279,6 +283,19 @@ export class VetVisitsPageComponent {
         this.feedbackMessage.set(feedback.message);
         this.loadVisits(toBackendFilter(this.visitFilters()));
       });
+  }
+
+  private reloadVisits$(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
+    this.loading.set(true);
+    return this.vetVisitsService.listVetVisits(filter).pipe(
+      map((items) => {
+        const visibleItems = mergeRecentlySavedVisit(items, recentlySavedVisit, filter);
+        this.visits.set(visibleItems);
+        this.visitRows.set(visibleItems.map(toVetVisitRow));
+        return visibleItems;
+      }),
+      finalize(() => this.loading.set(false))
+    );
   }
 }
 
@@ -339,6 +356,13 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
   };
 }
 
+function buildRecentlySavedVisitsForCreate(result: VetVisitDialogResult): VetVisitItem | VetVisitItem[] {
+  if (result.creationMode === 'attendedNow' && result.followUpChoice === 'schedule' && result.nextDueAt) {
+    return [toVetVisitItem(result), toVetVisitItem(buildFollowUpDialogResultFromCreate(result))];
+  }
+  return toVetVisitItem(result);
+}
+
 function mergeRecentlySavedVisit(
   items: VetVisitItem[],
   recentlySavedVisit: VetVisitItem | VetVisitItem[] | undefined,
@@ -359,8 +383,12 @@ function mergeRecentlySavedVisit(
   const savedByVisitId = new Map(matchingSavedVisits.map((item) => [item.visitId, item]));
   const merged = items.map((item) => savedByVisitId.get(item.visitId) ?? item);
   const existingVisitIds = new Set(merged.map((item) => item.visitId));
+  const existingParentVisitIds = new Set(merged.map((item) => item.parentVisitId).filter(Boolean));
   for (const savedVisit of matchingSavedVisits) {
     if (existingVisitIds.has(savedVisit.visitId)) {
+      continue;
+    }
+    if (savedVisit.parentVisitId && existingParentVisitIds.has(savedVisit.parentVisitId)) {
       continue;
     }
     const parentIndex = savedVisit.parentVisitId
@@ -372,6 +400,9 @@ function mergeRecentlySavedVisit(
       merged.unshift(savedVisit);
     }
     existingVisitIds.add(savedVisit.visitId);
+    if (savedVisit.parentVisitId) {
+      existingParentVisitIds.add(savedVisit.parentVisitId);
+    }
   }
   return merged;
 }
@@ -542,6 +573,24 @@ function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialo
     veterinarianLicense: attendResult.veterinarianLicense,
     targetAnimalCount: row.targetAnimalCount,
     parentVisitId: row.visitId,
+  };
+}
+
+function buildFollowUpDialogResultFromCreate(parentResult: VetVisitDialogResult): VetVisitDialogResult {
+  return {
+    mode: parentResult.mode,
+    creationMode: 'scheduled',
+    animalUuid: parentResult.animalUuid,
+    visitId: createLocalVisitId(),
+    status: 'PENDING',
+    occurredAt: parentResult.nextDueAt ?? parentResult.occurredAt,
+    nextDueAt: null,
+    notes: null,
+    reason: parentResult.reason,
+    veterinarianName: parentResult.veterinarianName,
+    veterinarianLicense: parentResult.veterinarianLicense,
+    targetAnimalCount: parentResult.targetAnimalCount,
+    parentVisitId: parentResult.visitId,
   };
 }
 

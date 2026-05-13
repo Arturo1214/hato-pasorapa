@@ -8,18 +8,18 @@ Sincronización offline-first para reproducción V1 con cola local e incremental
 
 ### Requirement: Queue-first con estados de sincronización
 
-The system MUST aceptar altas offline, guardarlas primero en cola y marcarlas `PENDING_SYNC` hasta confirmación.
+The system MUST aceptar altas offline, guardarlas primero en cola y marcarlas `PENDING_SYNC` hasta confirmación. The queued payload MUST include `eventCategory=REPRODUCTION` alongside existing reproduction metadata.
 
 #### Scenario: Alta offline y falla de push
 
 - GIVEN un dispositivo sin conectividad
 - WHEN se registra un evento reproductivo válido
-- THEN el evento se guarda en cola local con estado `PENDING_SYNC`
+- THEN el evento se guarda en cola local with `eventCategory=REPRODUCTION`
 - AND si el push falla, SHALL mantenerse en cola sin pérdida
 
 ### Requirement: Idempotencia por operationId
 
-The system MUST usar `operationId` como clave idempotente en push para evitar duplicados en reintentos, and MUST support conflict outcome handling (`accept_server|retry_local|discard_local`) before replaying blocked operations.
+The system MUST usar `operationId` como clave idempotente en push para evitar duplicados en reintentos across the unified log, and MUST support conflict outcome handling before replaying blocked operations.
 
 #### Scenario: Reintento de operación ya aplicada
 
@@ -28,13 +28,14 @@ The system MUST usar `operationId` como clave idempotente en push para evitar du
 - THEN el servidor responde sin crear duplicados
 
 #### Scenario: Operación bloqueada por conflicto exige decisión
+
 - GIVEN operación reproductiva con conflicto de estado
 - WHEN se solicita replay sin decisión
 - THEN el sistema deniega replay y exige resolución manual permitida
 
 ### Requirement: Pull incremental por cursor y alcance acotado
 
-The system MUST soportar pull por cursor y devolver solo cambios de reproducción V1.
+The system MUST soportar pull por cursor y devolver solo cambios with `eventCategory=REPRODUCTION`.
 
 #### Scenario: Pull incremental e inicial
 
@@ -42,3 +43,9 @@ The system MUST soportar pull por cursor y devolver solo cambios de reproducció
 - WHEN el cliente ejecuta pull incremental
 - THEN recibe solo cambios posteriores del dominio reproductivo
 - AND sin cursor previo, MAY recibir snapshot inicial y nuevo cursor
+
+#### Scenario: Pull excludes non-reproduction events
+
+- GIVEN existing general and health events in unified log
+- WHEN reproduction pull executes
+- THEN only events with `eventCategory=REPRODUCTION` are returned

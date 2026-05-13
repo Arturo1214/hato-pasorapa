@@ -8,13 +8,13 @@ Definir sincronización offline-first e idempotente para `ANIMAL_HEALTH_EVENT`.
 
 ### Requirement: Queue-first para altas sanitarias
 
-The client MUST enqueue health-event create operations locally before network sync and MAY expose pending status in UI.
+The client MUST enqueue health-event create operations locally before network sync and MAY expose pending status in UI. The queued payload MUST include `eventCategory=HEALTH` alongside the existing typed health metadata.
 
 #### Scenario: Alta sin conectividad
 
 - GIVEN el dispositivo offline
 - WHEN el usuario registra una vacunación válida
-- THEN la operación queda en cola local como `ANIMAL_HEALTH_EVENT`
+- THEN la operación queda en cola local as `ANIMAL_HEALTH_EVENT` with `eventCategory=HEALTH`
 - AND el registro aparece como pendiente de sincronización
 
 #### Scenario: Reintento automático al recuperar conectividad
@@ -25,7 +25,7 @@ The client MUST enqueue health-event create operations locally before network sy
 
 ### Requirement: Idempotencia por operationId
 
-The sync service MUST treat `operationId` as idempotency key for push and replay safety, and SHALL allow retry only after a valid manual conflict resolution compatible with entity/opType policy.
+The sync service MUST treat `operationId` as idempotency key for push and replay safety across all event categories. Duplicate `operationId` values MUST NOT create duplicate rows in the unified log.
 
 #### Scenario: Replay del mismo evento
 
@@ -34,6 +34,7 @@ The sync service MUST treat `operationId` as idempotency key for push and replay
 - THEN el backend MUST NOT duplicar entradas en el ledger
 
 #### Scenario: Conflicto en replay requiere resolución válida
+
 - GIVEN una operación sanitaria en `CONFLICT`
 - WHEN cliente intenta reintentar sin decisión manual válida
 - THEN backend rechaza reintento y mantiene conflicto activo
@@ -46,7 +47,7 @@ The sync service MUST treat `operationId` as idempotency key for push and replay
 
 ### Requirement: Pull incremental sanitario
 
-The system SHALL support incremental pull for `ANIMAL_HEALTH_EVENT` so each client receives only unseen server events since its last cursor.
+The system SHALL support incremental pull for health events filtering by `eventCategory=HEALTH` so each client receives only unseen server events since its last cursor.
 
 #### Scenario: Pull con cursor previo
 
@@ -59,3 +60,9 @@ The system SHALL support incremental pull for `ANIMAL_HEALTH_EVENT` so each clie
 - GIVEN un cliente sin cursor sanitario previo
 - WHEN ejecuta pull
 - THEN el sistema retorna un lote inicial consistente y un nuevo cursor
+
+#### Scenario: Pull excludes non-health events
+
+- GIVEN existing general and reproduction events in unified log
+- WHEN health event pull executes
+- THEN only events with `eventCategory=HEALTH` are returned

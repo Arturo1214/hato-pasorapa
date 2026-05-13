@@ -18,6 +18,7 @@ import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
 import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
@@ -58,6 +59,9 @@ class SyncResourceTest {
 
     @Inject
     AnimalEventRepository animalEventRepository;
+
+    @Inject
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     AnimalHealthEventRepository animalHealthEventRepository;
@@ -318,7 +322,12 @@ class SyncResourceTest {
                         "sourceChannel": "OFFLINE",
                         "operationId": "1f1e3d8f-65b6-4ca3-a073-54dfa6d18d95",
                         "metadata": {
-                          "visit": { "visitId": "VISIT-100" },
+                          "visit": {
+                            "visitId": "VISIT-100",
+                            "mode": "SPECIFIC",
+                            "status": "PENDING",
+                            "veterinarian": { "name": "Dra. Campo", "license": "VET-100" }
+                          },
                           "checklist": [
                             { "code": "TEMPERATURE", "ok": true },
                             { "code": "APPETITE", "ok": false, "note": "Disminuido" }
@@ -361,6 +370,7 @@ class SyncResourceTest {
                 .body("items[0].metadata.visit.visitId", equalTo("VISIT-100"))
                 .body("items[0].metadata.protocol.status", equalTo("STARTED"));
 
+        org.junit.jupiter.api.Assertions.assertEquals(1, animalEventLogRepository.count());
         org.junit.jupiter.api.Assertions.assertEquals(1, animalHealthEventRepository.count());
     }
 
@@ -587,6 +597,13 @@ class SyncResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             animalRepository.persist(buildAnimal(animalUuid, "BO-GAN-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0)));
             userRepository.persist(buildUser("ganadero-conflict", "ganadero-conflict@hato.bo", Role.GANADERO, "Ganadero9"));
+            ganaderoRepository.persist(buildGanadero(
+                    UUID.fromString("4bf99828-9a6d-491d-9aa6-69100a8e718a"),
+                    "NIT-GANADERO-CONFLICT",
+                    "Ganadero Conflict",
+                    "ganadero-conflict@hato.bo",
+                    true,
+                    LocalDateTime.of(2026, 4, 28, 10, 0)));
         });
 
         String ganaderoToken = loginAs("ganadero-conflict", "Ganadero9");
@@ -1234,6 +1251,20 @@ class SyncResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             userRepository.persist(buildManagedUser(UUID.fromString("3fed3e60-6e52-4a91-81db-b32e95fab1c1"), "notif-a", "notif-a@hato.bo", UserStatus.ACTIVE));
             userRepository.persist(buildManagedUser(UUID.fromString("7fdcd435-8a07-4990-8bdf-6287be3a1118"), "notif-b", "notif-b@hato.bo", UserStatus.ACTIVE));
+            ganaderoRepository.persist(buildGanadero(
+                    UUID.fromString("95ba935b-7418-4eb1-a5e9-8d94d27191ef"),
+                    "NIT-NOTIF-A",
+                    "Ganadero Notif A",
+                    "notif-a@hato.bo",
+                    true,
+                    LocalDateTime.of(2026, 4, 28, 10, 0)));
+            ganaderoRepository.persist(buildGanadero(
+                    UUID.fromString("75feb7f8-802b-43ff-b7fb-9696367e9358"),
+                    "NIT-NOTIF-B",
+                    "Ganadero Notif B",
+                    "notif-b@hato.bo",
+                    true,
+                    LocalDateTime.of(2026, 4, 28, 10, 0)));
         });
 
         String adminToken = loginAs("root-admin", "RootAdmin9");
@@ -1354,10 +1385,15 @@ class SyncResourceTest {
     }
 
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, boolean active, LocalDateTime updatedAt) {
+        return buildGanadero(id, businessIdentifier, name, null, active, updatedAt);
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email, boolean active, LocalDateTime updatedAt) {
         Ganadero ganadero = new Ganadero();
         ganadero.setId(id);
         ganadero.setBusinessIdentifier(businessIdentifier);
         ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(active);
         return ganadero;
     }

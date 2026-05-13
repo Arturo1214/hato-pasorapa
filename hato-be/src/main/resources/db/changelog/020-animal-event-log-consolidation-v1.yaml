@@ -147,3 +147,21 @@ databaseChangeLog:
               INSERT INTO animal_event_logs (event_id, animal_uuid, event_category, event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at)
               SELECT event_id, animal_uuid, 'REPRODUCTION', reproduction_event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
               FROM animal_reproduction_events
+        - sql:
+            sql: |
+              CREATE VIEW animal_events_view AS
+              SELECT event_id, animal_uuid, event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_event_logs
+              WHERE event_category = 'GENERAL'
+        - sql:
+            sql: |
+              CREATE VIEW animal_health_events_view AS
+              SELECT event_id, animal_uuid, event_type AS health_event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_event_logs
+              WHERE event_category = 'HEALTH'
+        - sql:
+            sql: |
+              CREATE VIEW animal_reproduction_events_view AS
+              SELECT event_id, animal_uuid, event_type AS reproduction_event_type, occurred_at, client_created_at, notes, performed_by_user_id, source_channel, operation_id, metadata_json, created_at, updated_at
+              FROM animal_event_logs
+              WHERE event_category = 'REPRODUCTION'

@@ -7,10 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.AnimalImage;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -18,6 +16,7 @@ import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AdminNotificationTargetingMode;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
@@ -1110,10 +1109,11 @@ class SyncServiceTest {
 
     private void seedAnimalEvent(UUID animalUuid, UUID operationId, AnimalEventType type, LocalDateTime occurredAt) {
         QuarkusTransaction.requiringNew().run(() -> {
-            AnimalEvent event = new AnimalEvent();
+            AnimalEventLog event = new AnimalEventLog();
             event.setEventId(UUID.randomUUID());
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
-            event.setType(type);
+            event.setEventCategory(AnimalEventCategory.GENERAL);
+            event.setEventType(type.name());
             event.setOccurredAt(occurredAt);
             event.setClientCreatedAt(occurredAt.plusMinutes(1));
             event.setNotes("Event " + type);
@@ -1123,16 +1123,17 @@ class SyncServiceTest {
             event.setMetadataJson("{\"reasonCode\":\"NOTE\"}");
             event.setCreatedAt(occurredAt.plusMinutes(2));
             event.setUpdatedAt(occurredAt.plusMinutes(2));
-            animalEventRepository.persist(event);
+            animalEventLogRepository.persist(event);
         });
     }
 
     private void seedAnimalHealthEvent(UUID animalUuid, UUID operationId, AnimalHealthEventType type, LocalDateTime occurredAt) {
         QuarkusTransaction.requiringNew().run(() -> {
-            AnimalHealthEvent event = new AnimalHealthEvent();
+            AnimalEventLog event = new AnimalEventLog();
             event.setEventId(UUID.randomUUID());
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
-            event.setHealthEventType(type);
+            event.setEventCategory(AnimalEventCategory.HEALTH);
+            event.setEventType(type.name());
             event.setOccurredAt(occurredAt);
             event.setClientCreatedAt(occurredAt.plusMinutes(1));
             event.setNotes("Health event " + type);
@@ -1142,16 +1143,17 @@ class SyncServiceTest {
             event.setMetadataJson("{\"productName\":\"Brucelosis\"}");
             event.setCreatedAt(occurredAt.plusMinutes(2));
             event.setUpdatedAt(occurredAt.plusMinutes(2));
-            animalHealthEventRepository.persist(event);
+            animalEventLogRepository.persist(event);
         });
     }
 
     private void seedAnimalReproductionEvent(UUID animalUuid, UUID operationId, AnimalReproductionEventType type, LocalDateTime occurredAt) {
         QuarkusTransaction.requiringNew().run(() -> {
-            AnimalReproductionEvent event = new AnimalReproductionEvent();
+            AnimalEventLog event = new AnimalEventLog();
             event.setEventId(UUID.randomUUID());
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
-            event.setReproductionEventType(type);
+            event.setEventCategory(AnimalEventCategory.REPRODUCTION);
+            event.setEventType(type.name());
             event.setOccurredAt(occurredAt);
             event.setClientCreatedAt(occurredAt.plusMinutes(1));
             event.setNotes("Reproduction event " + type);
@@ -1163,7 +1165,7 @@ class SyncServiceTest {
                     : "{\"birthDate\":\"2026-04-26T10:15:00Z\",\"offspringCount\":0,\"motherAnimalUuid\":\"" + animalUuid + "\"}");
             event.setCreatedAt(occurredAt.plusMinutes(2));
             event.setUpdatedAt(occurredAt.plusMinutes(2));
-            animalReproductionEventRepository.persist(event);
+            animalEventLogRepository.persist(event);
         });
     }
 

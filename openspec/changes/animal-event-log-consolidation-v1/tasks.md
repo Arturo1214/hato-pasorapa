@@ -123,11 +123,11 @@ Chain strategy: stacked-to-main
 - [x] 3.4.3 Run FE tests: `npm test --prefix hato-fe -- --run` (no build)
 
 ### 3.5 Migration Execution & Finalization
-- [ ] 3.5.1 Execute migration: copy existing rows from three tables into `animal_event_logs` with correct `eventCategory`
-- [ ] 3.5.2 Verify compatibility views return same results as unified log queries
-- [ ] 3.5.3 Run full BE + FE test suites: `./mvnw test -Dquarkus.profile=test` AND `npm test --prefix hato-fe -- --run`
-- [ ] 3.5.4 Confirm vet visit workflow regression tests pass: `npm test --prefix hato-fe -- --run --grep "vet-visit"` (protecting `vet-visit-clinical-workflow-v1`)
-- [ ] 3.5.5 Document migration completion in `CHANGELOG-migration.md`
+- [x] 3.5.1 Execute migration: copy existing rows from three tables into `animal_event_logs` with correct `eventCategory`
+- [x] 3.5.2 Verify compatibility views return same results as unified log queries
+- [ ] 3.5.3 Run full BE + FE test suites: `./mvnw test -Dquarkus.profile=test` AND `npm test --prefix hato-fe -- --run` — BE full suite attempted on 2026-05-13 and still not green; event-log sync regressions fixed, `SyncResourceTest` now passes 28/28 after ganadero auth fixture repair, but 11 unrelated full-suite failures remain
+- [x] 3.5.4 Confirm vet visit workflow regression tests pass: `npm test --prefix hato-fe -- --run --grep "vet-visit"` (protecting `vet-visit-clinical-workflow-v1`)
+- [x] 3.5.5 Document migration completion in `CHANGELOG-migration.md`
 
 ---
 

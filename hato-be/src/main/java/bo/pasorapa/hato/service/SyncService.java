@@ -286,22 +286,22 @@ public class SyncService {
                     event -> new PullCursorItem(toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_EVENT -> buildPullResponse(
                     entityType,
-                    animalEventRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSince(AnimalEventCategory.GENERAL, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
-                    event -> new PullCursorItem(animalEventMapper.toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
+                    event -> new PullCursorItem(toLegacyAnimalEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_HEALTH_EVENT -> buildPullResponse(
                     entityType,
-                    animalHealthEventRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSince(AnimalEventCategory.HEALTH, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
-                    event -> new PullCursorItem(animalHealthEventMapper.toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
+                    event -> new PullCursorItem(toLegacyAnimalHealthEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_REPRODUCTION_EVENT -> buildPullResponse(
                     entityType,
-                    animalReproductionEventRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSince(AnimalEventCategory.REPRODUCTION, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
-                    event -> new PullCursorItem(animalReproductionEventMapper.toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
+                    event -> new PullCursorItem(toLegacyAnimalReproductionEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_IMAGE -> buildPullResponse(
                     entityType,
                     animalImageRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
@@ -1262,6 +1262,18 @@ public class SyncService {
         item.put("createdAt", event.getCreatedAt().atOffset(ZoneOffset.UTC));
         item.put("updatedAt", event.getUpdatedAt().atOffset(ZoneOffset.UTC));
         return item;
+    }
+
+    private Map<String, Object> toLegacyAnimalEventPullItem(AnimalEventLog event) {
+        return animalEventMapper.toPullItem(animalEventMapper.toAnimalEvent(event));
+    }
+
+    private Map<String, Object> toLegacyAnimalHealthEventPullItem(AnimalEventLog event) {
+        return animalHealthEventMapper.toPullItem(animalHealthEventMapper.toAnimalHealthEvent(event));
+    }
+
+    private Map<String, Object> toLegacyAnimalReproductionEventPullItem(AnimalEventLog event) {
+        return animalReproductionEventMapper.toPullItem(animalReproductionEventMapper.toAnimalReproductionEvent(event));
     }
 
     private Map<String, Object> readEventLogMetadata(AnimalEventLog event) {

@@ -32,6 +32,32 @@ class Migration020Test {
         }
     }
 
+    @Test
+    void shouldExposeCompatibilityViewsEquivalentToUnifiedLogQueries() throws Exception {
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:h2:mem:animal-event-log-migration-020-views;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+                "sa",
+                "sa")) {
+            createLegacySchema(connection);
+            seedLegacyRows(connection);
+
+            applyChangelog(connection, "db/changelog/020-animal-event-log-consolidation-v1.yaml");
+
+            assertEquivalentProjection(
+                    connection,
+                    "select event_id, animal_uuid, event_type, occurred_at, operation_id from animal_event_logs where event_category = 'GENERAL'",
+                    "select event_id, animal_uuid, event_type, occurred_at, operation_id from animal_events_view");
+            assertEquivalentProjection(
+                    connection,
+                    "select event_id, animal_uuid, event_type, occurred_at, operation_id from animal_event_logs where event_category = 'HEALTH'",
+                    "select event_id, animal_uuid, health_event_type, occurred_at, operation_id from animal_health_events_view");
+            assertEquivalentProjection(
+                    connection,
+                    "select event_id, animal_uuid, event_type, occurred_at, operation_id from animal_event_logs where event_category = 'REPRODUCTION'",
+                    "select event_id, animal_uuid, reproduction_event_type, occurred_at, operation_id from animal_reproduction_events_view");
+        }
+    }
+
     private void createLegacySchema(Connection connection) throws Exception {
         try (Statement statement = connection.createStatement()) {
             statement.execute("""
@@ -140,5 +166,32 @@ class Migration020Test {
             resultSet.next();
             return resultSet.getInt(1);
         }
+    }
+
+    private void assertEquivalentProjection(Connection connection, String unifiedQuery, String compatibilityViewQuery) throws Exception {
+        try (Statement statement = connection.createStatement();
+                ResultSet unified = statement.executeQuery(unifiedQuery + " order by event_id")) {
+            String unifiedProjection = readProjection(unified);
+            try (ResultSet compatibility = statement.executeQuery(compatibilityViewQuery + " order by event_id")) {
+                assertEquals(unifiedProjection, readProjection(compatibility));
+            }
+        }
+    }
+
+    private String readProjection(ResultSet resultSet) throws Exception {
+        StringBuilder projection = new StringBuilder();
+        while (resultSet.next()) {
+            projection.append(resultSet.getString(1))
+                    .append('|')
+                    .append(resultSet.getString(2))
+                    .append('|')
+                    .append(resultSet.getString(3))
+                    .append('|')
+                    .append(resultSet.getString(4))
+                    .append('|')
+                    .append(resultSet.getString(5))
+                    .append('\n');
+        }
+        return projection.toString();
     }
 }

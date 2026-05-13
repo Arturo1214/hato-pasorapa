@@ -53,9 +53,6 @@ describe('SidebarComponent integration', () => {
       'Visitas veterinarias',
       'Calendario',
       'Notificaciones',
-      'Sincronización',
-      'Backups',
-      'Conflictos',
     ]);
   });
 });

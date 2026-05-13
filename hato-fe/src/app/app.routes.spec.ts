@@ -27,17 +27,24 @@ describe('app routes', () => {
     expect(publicShell.some((route) => route.path === 'admin/bootstrap')).toBe(true);
   });
 
-  it('should expose the ganadero routes and keep admin conflicts admin-only', () => {
+  it('should redirect ganadero manual offline tooling routes and keep admin conflicts admin-only', () => {
     const protectedShell = routes.find((candidate) => candidate.path === '' && candidate.loadComponent)?.children ?? [];
     const routePaths = protectedShell.map((route) => route.path);
     const adminConflictsRoute = protectedShell.find((route) => route.path === 'admin/conflictos');
+    const ganaderoOfflineToolRoutes = protectedShell.filter((route) =>
+      ['ganadero/backups', 'ganadero/conflictos', 'ganadero/sincronizacion'].includes(route.path ?? '')
+    );
 
     expect(routePaths).toContain('ganadero/dashboard');
-    expect(routePaths).toContain('ganadero/backups');
-    expect(routePaths).toContain('ganadero/conflictos');
-    expect(routePaths).toContain('ganadero/sincronizacion');
     expect(routePaths).not.toContain('admin/backups');
     expect(adminConflictsRoute?.canActivate?.length).toBe(1);
+    expect(ganaderoOfflineToolRoutes.map((route) => route.path)).toEqual([
+      'ganadero/sincronizacion',
+      'ganadero/backups',
+      'ganadero/conflictos',
+    ]);
+    expect(ganaderoOfflineToolRoutes.every((route) => route.canMatch?.length === 1)).toBe(true);
+    expect(ganaderoOfflineToolRoutes.every((route) => route.loadComponent === undefined)).toBe(true);
   });
 
   it('should expose a protected forbidden page for authenticated users without route permission', () => {

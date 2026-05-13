@@ -45,10 +45,10 @@ Chain strategy: pending
 
 ## Phase 4: UI — Header Connectivity and GANADERO Navigation
 
-- [ ] 4.1 Modify `header.ts` — inject `OfflineStatusService`, add `isOnline` signal
-- [ ] 4.2 Modify `header.html` — add offline indicator/banner
-- [ ] 4.3 Modify `sidebar.ts` — remove `Sincronización`, `Backups`, `Conflictos` from `GANADERO_MENU_ITEMS`
-- [ ] 4.4 Write component specs: `header.spec.ts`, `sidebar.spec.ts`
+- [x] 4.1 Modify `header.ts` — inject `OfflineStatusService`, add `isOnline` signal
+- [x] 4.2 Modify `header.html` — add offline indicator/banner
+- [x] 4.3 Modify `sidebar.ts` — remove `Sincronización`, `Backups`, `Conflictos` from `GANADERO_MENU_ITEMS`
+- [x] 4.4 Write component specs: `header.spec.ts`, `sidebar.spec.ts`
 
 ## Phase 5: Animal Pages — Row and Media Badges
 
@@ -59,12 +59,12 @@ Chain strategy: pending
 
 ## Phase 6: Routes — Guard GANADERO Sync/Backup/Conflict Routes
 
-- [ ] 6.1 In `app.routes.ts` — add `canMatch` guard to `/ganadero/sincronizacion`, `/ganadero/backups`, `/ganadero/conflictos` redirecting GANADERO to dashboard
-- [ ] 6.2 Write route guard spec
+- [x] 6.1 In `app.routes.ts` — add `canMatch` guard to `/ganadero/sincronizacion`, `/ganadero/backups`, `/ganadero/conflictos` redirecting GANADERO to dashboard
+- [x] 6.2 Write route guard spec
 
 ## Phase 7: Tests
 
-- [ ] 7.1 Update all `*.spec.ts` for modified files
+- [x] 7.1 Update all `*.spec.ts` for modified files
 - [ ] 7.2 Run `ng test` — no production build required
 
 ## Implementation Order

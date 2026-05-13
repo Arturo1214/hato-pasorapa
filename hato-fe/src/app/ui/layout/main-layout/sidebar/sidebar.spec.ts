@@ -80,19 +80,19 @@ describe('SidebarComponent', () => {
       'Visitas veterinarias',
       'Calendario',
       'Notificaciones',
-      'Sincronización',
-      'Backups',
-      'Conflictos',
     ]);
-    expect(labels).toHaveLength(8);
+    expect(labels).toHaveLength(5);
+    expect(labels).not.toContain('Sincronización');
+    expect(labels).not.toContain('Backups');
+    expect(labels).not.toContain('Conflictos');
   });
 
   it('should render the operational badge for calendario entries', async () => {
     await configure('GANADERO');
 
     const badges = Array.from(fixture.nativeElement.querySelectorAll('.menu-badge')) as HTMLElement[];
-    expect(badges.some((badge) => badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high')).toBe(true);
     expect(badges.some((badge) => badge.textContent?.includes('2') && badge.getAttribute('data-severity') === 'overdue')).toBe(true);
+    expect(badges.some((badge) => badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high')).toBe(false);
     expect(badges.some((badge) => badge.textContent?.includes('1') && badge.getAttribute('data-severity') === 'info')).toBe(false);
   });
 });

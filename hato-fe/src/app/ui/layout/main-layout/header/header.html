@@ -12,6 +12,17 @@
     </div>
 
     <div class="right-header">
+      <div
+        class="connectivity-chip"
+        [class.connectivity-chip--offline]="!isOnline()"
+        data-testid="header-connectivity-status"
+        role="status"
+        [attr.aria-label]="connectivityAriaLabel()"
+      >
+        <mat-icon>{{ isOnline() ? 'wifi' : 'wifi_off' }}</mat-icon>
+        <span>{{ connectivityLabel() }}</span>
+      </div>
+
       <div class="user-chip">
         <span class="user-chip__label">Sesión</span>
         <strong>{{ greeting() }}</strong>

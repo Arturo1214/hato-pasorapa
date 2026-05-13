@@ -3,6 +3,7 @@ import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, Router } from '@
 import { signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
+import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { GanaderoNotificationsStore } from '../../../../features/ganadero/notifications/data-access/ganadero-notifications.store';
 import { ThemeService } from '../../../../core/theme/data-access/theme';
 import { HeaderComponent } from './header';
@@ -11,6 +12,7 @@ describe('HeaderComponent', () => {
   const logout = vi.fn();
   const toggleTheme = vi.fn();
   const unreadCount = signal(0);
+  const onlineState = signal(true);
   const refreshUnreadCount = vi.fn().mockResolvedValue(undefined);
   const navigateByUrl = vi.fn().mockResolvedValue(true);
   let routerEvents: Subject<NavigationEnd>;
@@ -80,6 +82,12 @@ describe('HeaderComponent', () => {
           },
         },
         {
+          provide: OfflineStatusService,
+          useValue: {
+            isOnline: onlineState,
+          },
+        },
+        {
           provide: ThemeService,
           useValue: {
             currentTheme: () => 'dark',
@@ -100,6 +108,7 @@ describe('HeaderComponent', () => {
     refreshUnreadCount.mockClear();
     navigateByUrl.mockClear();
     unreadCount.set(0);
+    onlineState.set(true);
     routerEvents = new Subject<NavigationEnd>();
   });
 
@@ -124,6 +133,50 @@ describe('HeaderComponent', () => {
     expect(text).not.toContain('Pasorapa');
     expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(3);
     expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]')).toBeNull();
+  });
+
+  it('should show the online connectivity indicator in Spanish', async () => {
+    const dashboardSnapshot = createSnapshot({
+      path: 'ganadero/dashboard',
+      data: {
+        title: 'Dashboard',
+        subtitle: 'Resumen ganadero.',
+      },
+    });
+
+    const fixture = await configureHeader({
+      url: '/ganadero/dashboard',
+      rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
+      currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
+    });
+    const indicator = fixture.nativeElement.querySelector('[data-testid="header-connectivity-status"]') as HTMLElement;
+
+    expect(indicator.textContent).toContain('En línea');
+    expect(indicator.getAttribute('aria-label')).toBe('Estado de conexión: en línea');
+  });
+
+  it('should keep the offline connectivity indicator visible across route changes', async () => {
+    onlineState.set(false);
+    const animalsSnapshot = createSnapshot({
+      path: 'ganadero/animales',
+      data: {
+        title: 'Animales',
+        subtitle: 'Consultá tu rodeo.',
+      },
+    });
+    const rootSnapshot = createSnapshot({ firstChild: animalsSnapshot });
+    const fixture = await configureHeader({
+      url: '/ganadero/animales',
+      rootSnapshot,
+      currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
+    });
+
+    routerEvents.next(new NavigationEnd(1, '/ganadero/animales', '/ganadero/dashboard'));
+    fixture.detectChanges();
+
+    const indicator = fixture.nativeElement.querySelector('[data-testid="header-connectivity-status"]') as HTMLElement;
+    expect(indicator.textContent).toContain('Sin conexión');
+    expect(indicator.getAttribute('aria-label')).toBe('Estado de conexión: sin conexión');
   });
 
   it('should render a GANADERO-only notification bell with unread badge', async () => {

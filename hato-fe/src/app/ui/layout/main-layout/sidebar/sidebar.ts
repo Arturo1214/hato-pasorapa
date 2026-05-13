@@ -100,25 +100,6 @@ const GANADERO_MENU_ITEMS: StaticMenuItem[] = [
     route: '/ganadero/notificaciones',
     description: 'Bandeja de avisos recibidos con seguimiento de lectura y prioridades.',
   },
-  {
-    label: 'Sincronización',
-    icon: 'sync_alt',
-    route: '/ganadero/sincronizacion',
-    description: 'Estado actual de la sincronización y de las operaciones pendientes.',
-  },
-  {
-    label: 'Backups',
-    icon: 'save',
-    route: '/ganadero/backups',
-    description: 'Respaldo y restauración local para proteger la continuidad del trabajo.',
-  },
-  {
-    label: 'Conflictos',
-    icon: 'rule',
-    route: '/ganadero/conflictos',
-    description: 'Seguimiento y resolución de conflictos pendientes antes de cerrar la jornada.',
-    badgeKey: 'conflicts',
-  },
 ];
 
 @Component({

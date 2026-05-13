@@ -47,6 +47,32 @@
   background: color-mix(in srgb, var(--mat-sys-primary-container) 55%, transparent 45%);
 }
 
+.connectivity-chip {
+  align-items: center;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 58%, transparent 42%);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 35%, transparent 65%);
+  border-radius: 999px;
+  color: var(--mat-sys-on-primary-container);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  white-space: nowrap;
+}
+
+.connectivity-chip mat-icon {
+  font-size: 1.1rem;
+  height: 1.1rem;
+  width: 1.1rem;
+}
+
+.connectivity-chip--offline {
+  background: color-mix(in srgb, var(--mat-sys-error-container) 70%, transparent 30%);
+  border-color: color-mix(in srgb, var(--mat-sys-error) 42%, transparent 58%);
+  color: var(--mat-sys-on-error-container);
+}
+
 .user-chip__label {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -89,6 +115,10 @@
   }
 
   .user-chip {
+    display: none;
+  }
+
+  .connectivity-chip span {
     display: none;
   }
 

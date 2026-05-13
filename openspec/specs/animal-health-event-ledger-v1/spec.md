@@ -9,6 +9,7 @@ Definir un ledger sanitario append-only por animal para vacunaciones, desparasit
 ### Requirement: Registro sanitario tipado y auditable
 
 The system MUST persist each health event as append-only in the unified `animal_event_log` with `eventCategory=HEALTH`. Required fields: `animalUuid`, `healthEventType`, `occurredAt`, `performedByUserId`, `sourceChannel`, `operationId`, and typed `metadata`; `notes` MAY be empty. The underlying persistence MAY be a unified table; the health event ledger contract is preserved.
+(Previously: append-only audit; now also served offline)
 
 #### Scenario: Alta válida de vacunación
 
@@ -16,6 +17,25 @@ The system MUST persist each health event as append-only in the unified `animal_
 - WHEN se registra el evento
 - THEN el sistema crea una nueva entrada inmutable en unified log with `eventCategory=HEALTH`
 - AND conserva trazabilidad por `performedByUserId`, `sourceChannel` y `operationId`
+
+### Requirement: Health event data available offline in animal context
+
+The system MUST serve health event history from local IndexedDB snapshots when offline, allowing the GANADERO to view the full health timeline including vet visits without network access.
+
+#### Scenario: Health timeline loads offline
+- GIVEN the device is offline
+- WHEN the GANADERO opens the Salud tab on an animal profile
+- THEN the health event timeline renders from the local snapshot
+- AND vet visit details remain fully readable
+
+### Requirement: Offline access to field vet visit metadata
+
+The system MUST cache and serve locally all typed metadata blocks for `FIELD_VET_VISIT` events (visit, checklist, clinicalNote, protocol, cost, treatmentPlan) from IndexedDB while offline.
+
+#### Scenario: Vet visit metadata readable offline
+- GIVEN a `FIELD_VET_VISIT` event previously synced
+- WHEN the GANADERO views the event details while offline
+- THEN all metadata blocks (including veterinarianId, atencionNotas, cost) are displayed
 
 #### Scenario: Rechazo por metadata inválida
 

@@ -1,7 +1,9 @@
 import type {
+  AnimalOfflineUiStatus,
   AnimalReproductionEventOfflineMetadata,
   OfflineOperationEnvelope,
 } from '../../../../core/offline/offline-types';
+import { mapAnimalOfflineUiStatus } from '../../../../core/offline/offline-types';
 import type { AnimalReproductionEventItem, AnimalReproductionEventListFilters } from './animals-reproduction-events.service';
 
 export function normalizeAnimalReproductionEventItem(raw: Record<string, unknown>): AnimalReproductionEventItem {
@@ -65,34 +67,45 @@ export function decorateAnimalReproductionTimeline(
         operation.entityId === item.id &&
         (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'REPRODUCTION')
     );
-    const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
-    const pending = relatedOperations.find(
-      (operation) => operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight'
-    );
-
-    if (conflict) {
-      return {
-        ...item,
-        syncStatus: 'conflict',
-        syncState: 'CONFLICT',
-        syncMessage: conflict.conflict?.reason ?? conflict.lastErrorMessage ?? 'Hay un conflicto remoto.',
-      } satisfies AnimalReproductionEventItem;
-    }
-
-    if (pending) {
-      return {
-        ...item,
-        syncStatus: 'pending',
-        syncState: 'PENDING_SYNC',
-        syncMessage: 'Pendiente de sync.',
-      } satisfies AnimalReproductionEventItem;
-    }
+    const statusOperation = findHighestPriorityOfflineOperation(relatedOperations);
+    const syncStatus = mapAnimalOfflineUiStatus(statusOperation?.status);
 
     return {
       ...item,
-      syncStatus: 'synced',
-      syncState: 'SYNCED',
-      syncMessage: null,
+      syncStatus,
+      syncState: mapReproductionSyncState(syncStatus),
+      syncMessage: resolveReproductionSyncMessage(syncStatus, statusOperation),
     } satisfies AnimalReproductionEventItem;
   });
+}
+
+function findHighestPriorityOfflineOperation(operations: OfflineOperationEnvelope[]) {
+  return (
+    operations.find((operation) => operation.status === 'conflict') ??
+    operations.find((operation) => operation.status === 'failed' || operation.status === 'dead_letter') ??
+    operations.find((operation) => operation.status !== 'acked')
+  );
+}
+
+function mapReproductionSyncState(status: AnimalOfflineUiStatus): AnimalReproductionEventItem['syncState'] {
+  if (status === 'pending' || status === 'local_only') {
+    return 'PENDING_SYNC';
+  }
+  if (status === 'conflict' || status === 'failed') {
+    return 'CONFLICT';
+  }
+  return 'SYNCED';
+}
+
+function resolveReproductionSyncMessage(status: AnimalOfflineUiStatus, operation: OfflineOperationEnvelope | undefined) {
+  if (status === 'conflict') {
+    return operation?.conflict?.reason ?? operation?.lastErrorMessage ?? 'Hay un conflicto remoto.';
+  }
+  if (status === 'failed') {
+    return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
+  }
+  if (status === 'pending' || status === 'local_only') {
+    return 'Pendiente de sync.';
+  }
+  return null;
 }

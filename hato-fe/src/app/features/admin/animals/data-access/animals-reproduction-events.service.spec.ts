@@ -108,6 +108,36 @@ describe('AnimalsReproductionEventsService', () => {
     ]);
   });
 
+  it('should derive failed reproduction event sync markers from the shared offline mapper', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL_REPRODUCTION_EVENT:repro-failed-1',
+      entityType: 'ANIMAL_REPRODUCTION_EVENT',
+      entityId: 'repro-failed-1',
+      payload: createEvent({ id: 'repro-failed-1', operationId: 'repro-failed-1' }) as unknown as Record<string, unknown>,
+      updatedAt: '2026-04-26T10:00:01.000Z',
+    });
+    const failed = await store.enqueueOperation({
+      entityType: 'ANIMAL_REPRODUCTION_EVENT',
+      entityId: 'repro-failed-1',
+      opType: 'CREATE',
+      payload: createEvent({ id: 'repro-failed-1', operationId: 'repro-failed-1' }) as unknown as Record<string, unknown>,
+      clientCreatedAt: '2026-04-26T10:00:00.000Z',
+      clientUpdatedAt: '2026-04-26T10:00:00.000Z',
+      operationId: 'repro-failed-1',
+    });
+    await store.markDeadLetter(failed.operationId, { code: 'REPRO_SYNC_FAILED', message: 'Reproducción no sincronizada.' });
+
+    await expect(firstValueFrom(service.listEvents('animal-uuid-1'))).resolves.toEqual([
+      expect.objectContaining({
+        id: 'repro-failed-1',
+        syncStatus: 'failed',
+        syncState: 'CONFLICT',
+        syncMessage: 'Reproducción no sincronizada.',
+      }),
+    ]);
+  });
+
   it('should queue birth events queue-first and keep pending snapshot metadata offline', async () => {
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
     const { service, store } = setup({ online: false });

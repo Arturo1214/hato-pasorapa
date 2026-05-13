@@ -182,6 +182,31 @@ describe('AnimalsHealthEventsService', () => {
     ]);
   });
 
+  it('should derive failed health event sync markers from the shared offline mapper', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL_HEALTH_EVENT:health-failed-1',
+      entityType: 'ANIMAL_HEALTH_EVENT',
+      entityId: 'health-failed-1',
+      payload: createEvent({ id: 'health-failed-1', operationId: 'health-failed-1' }) as unknown as Record<string, unknown>,
+      updatedAt: '2026-04-26T10:00:01.000Z',
+    });
+    const failed = await store.enqueueOperation({
+      entityType: 'ANIMAL_HEALTH_EVENT',
+      entityId: 'health-failed-1',
+      opType: 'CREATE',
+      payload: createEvent({ id: 'health-failed-1', operationId: 'health-failed-1' }) as unknown as Record<string, unknown>,
+      clientCreatedAt: '2026-04-26T10:00:00.000Z',
+      clientUpdatedAt: '2026-04-26T10:00:00.000Z',
+      operationId: 'health-failed-1',
+    });
+    await store.markFailed(failed.operationId, { code: 'HEALTH_SYNC_FAILED', message: 'Sanidad no sincronizada.' });
+
+    await expect(firstValueFrom(service.listEvents('animal-uuid-1'))).resolves.toEqual([
+      expect.objectContaining({ id: 'health-failed-1', syncStatus: 'failed', syncMessage: 'Sanidad no sincronizada.' }),
+    ]);
+  });
+
   it('should request visitId filtering and normalize typed field vet visits online', async () => {
     const get = vi.fn(() =>
       of({

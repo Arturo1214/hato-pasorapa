@@ -8,6 +8,7 @@ import {
   type AnimalEventLogSnapshotPayload,
   type AnimalEventOfflineMetadata,
   type AnimalEventSnapshotPayload,
+  type AnimalOfflineUiStatus,
   type AnimalOfflineSnapshotPayload,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
@@ -35,7 +36,7 @@ export interface AnimalEventItem {
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
 }
 

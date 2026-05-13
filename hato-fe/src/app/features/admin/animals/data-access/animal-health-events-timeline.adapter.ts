@@ -1,7 +1,9 @@
 import type {
   AnimalHealthEventOfflineMetadata,
+  AnimalOfflineUiStatus,
   OfflineOperationEnvelope,
 } from '../../../../core/offline/offline-types';
+import { mapAnimalOfflineUiStatus } from '../../../../core/offline/offline-types';
 import type { AnimalHealthEventItem, AnimalHealthEventListFilters } from './animals-health-events.service';
 
 export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): AnimalHealthEventItem {
@@ -107,10 +109,8 @@ export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], out
         operation.entityId === item.id &&
         (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'HEALTH')
     );
-    const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
-    const pending = relatedOperations.find(
-      (operation) => operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight'
-    );
+    const statusOperation = findHighestPriorityOfflineOperation(relatedOperations);
+    const syncStatus = mapAnimalOfflineUiStatus(statusOperation?.status);
 
     const treatmentCaseId = readTreatmentCaseId(item);
     const latestType = treatmentCaseId ? latestByTreatmentCase.get(treatmentCaseId) : undefined;
@@ -118,34 +118,35 @@ export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], out
     const treatmentStatus = visitProjection?.status ?? (treatmentCaseId ? (latestType === 'TREATMENT_CLOSED' ? 'closed' : 'active') : item.treatmentStatus);
     const nextDueAt = visitProjection?.nextDueAt ?? item.nextDueAt ?? null;
 
-    if (conflict) {
-      return {
-        ...item,
-        syncStatus: 'conflict',
-        syncMessage: conflict.conflict?.reason ?? conflict.lastErrorMessage ?? 'Hay un conflicto remoto.',
-        treatmentStatus,
-        nextDueAt,
-      } satisfies AnimalHealthEventItem;
-    }
-
-    if (pending) {
-      return {
-        ...item,
-        syncStatus: 'pending',
-        syncMessage: 'Pendiente de sync.',
-        treatmentStatus,
-        nextDueAt,
-      } satisfies AnimalHealthEventItem;
-    }
-
     return {
       ...item,
-      syncStatus: 'synced',
-      syncMessage: null,
+      syncStatus,
+      syncMessage: resolveHealthEventSyncMessage(syncStatus, statusOperation),
       treatmentStatus,
       nextDueAt,
     } satisfies AnimalHealthEventItem;
   });
+}
+
+function findHighestPriorityOfflineOperation(operations: OfflineOperationEnvelope[]) {
+  return (
+    operations.find((operation) => operation.status === 'conflict') ??
+    operations.find((operation) => operation.status === 'failed' || operation.status === 'dead_letter') ??
+    operations.find((operation) => operation.status !== 'acked')
+  );
+}
+
+function resolveHealthEventSyncMessage(status: AnimalOfflineUiStatus, operation: OfflineOperationEnvelope | undefined) {
+  if (status === 'conflict') {
+    return operation?.conflict?.reason ?? operation?.lastErrorMessage ?? 'Hay un conflicto remoto.';
+  }
+  if (status === 'failed') {
+    return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
+  }
+  if (status === 'pending') {
+    return 'Pendiente de sync.';
+  }
+  return null;
 }
 
 function readTreatmentCaseId(item: AnimalHealthEventItem) {

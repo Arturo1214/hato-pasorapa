@@ -1,4 +1,4 @@
-import type { OfflineOperationEnvelope } from '../../../../core/offline/offline-types';
+import { mapAnimalOfflineUiStatus, type AnimalOfflineUiStatus, type OfflineOperationEnvelope } from '../../../../core/offline/offline-types';
 import type { AnimalEventItem, AnimalEventListFilters } from './animals-events.service';
 
 export function normalizeAnimalEventItem(raw: Record<string, unknown>): AnimalEventItem {
@@ -58,29 +58,33 @@ export function decorateAnimalEventSnapshot(
       operation.entityId === item.id &&
       (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'GENERAL')
   );
-  const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
-  if (conflict) {
-    return {
-      ...item,
-      syncStatus: 'conflict',
-      syncMessage: conflict.conflict?.reason ?? conflict.lastErrorMessage ?? 'Hay un conflicto remoto.',
-    };
-  }
-
-  const pending = relatedOperations.find(
-    (operation) => operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight'
-  );
-  if (pending) {
-    return {
-      ...item,
-      syncStatus: 'pending',
-      syncMessage: 'Pendiente de sync.',
-    };
-  }
+  const statusOperation = findHighestPriorityOfflineOperation(relatedOperations);
+  const syncStatus = mapAnimalOfflineUiStatus(statusOperation?.status);
 
   return {
     ...item,
-    syncStatus: 'synced',
-    syncMessage: null,
+    syncStatus,
+    syncMessage: resolveEventSyncMessage(syncStatus, statusOperation),
   };
+}
+
+function findHighestPriorityOfflineOperation(operations: OfflineOperationEnvelope[]) {
+  return (
+    operations.find((operation) => operation.status === 'conflict') ??
+    operations.find((operation) => operation.status === 'failed' || operation.status === 'dead_letter') ??
+    operations.find((operation) => operation.status !== 'acked')
+  );
+}
+
+function resolveEventSyncMessage(status: AnimalOfflineUiStatus, operation: OfflineOperationEnvelope | undefined) {
+  if (status === 'conflict') {
+    return operation?.conflict?.reason ?? operation?.lastErrorMessage ?? 'Hay un conflicto remoto.';
+  }
+  if (status === 'failed') {
+    return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
+  }
+  if (status === 'pending') {
+    return 'Pendiente de sync.';
+  }
+  return null;
 }

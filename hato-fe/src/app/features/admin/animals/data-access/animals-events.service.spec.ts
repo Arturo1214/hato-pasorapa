@@ -147,6 +147,31 @@ describe('AnimalsEventsService', () => {
     ]);
   });
 
+  it('should derive failed general event sync markers from the shared offline mapper', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL_EVENT:event-failed-1',
+      entityType: 'ANIMAL_EVENT',
+      entityId: 'event-failed-1',
+      payload: createEvent({ id: 'event-failed-1', operationId: 'event-failed-1' }) as unknown as Record<string, unknown>,
+      updatedAt: '2026-04-26T10:00:01.000Z',
+    });
+    const failed = await store.enqueueOperation({
+      entityType: 'ANIMAL_EVENT',
+      entityId: 'event-failed-1',
+      opType: 'CREATE',
+      payload: createEvent({ id: 'event-failed-1', operationId: 'event-failed-1' }) as unknown as Record<string, unknown>,
+      clientCreatedAt: '2026-04-26T10:00:00.000Z',
+      clientUpdatedAt: '2026-04-26T10:00:00.000Z',
+      operationId: 'event-failed-1',
+    });
+    await store.markDeadLetter(failed.operationId, { code: 'EVENT_RETRY_EXHAUSTED', message: 'Evento no sincronizado.' });
+
+    await expect(firstValueFrom(service.listEvents('animal-uuid-1'))).resolves.toEqual([
+      expect.objectContaining({ id: 'event-failed-1', syncStatus: 'failed', syncMessage: 'Evento no sincronizado.' }),
+    ]);
+  });
+
   it('should queue animal events offline with audit metadata and trigger manual sync when already online', async () => {
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
     const { service, store } = setup({ online: true });

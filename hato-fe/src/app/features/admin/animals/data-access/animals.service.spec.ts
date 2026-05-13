@@ -214,6 +214,35 @@ describe('AnimalsService', () => {
     ]);
   });
 
+  it('should derive failed animal sync markers from the shared offline mapper', async () => {
+    const { service, store } = setup({ online: false });
+    await store.saveSnapshot({
+      key: 'ANIMAL:animal-failed-1',
+      entityType: 'ANIMAL',
+      entityId: 'animal-failed-1',
+      payload: { ...createAnimal({ uuid: 'animal-failed-1', arete: 'FAIL-1' }) },
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 1,
+    });
+    const operation = await store.enqueueOperation({
+      entityType: 'ANIMAL',
+      entityId: 'animal-failed-1',
+      opType: 'UPDATE',
+      payload: { arete: 'FAIL-1' },
+      clientCreatedAt: '2026-04-26T10:06:00.000Z',
+      clientUpdatedAt: '2026-04-26T10:06:00.000Z',
+    });
+    await store.markFailed(operation.operationId, { code: 'ANIMAL_RETRY_EXHAUSTED', message: 'No se pudo sincronizar.' });
+
+    await expect(firstValueFrom(service.listAnimals({ visible: 'FAIL-1' }))).resolves.toEqual([
+      expect.objectContaining({
+        uuid: 'animal-failed-1',
+        syncStatus: 'failed',
+        syncMessage: 'No se pudo sincronizar.',
+      }),
+    ]);
+  });
+
   it('should force ganadero owner scope for online requests and local snapshot reads', async () => {
     const get = vi.fn(() => of({ content: [createAnimal({ ownerGanaderoId: 'ganadero-user-1' })] }));
     const { service, store } = setup({
@@ -523,6 +552,44 @@ describe('AnimalsService', () => {
         syncStatus: 'synced',
       }),
       expect.objectContaining({ uuid: 'remote-animal-1', arete: 'AR-100', syncStatus: 'synced' }),
+    ]);
+    expect(get).toHaveBeenCalledWith('/api/animals?page=0&size=20&sort=updatedAt,desc', {
+      headers: expect.any(HttpHeaders),
+    });
+  });
+
+  it('should transition an offline animal update badge to synced after reconnect acknowledgement', async () => {
+    const get = vi.fn(() => of({ content: [] }));
+    const { service, store } = setup({ online: false, http: { get: get as never } });
+    await store.saveSnapshot({
+      key: 'ANIMAL:animal-uuid-sync-1',
+      entityType: 'ANIMAL',
+      entityId: 'animal-uuid-sync-1',
+      payload: { ...createAnimal({ uuid: 'animal-uuid-sync-1', arete: 'AR-SYNC-OLD', version: 5 }) },
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 5,
+    });
+
+    await firstValueFrom(
+      service.updateAnimal('animal-uuid-sync-1', {
+        ownerGanaderoId: 'ganadero-uuid-1',
+        arete: 'AR-SYNC-NEW',
+        category: ANIMAL_CATEGORY.VACA,
+        active: true,
+        admissionDate: '2026-04-26',
+      })
+    );
+    const [updateOperation] = await store.listOutbox();
+    await store.markAcked(updateOperation.operationId);
+    service.configureForTesting({ offlineStatus: { isOnline: (() => true) as never } });
+
+    await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([
+      expect.objectContaining({
+        uuid: 'animal-uuid-sync-1',
+        arete: 'AR-SYNC-NEW',
+        syncStatus: 'synced',
+        syncMessage: null,
+      }),
     ]);
     expect(get).toHaveBeenCalledWith('/api/animals?page=0&size=20&sort=updatedAt,desc', {
       headers: expect.any(HttpHeaders),

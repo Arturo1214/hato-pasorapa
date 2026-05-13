@@ -5,6 +5,7 @@ import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import {
   type AnimalEventLogSnapshotPayload,
+  type AnimalOfflineUiStatus,
   type AnimalReproductionEventOfflineCreatePayload,
   type AnimalReproductionEventOfflineMetadata,
   type AnimalReproductionEventSnapshotPayload,
@@ -72,7 +73,7 @@ export interface AnimalReproductionEventItem {
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
   syncState?: 'PENDING_SYNC' | 'SYNCED' | 'CONFLICT';
 }

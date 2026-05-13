@@ -4,7 +4,9 @@ import { firstValueFrom, from, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import {
+  type AnimalOfflineUiStatus,
   type AnimalOfflineMutationPayload,
+  mapAnimalOfflineUiStatus,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
@@ -67,7 +69,7 @@ export interface AnimalItem {
   version: number;
   updatedAt: string;
   lastSyncedAt: string | null;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
 }
 
@@ -663,31 +665,38 @@ function matchesAnimalFilters(animal: AnimalItem, filters: AnimalListFilters) {
 
 function decorateAnimalSnapshot(animal: AnimalItem, outbox: Awaited<ReturnType<OfflineStoreService['listOutbox']>>): AnimalItem {
   const relatedOperations = outbox.filter((operation) => operation.entityType === 'ANIMAL' && operation.entityId === animal.uuid);
-  const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
-  if (conflict) {
-    return {
-      ...animal,
-      syncStatus: 'conflict',
-      syncMessage: conflict.conflict?.reason ?? conflict.lastErrorMessage ?? 'Hay un conflicto remoto.',
-    };
-  }
-
-  const pending = relatedOperations.find(
-    (operation) => operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight'
-  );
-  if (pending) {
-    return {
-      ...animal,
-      syncStatus: 'pending',
-      syncMessage: 'Pendiente de sync.',
-    };
-  }
+  const statusOperation = findHighestPriorityOfflineOperation(relatedOperations);
+  const syncStatus = mapAnimalOfflineUiStatus(statusOperation?.status);
 
   return {
     ...animal,
-    syncStatus: 'synced',
-    syncMessage: null,
+    syncStatus,
+    syncMessage: resolveAnimalSyncMessage(syncStatus, statusOperation),
   };
+}
+
+function findHighestPriorityOfflineOperation(operations: Awaited<ReturnType<OfflineStoreService['listOutbox']>>) {
+  return (
+    operations.find((operation) => operation.status === 'conflict') ??
+    operations.find((operation) => operation.status === 'failed' || operation.status === 'dead_letter') ??
+    operations.find((operation) => operation.status !== 'acked')
+  );
+}
+
+function resolveAnimalSyncMessage(
+  status: AnimalOfflineUiStatus,
+  operation: Awaited<ReturnType<OfflineStoreService['listOutbox']>>[number] | undefined
+) {
+  if (status === 'conflict') {
+    return operation?.conflict?.reason ?? operation?.lastErrorMessage ?? 'Hay un conflicto remoto.';
+  }
+  if (status === 'failed') {
+    return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
+  }
+  if (status === 'pending') {
+    return 'Pendiente de sync.';
+  }
+  return null;
 }
 
 function markSynced(animal: AnimalItem): AnimalItem {

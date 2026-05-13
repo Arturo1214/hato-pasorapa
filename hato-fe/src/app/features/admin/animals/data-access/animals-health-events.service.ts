@@ -8,6 +8,7 @@ import {
   type AnimalHealthEventOfflineMetadata,
   type AnimalHealthEventSnapshotPayload,
   type AnimalEventLogSnapshotPayload,
+  type AnimalOfflineUiStatus,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
@@ -42,7 +43,7 @@ export interface AnimalHealthEventItem {
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
   treatmentStatus?: 'active' | 'closed';
   visitId?: string | null;

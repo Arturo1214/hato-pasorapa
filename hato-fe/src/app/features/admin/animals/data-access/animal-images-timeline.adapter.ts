@@ -1,4 +1,8 @@
-import type { AnimalImageSnapshotPayload, OfflineOperationEnvelope } from '../../../../core/offline/offline-types';
+import {
+  mapAnimalMediaUiStatus,
+  type AnimalImageSnapshotPayload,
+  type OfflineOperationEnvelope,
+} from '../../../../core/offline/offline-types';
 import type { AnimalImageItem } from './animals-images.service';
 
 export function normalizeAnimalImageItem(raw: Record<string, unknown>): AnimalImageItem {
@@ -20,6 +24,10 @@ export function normalizeAnimalImageItem(raw: Record<string, unknown>): AnimalIm
     updatedAt: String(raw['updatedAt'] ?? raw['createdAt'] ?? raw['capturedAt'] ?? ''),
     syncState: String(raw['syncState'] ?? 'SYNCED') as AnimalImageItem['syncState'],
     syncMessage: typeof raw['syncMessage'] === 'string' ? raw['syncMessage'] : null,
+    uiStatus: mapAnimalMediaUiStatus({
+      syncState: String(raw['syncState'] ?? 'SYNCED') as AnimalImageItem['syncState'],
+      binaryRef: typeof raw['binaryRef'] === 'string' ? raw['binaryRef'] : null,
+    }),
   };
 }
 
@@ -41,24 +49,28 @@ export function decorateAnimalImageTimeline(items: AnimalImageItem[], outbox: Of
   return [...items].sort(compareAnimalImageTimeline).map((item) => {
     const related = outbox.find((operation) => operation.entityType === 'ANIMAL_IMAGE' && operation.operationId === item.operationId);
     if (!related) {
-      return { ...item, syncState: 'SYNCED', syncMessage: null } satisfies AnimalImageItem;
+      return { ...item, syncState: 'SYNCED', syncMessage: null, uiStatus: mapAnimalMediaUiStatus({ syncState: 'SYNCED' }) } satisfies AnimalImageItem;
     }
 
     if (related.status === 'acked') {
-      return { ...item, syncState: 'SYNCED', syncMessage: null } satisfies AnimalImageItem;
+      return { ...item, syncState: 'SYNCED', syncMessage: null, uiStatus: mapAnimalMediaUiStatus({ syncState: 'SYNCED' }) } satisfies AnimalImageItem;
     }
 
     if (related.status === 'failed' || related.status === 'conflict' || related.status === 'dead_letter') {
+      const syncState = 'FAILED';
       return {
         ...item,
-        syncState: 'FAILED',
+        syncState,
+        uiStatus: mapAnimalMediaUiStatus({ syncState, binaryRef: item.binaryRef }),
         syncMessage: related.conflict?.reason ?? related.lastErrorMessage ?? 'La imagen quedó en estado FAILED.',
       } satisfies AnimalImageItem;
     }
 
+    const syncState = 'PENDING';
     return {
       ...item,
-      syncState: 'PENDING',
+      syncState,
+      uiStatus: mapAnimalMediaUiStatus({ syncState, binaryRef: item.binaryRef }),
       syncMessage: 'Pendiente de sync.',
     } satisfies AnimalImageItem;
   });

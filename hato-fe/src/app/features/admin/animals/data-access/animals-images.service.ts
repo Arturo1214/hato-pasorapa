@@ -8,6 +8,7 @@ import {
   type AnimalImageMimeType,
   type AnimalImageOfflineCreatePayload,
   type AnimalImageSnapshotPayload,
+  type AnimalOfflineUiStatus,
 } from '../../../../core/offline/offline-types';
 import {
   DEFAULT_OFFLINE_IMAGE_BINARY_STORE,
@@ -37,6 +38,7 @@ export interface AnimalImageItem {
   updatedAt: string;
   syncState: 'PENDING' | 'SYNCED' | 'FAILED';
   syncMessage?: string | null;
+  uiStatus?: AnimalOfflineUiStatus;
 }
 
 export interface AnimalImageMutationFeedback {

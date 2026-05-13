@@ -38,10 +38,10 @@ Chain strategy: pending
 
 ## Phase 3: Animal Feature Services — Use Shared Status Mapper
 
-- [ ] 3.1 Modify `animals.service.ts` — use `mapAnimalOfflineUiStatus()` for badge derivation
-- [ ] 3.2 Modify `animals-images.service.ts` — use `mapAnimalMediaUiStatus()` for image badge
-- [ ] 3.3 Modify animal event services — apply `mapAnimalOfflineUiStatus()` to snapshot `syncStatus`
-- [ ] 3.4 Write integration specs: animal create/update offline → reconnect → badge `synced`
+- [x] 3.1 Modify `animals.service.ts` — use `mapAnimalOfflineUiStatus()` for badge derivation
+- [x] 3.2 Modify `animals-images.service.ts` — use `mapAnimalMediaUiStatus()` for image badge
+- [x] 3.3 Modify animal event services — apply `mapAnimalOfflineUiStatus()` to snapshot `syncStatus`
+- [x] 3.4 Write integration specs: animal create/update offline → reconnect → badge `synced`
 
 ## Phase 4: UI — Header Connectivity and GANADERO Navigation
 

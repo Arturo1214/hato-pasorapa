@@ -493,7 +493,7 @@ export interface AnimalEventSnapshotPayload extends AnimalEventOfflineCreatePayl
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
 }
 
@@ -516,7 +516,7 @@ export interface AnimalEventLogSnapshotPayload extends Record<string, unknown> {
   createdAt: string;
   updatedAt: string;
   clientCreatedAt?: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
   type?: AnimalEventType;
   healthEventType?: AnimalHealthEventType;
@@ -630,7 +630,7 @@ export interface AnimalHealthEventSnapshotPayload extends AnimalHealthEventOffli
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
   treatmentStatus?: 'active' | 'closed';
   visitId?: string | null;
@@ -680,7 +680,7 @@ export interface AnimalReproductionEventSnapshotPayload extends AnimalReproducti
   clientCreatedAt: string;
   createdAt: string;
   updatedAt: string;
-  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncStatus?: AnimalOfflineUiStatus;
   syncMessage?: string | null;
   syncState?: AnimalReproductionEventSyncState;
 }

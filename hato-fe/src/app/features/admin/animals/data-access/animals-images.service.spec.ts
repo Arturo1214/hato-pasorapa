@@ -64,6 +64,91 @@ describe('AnimalsImagesService', () => {
 
     const binary = await imageBinaryStore.getBinary(outbox[0].operationId);
     expect(binary).toEqual(expect.objectContaining({ operationId: outbox[0].operationId, sizeBytes: 3 }));
+
+    await expect(firstValueFrom(service.listImages('animal-1'))).resolves.toEqual([
+      expect.objectContaining({
+        id: outbox[0].operationId,
+        syncState: 'PENDING',
+        uiStatus: 'local_only',
+      }),
+    ]);
+  });
+
+  it('should expose synced and failed image UI statuses through the shared media mapper', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        AnimalsImagesService,
+        SyncMetricsStore,
+        { provide: HttpClient, useValue: { get: vi.fn() } },
+        { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
+        { provide: AuthService, useValue: { getAccessToken: () => 'token', currentUser: () => currentUser } },
+        { provide: OfflineStatusService, useValue: { isOnline: () => false } },
+      ],
+    });
+
+    const service = TestBed.inject(AnimalsImagesService);
+    const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
+    const imageBinaryStore = new OfflineImageBinaryStoreService(new InMemoryOfflineImageBinaryPersistenceAdapter());
+    service.configureForTesting({ store, imageBinaryStore });
+    await store.saveSnapshot({
+      key: 'ANIMAL_IMAGE:image-synced-1',
+      entityType: 'ANIMAL_IMAGE',
+      entityId: 'image-synced-1',
+      payload: {
+        id: 'image-synced-1',
+        animalUuid: 'animal-1',
+        operationId: 'image-synced-1',
+        fileName: 'synced.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 3,
+        checksumSha256: 'checksum-1',
+        capturedAt: '2026-04-27T10:00:00.000Z',
+        sourceChannel: 'ONLINE',
+        binaryRef: 'image-synced-1',
+        clientCreatedAt: '2026-04-27T10:00:00.000Z',
+        createdAt: '2026-04-27T10:00:00.000Z',
+        updatedAt: '2026-04-27T10:00:00.000Z',
+        syncState: 'SYNCED',
+      },
+      updatedAt: '2026-04-27T10:00:00.000Z',
+    });
+    await store.saveSnapshot({
+      key: 'ANIMAL_IMAGE:image-failed-1',
+      entityType: 'ANIMAL_IMAGE',
+      entityId: 'image-failed-1',
+      payload: {
+        id: 'image-failed-1',
+        animalUuid: 'animal-1',
+        operationId: 'image-failed-1',
+        fileName: 'failed.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 3,
+        checksumSha256: 'checksum-2',
+        capturedAt: '2026-04-27T11:00:00.000Z',
+        sourceChannel: 'OFFLINE',
+        binaryRef: 'image-failed-1',
+        clientCreatedAt: '2026-04-27T11:00:00.000Z',
+        createdAt: '2026-04-27T11:00:00.000Z',
+        updatedAt: '2026-04-27T11:00:00.000Z',
+        syncState: 'PENDING',
+      },
+      updatedAt: '2026-04-27T11:00:00.000Z',
+    });
+    const failed = await store.enqueueOperation({
+      entityType: 'ANIMAL_IMAGE',
+      entityId: 'image-failed-1',
+      opType: 'CREATE',
+      payload: { animalUuid: 'animal-1' },
+      operationId: 'image-failed-1',
+      clientCreatedAt: '2026-04-27T11:00:00.000Z',
+      clientUpdatedAt: '2026-04-27T11:00:00.000Z',
+    });
+    await store.markDeadLetter(failed.operationId, { code: 'IMAGE_UPLOAD_FAILED', message: 'Upload agotado.' });
+
+    await expect(firstValueFrom(service.listImages('animal-1'))).resolves.toEqual([
+      expect.objectContaining({ id: 'image-synced-1', syncState: 'SYNCED', uiStatus: 'synced' }),
+      expect.objectContaining({ id: 'image-failed-1', syncState: 'FAILED', uiStatus: 'failed', syncMessage: 'Upload agotado.' }),
+    ]);
   });
 
   it('should reject more than 3 images per animal sync cycle', async () => {

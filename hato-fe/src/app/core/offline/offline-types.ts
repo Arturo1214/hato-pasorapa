@@ -9,6 +9,7 @@ export const OFFLINE_ENTITY_TYPES = [
   'ANIMAL_EVENT',
   'ANIMAL_HEALTH_EVENT',
   'ANIMAL_REPRODUCTION_EVENT',
+  'ANIMAL_EVENT_LOG',
   'ANIMAL_IMAGE',
   'NOTIFICATION',
 ] as const;
@@ -208,6 +209,8 @@ export interface OfflineSyncCheckpoint {
   cursorUpdatedAt: string;
   cursorId: string;
   lastSuccessAt: string;
+  lastSyncedEventId?: string;
+  lastSyncedAt?: string;
 }
 
 export interface OfflineSyncStateMeta {
@@ -476,6 +479,37 @@ export interface AnimalEventSnapshotPayload extends AnimalEventOfflineCreatePayl
   updatedAt: string;
   syncStatus?: 'synced' | 'pending' | 'conflict';
   syncMessage?: string | null;
+}
+
+export const ANIMAL_EVENT_CATEGORIES = ['GENERAL', 'HEALTH', 'REPRODUCTION'] as const;
+export type AnimalEventCategory = (typeof ANIMAL_EVENT_CATEGORIES)[number];
+export type AnimalEventLogSourceChannel = 'ONLINE' | 'OFFLINE';
+export type AnimalEventLogMetadata = Record<string, unknown>;
+
+export interface AnimalEventLogSnapshotPayload extends Record<string, unknown> {
+  id: string;
+  animalUuid: string;
+  eventCategory: AnimalEventCategory;
+  eventType: string;
+  occurredAt: string;
+  notes?: string | null;
+  performedByUserId: string;
+  sourceChannel: AnimalEventLogSourceChannel;
+  operationId: string;
+  metadata: AnimalEventLogMetadata;
+  createdAt: string;
+  updatedAt: string;
+  clientCreatedAt?: string;
+  syncStatus?: 'synced' | 'pending' | 'conflict';
+  syncMessage?: string | null;
+  type?: AnimalEventType;
+  healthEventType?: AnimalHealthEventType;
+  reproductionEventType?: AnimalReproductionEventType;
+  visitId?: string | null;
+  parentVisitId?: string | null;
+  nextDueAt?: string | null;
+  visitStatus?: string;
+  protocolStatus?: string;
 }
 
 export const ANIMAL_HEALTH_EVENT_TYPES = [

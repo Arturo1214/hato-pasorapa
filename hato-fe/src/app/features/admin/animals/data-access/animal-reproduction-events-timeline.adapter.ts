@@ -8,7 +8,7 @@ export function normalizeAnimalReproductionEventItem(raw: Record<string, unknown
   return {
     id: String(raw['id'] ?? raw['operationId'] ?? ''),
     animalUuid: String(raw['animalUuid'] ?? ''),
-    reproductionEventType: String(raw['reproductionEventType'] ?? raw['type'] ?? 'SERVICE') as AnimalReproductionEventItem['reproductionEventType'],
+    reproductionEventType: String(raw['reproductionEventType'] ?? raw['eventType'] ?? raw['type'] ?? 'SERVICE') as AnimalReproductionEventItem['reproductionEventType'],
     occurredAt: String(raw['occurredAt'] ?? ''),
     notes: typeof raw['notes'] === 'string' ? raw['notes'] : null,
     performedByUserId: String(raw['performedByUserId'] ?? ''),
@@ -60,7 +60,10 @@ export function decorateAnimalReproductionTimeline(
 ): AnimalReproductionEventItem[] {
   return [...items].sort(compareAnimalReproductionEventTimeline).map((item) => {
     const relatedOperations = outbox.filter(
-      (operation) => operation.entityType === 'ANIMAL_REPRODUCTION_EVENT' && operation.entityId === item.id
+      (operation) =>
+        (operation.entityType === 'ANIMAL_REPRODUCTION_EVENT' || operation.entityType === 'ANIMAL_EVENT_LOG') &&
+        operation.entityId === item.id &&
+        (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'REPRODUCTION')
     );
     const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
     const pending = relatedOperations.find(

@@ -255,7 +255,7 @@ export class OfflineStoreService {
 
   async saveCheckpoint(checkpoint: OfflineSyncCheckpoint) {
     const state = await this.getState();
-    state.syncState.checkpoints[checkpoint.entityType] = checkpoint;
+    state.syncState.checkpoints[checkpoint.entityType] = normalizeCheckpointAliases(checkpoint);
     await this.persistState(state);
   }
 
@@ -483,7 +483,7 @@ export class OfflineStoreService {
       }];
     });
 
-    state.syncState.checkpoints[entityType] = checkpoint;
+    state.syncState.checkpoints[entityType] = normalizeCheckpointAliases(checkpoint);
     if (entityType === 'NOTIFICATION') {
       this.trimNotificationRetention(state);
     }
@@ -929,6 +929,18 @@ function maxIsoDate(left: string | null, right: string | null) {
 
 function cloneOfflineState(state: PersistedOfflineState): PersistedOfflineState {
   return JSON.parse(JSON.stringify(state)) as PersistedOfflineState;
+}
+
+function normalizeCheckpointAliases(checkpoint: OfflineSyncCheckpoint): OfflineSyncCheckpoint {
+  if (checkpoint.entityType !== 'ANIMAL_EVENT_LOG') {
+    return checkpoint;
+  }
+
+  return {
+    ...checkpoint,
+    lastSyncedEventId: checkpoint.lastSyncedEventId ?? checkpoint.cursorId,
+    lastSyncedAt: checkpoint.lastSyncedAt ?? checkpoint.lastSuccessAt,
+  };
 }
 
 function rangesOverlap(leftFrom: string, leftTo: string | null, rightFrom: string, rightTo: string | null) {

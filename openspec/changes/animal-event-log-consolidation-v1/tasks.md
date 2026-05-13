@@ -99,28 +99,28 @@ Chain strategy: stacked-to-main
 ## Phase 3: FE Offline Migration + Timeline Adapters (PR 3)
 
 ### 3.1 FE Offline Types
-- [ ] 3.1.1 Add `ANIMAL_EVENT_LOG` to `SyncEntityType` in `hato-fe/src/app/core/offline/offline-types.ts`
-- [ ] 3.1.2 Create unified snapshot/payload types: `AnimalEventLogSnapshot { id, animalUuid, eventCategory, eventType, occurredAt, performedByUserId, sourceChannel, operationId, metadata, createdAt, updatedAt }`
-- [ ] 3.1.3 Update `SyncPayload` to include `ANIMAL_EVENT_LOG` variant
-- [ ] 3.1.4 Write `animal-event-log-offline.spec.ts`: offline type migration, idempotency via `operationId`
+- [x] 3.1.1 Add `ANIMAL_EVENT_LOG` to `SyncEntityType` in `hato-fe/src/app/core/offline/offline-types.ts`
+- [x] 3.1.2 Create unified snapshot/payload types: `AnimalEventLogSnapshot { id, animalUuid, eventCategory, eventType, occurredAt, performedByUserId, sourceChannel, operationId, metadata, createdAt, updatedAt }`
+- [x] 3.1.3 Update `SyncPayload` to include `ANIMAL_EVENT_LOG` variant
+- [x] 3.1.4 Write `animal-event-log-offline.spec.ts`: offline type migration, idempotency via `operationId`
 
 ### 3.2 Store Migration
-- [ ] 3.2.1 Migrate existing `animal_event` snapshot keys to unified log format: add `eventCategory=GENERAL`
-- [ ] 3.2.2 Migrate `animal_health_event` keys to `eventCategory=HEALTH`
-- [ ] 3.2.3 Migrate `animal_reproduction_event` keys to `eventCategory=REPRODUCTION`
-- [ ] 3.2.4 Update IndexedDB store: checkpoint keys for sync cursor now use `lastSyncedEventId` + `lastSyncedAt` on unified log
-- [ ] 3.2.5 Write `store-migration.spec.ts`: verify old snapshots migrate to new format without data loss
+- [x] 3.2.1 Migrate existing `animal_event` snapshot keys to unified log format: add `eventCategory=GENERAL`
+- [x] 3.2.2 Migrate `animal_health_event` keys to `eventCategory=HEALTH`
+- [x] 3.2.3 Migrate `animal_reproduction_event` keys to `eventCategory=REPRODUCTION`
+- [x] 3.2.4 Update IndexedDB store: checkpoint keys for sync cursor now use `lastSyncedEventId` + `lastSyncedAt` on unified log
+- [x] 3.2.5 Write `store-migration.spec.ts`: verify old snapshots migrate to new format without data loss
 
 ### 3.3 Timeline Adapters
-- [ ] 3.3.1 Update `hato-fe/src/app/features/admin/animals/data-access/animal-timeline.adapter.ts`: filter unified log by `eventCategory` to derive general/health/reproduction timelines
-- [ ] 3.3.2 Update health timeline adapter: `FIELD_VET_VISIT` projected from `HEALTH` rows with vet columns, visit/clinical/treatment blocks from metadata
-- [ ] 3.3.3 Update `animal-detail/history.component.ts` to use unified log query with category filter
-- [ ] 3.3.4 Write `animal-timeline.adapter.spec.ts`: category filter correctness, vet visit chain projection from unified log
+- [x] 3.3.1 Update `hato-fe/src/app/features/admin/animals/data-access/animal-timeline.adapter.ts`: filter unified log by `eventCategory` to derive general/health/reproduction timelines
+- [x] 3.3.2 Update health timeline adapter: `FIELD_VET_VISIT` projected from `HEALTH` rows with vet columns, visit/clinical/treatment blocks from metadata
+- [x] 3.3.3 Update `animal-detail/history.component.ts` to use unified log query with category filter
+- [x] 3.3.4 Write `animal-timeline.adapter.spec.ts`: category filter correctness, vet visit chain projection from unified log
 
 ### 3.4 Vet Visit Regression Protection
-- [ ] 3.4.1 Write `vet-visit-timeline-regression.spec.ts`: confirm `FIELD_VET_VISIT` lifecycle chain (`PROGRAMADA→ATENDIDA→CANCELADA/FINALIZADA`) projected from unified log matches current behavior from `animal_health_events`
-- [ ] 3.4.2 Write `vet-visit-offline-regression.spec.ts`: offline create/sync/retrieve of vet visits works against unified log
-- [ ] 3.4.3 Run FE tests: `npm test --prefix hato-fe -- --run` (no build)
+- [x] 3.4.1 Write `vet-visit-timeline-regression.spec.ts`: confirm `FIELD_VET_VISIT` lifecycle chain (`PROGRAMADA→ATENDIDA→CANCELADA/FINALIZADA`) projected from unified log matches current behavior from `animal_health_events`
+- [x] 3.4.2 Write `vet-visit-offline-regression.spec.ts`: offline create/sync/retrieve of vet visits works against unified log
+- [x] 3.4.3 Run FE tests: `npm test --prefix hato-fe -- --run` (no build)
 
 ### 3.5 Migration Execution & Finalization
 - [ ] 3.5.1 Execute migration: copy existing rows from three tables into `animal_event_logs` with correct `eventCategory`

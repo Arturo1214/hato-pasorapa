@@ -5,7 +5,7 @@ export function normalizeAnimalEventItem(raw: Record<string, unknown>): AnimalEv
   return {
     id: String(raw['id'] ?? raw['operationId'] ?? ''),
     animalUuid: String(raw['animalUuid'] ?? ''),
-    type: String(raw['type'] ?? 'OBSERVATION') as AnimalEventItem['type'],
+    type: String(raw['type'] ?? raw['eventType'] ?? 'OBSERVATION') as AnimalEventItem['type'],
     occurredAt: String(raw['occurredAt'] ?? ''),
     notes: typeof raw['notes'] === 'string' ? raw['notes'] : null,
     performedByUserId: String(raw['performedByUserId'] ?? ''),
@@ -53,7 +53,10 @@ export function decorateAnimalEventSnapshot(
   outbox: OfflineOperationEnvelope[]
 ): AnimalEventItem {
   const relatedOperations = outbox.filter(
-    (operation) => operation.entityType === 'ANIMAL_EVENT' && operation.entityId === item.id
+    (operation) =>
+      (operation.entityType === 'ANIMAL_EVENT' || operation.entityType === 'ANIMAL_EVENT_LOG') &&
+      operation.entityId === item.id &&
+      (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'GENERAL')
   );
   const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
   if (conflict) {

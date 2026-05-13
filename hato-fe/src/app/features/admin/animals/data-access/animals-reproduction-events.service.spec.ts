@@ -103,8 +103,8 @@ describe('AnimalsReproductionEventsService', () => {
       '/api/animals/animal-uuid-1/reproduction-events?reproductionEventType=BIRTH&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z'
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
-    await expect(store.listSnapshots('ANIMAL_REPRODUCTION_EVENT')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL_REPRODUCTION_EVENT:repro-event-2' }),
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:repro-event-2', payload: expect.objectContaining({ eventCategory: 'REPRODUCTION', eventType: 'BIRTH' }) }),
     ]);
   });
 
@@ -137,17 +137,19 @@ describe('AnimalsReproductionEventsService', () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toEqual(
       expect.objectContaining({
-        entityType: 'ANIMAL_REPRODUCTION_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         payload: expect.objectContaining({
+          eventCategory: 'REPRODUCTION',
+          eventType: 'BIRTH',
           reproductionEventType: 'BIRTH',
           sourceChannel: 'OFFLINE',
           metadata: expect.objectContaining({ offspringCount: 1, offspringAnimalUuids: ['calf-1'] }),
         }),
       })
     );
-    await expect(store.listSnapshots('ANIMAL_REPRODUCTION_EVENT')).resolves.toEqual([
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        payload: expect.objectContaining({ syncState: 'PENDING_SYNC', syncMessage: 'Pendiente de sync.' }),
+        payload: expect.objectContaining({ eventCategory: 'REPRODUCTION', eventType: 'BIRTH', syncState: 'PENDING_SYNC', syncMessage: 'Pendiente de sync.' }),
       }),
     ]);
     expect(dispatchEvent).not.toHaveBeenCalled();
@@ -176,10 +178,12 @@ describe('AnimalsReproductionEventsService', () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toEqual(
       expect.objectContaining({
-        entityType: 'ANIMAL_REPRODUCTION_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         entityId: outbox[0].operationId,
         payload: expect.objectContaining({
           animalUuid: 'animal-uuid-1',
+          eventCategory: 'REPRODUCTION',
+          eventType: 'SERVICE',
           performedByUserId: 'user-1',
           sourceChannel: 'ONLINE',
           metadata: expect.objectContaining({ serviceMethod: 'MONTA_NATURAL', fatherAnimalUuid: 'toro-uuid-1' }),

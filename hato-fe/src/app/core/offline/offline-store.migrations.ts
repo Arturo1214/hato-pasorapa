@@ -8,13 +8,17 @@ import {
   type CalendarAlertPreferences,
   type CalendarDerivedState,
   type NotificationReadState,
+  type AnimalEventCategory,
+  type OfflineEntityType,
   type OfflineOperationEnvelope,
+  type OfflineSnapshotRecord,
+  type OfflineSyncCheckpoint,
   type PersistedOfflineState,
   type ReportingPresetId,
   type ReportingWindow,
 } from './offline-types';
 
-export const CURRENT_OFFLINE_SCHEMA_VERSION = 10;
+export const CURRENT_OFFLINE_SCHEMA_VERSION = 11;
 
 export function isOfflineSchemaVersionSupported(schemaVersion: number) {
   return Number.isInteger(schemaVersion) && schemaVersion > 0 && schemaVersion <= CURRENT_OFFLINE_SCHEMA_VERSION;
@@ -173,6 +177,7 @@ export function createEmptyAdminReportingDerivedState(
       ANIMAL_EVENT: null,
       ANIMAL_HEALTH_EVENT: null,
       ANIMAL_REPRODUCTION_EVENT: null,
+      ANIMAL_EVENT_LOG: null,
       selection: `${selectedWindow}:${selectedPreset}`,
     },
   };
@@ -199,6 +204,7 @@ export function createEmptyDecisionSupportDerivedState(selectedWindow: Reporting
       ANIMAL_EVENT: null,
       ANIMAL_HEALTH_EVENT: null,
       ANIMAL_REPRODUCTION_EVENT: null,
+      ANIMAL_EVENT_LOG: null,
       selection: selectedWindow,
     },
   };
@@ -330,6 +336,23 @@ export function migrateOfflineState(existing?: PersistedOfflineState): OfflineMi
     appliedMigrations.push('v9-to-v10-decision-support-derived-state');
   }
 
+  if (state.schemaVersion < 11) {
+    migrateLegacyAnimalEventsToUnifiedLog(state);
+    state.syncState.meta = {
+      appliedMigrations: [...(state.syncState.meta?.appliedMigrations ?? []), 'v10-to-v11-animal-event-log-consolidation'],
+      calendarAlerts: normalizeCalendarDerivedState(state.syncState.meta?.calendarAlerts),
+      reporting: normalizeAdminReportingDerivedState(state.syncState.meta?.reporting),
+      decisionSupport: normalizeDecisionSupportDerivedState(state.syncState.meta?.decisionSupport),
+      notifications: {
+        readState: normalizeNotificationReadState(state.syncState.meta?.notifications?.readState),
+      },
+      conflictResolution: normalizeConflictResolutionState(state.syncState.meta?.conflictResolution),
+      sessionSecurity: normalizeSessionSecurityState(state.syncState.meta?.sessionSecurity),
+    };
+    state.schemaVersion = 11;
+    appliedMigrations.push('v10-to-v11-animal-event-log-consolidation');
+  }
+
   state.schemaVersion = CURRENT_OFFLINE_SCHEMA_VERSION;
   state.syncState.checkpoints ??= {};
   state.syncState.meta = {
@@ -348,6 +371,132 @@ export function migrateOfflineState(existing?: PersistedOfflineState): OfflineMi
     state,
     appliedMigrations,
   };
+}
+
+function migrateLegacyAnimalEventsToUnifiedLog(state: PersistedOfflineState) {
+  state.outbox = state.outbox.map((operation) => {
+    const category = legacyEventCategory(operation.entityType);
+    if (!category) {
+      return operation;
+    }
+
+    return {
+      ...operation,
+      entityType: 'ANIMAL_EVENT_LOG',
+      payload: toAnimalEventLogPayload(operation.payload, operation.entityType, operation.entityId ?? operation.operationId, operation.operationId),
+    };
+  });
+
+  state.inbox = state.inbox.map((entry) => {
+    const category = legacyEventCategory(entry.entityType);
+    if (!category) {
+      return entry;
+    }
+
+    const entityId = entry.entityId;
+    return {
+      ...entry,
+      key: `ANIMAL_EVENT_LOG:${entityId}`,
+      entityType: 'ANIMAL_EVENT_LOG',
+      payload: toAnimalEventLogPayload(entry.payload, entry.entityType, entityId, readOperationId(entry.payload, entityId)),
+    };
+  });
+
+  state.snapshots = state.snapshots.map((snapshot) => {
+    const category = legacyEventCategory(snapshot.entityType);
+    if (!category) {
+      return snapshot;
+    }
+
+    const entityId = snapshot.entityId;
+    return {
+      ...snapshot,
+      key: `ANIMAL_EVENT_LOG:${entityId}`,
+      entityType: 'ANIMAL_EVENT_LOG',
+      payload: toAnimalEventLogPayload(snapshot.payload, snapshot.entityType, entityId, readOperationId(snapshot.payload, entityId)),
+    } satisfies OfflineSnapshotRecord;
+  });
+
+  const unifiedCheckpoint = latestLegacyEventCheckpoint(state.syncState.checkpoints);
+  if (unifiedCheckpoint) {
+    state.syncState.checkpoints['ANIMAL_EVENT_LOG'] = unifiedCheckpoint;
+  }
+  delete state.syncState.checkpoints.ANIMAL_EVENT;
+  delete state.syncState.checkpoints.ANIMAL_HEALTH_EVENT;
+  delete state.syncState.checkpoints.ANIMAL_REPRODUCTION_EVENT;
+}
+
+function toAnimalEventLogPayload(
+  payload: Record<string, unknown>,
+  entityType: OfflineEntityType,
+  fallbackId: string,
+  fallbackOperationId: string
+) {
+  const category = legacyEventCategory(entityType);
+  if (!category) {
+    return { ...payload };
+  }
+
+  const id = String(payload['id'] ?? payload['uuid'] ?? fallbackId);
+  const eventType = readEventType(payload, category);
+
+  return {
+    ...payload,
+    id,
+    animalUuid: String(payload['animalUuid'] ?? ''),
+    eventCategory: category,
+    eventType,
+    type: category === 'GENERAL' ? eventType : payload['type'],
+    healthEventType: category === 'HEALTH' ? eventType : payload['healthEventType'],
+    reproductionEventType: category === 'REPRODUCTION' ? eventType : payload['reproductionEventType'],
+    occurredAt: String(payload['occurredAt'] ?? payload['createdAt'] ?? ''),
+    performedByUserId: String(payload['performedByUserId'] ?? ''),
+    sourceChannel: payload['sourceChannel'] === 'ONLINE' ? 'ONLINE' : 'OFFLINE',
+    operationId: readOperationId(payload, fallbackOperationId),
+    metadata: isRecord(payload['metadata']) ? { ...payload['metadata'] } : {},
+    createdAt: String(payload['createdAt'] ?? payload['occurredAt'] ?? ''),
+    updatedAt: String(payload['updatedAt'] ?? payload['createdAt'] ?? payload['occurredAt'] ?? ''),
+  };
+}
+
+function legacyEventCategory(entityType: OfflineEntityType): AnimalEventCategory | null {
+  if (entityType === 'ANIMAL_EVENT') return 'GENERAL';
+  if (entityType === 'ANIMAL_HEALTH_EVENT') return 'HEALTH';
+  if (entityType === 'ANIMAL_REPRODUCTION_EVENT') return 'REPRODUCTION';
+  return null;
+}
+
+function readEventType(payload: Record<string, unknown>, category: AnimalEventCategory) {
+  const key = category === 'GENERAL' ? 'type' : category === 'HEALTH' ? 'healthEventType' : 'reproductionEventType';
+  return String(payload['eventType'] ?? payload[key] ?? '');
+}
+
+function readOperationId(payload: Record<string, unknown>, fallback: string) {
+  return String(payload['operationId'] ?? fallback);
+}
+
+function latestLegacyEventCheckpoint(checkpoints: PersistedOfflineState['syncState']['checkpoints']): OfflineSyncCheckpoint | null {
+  const legacy = [checkpoints.ANIMAL_EVENT, checkpoints.ANIMAL_HEALTH_EVENT, checkpoints.ANIMAL_REPRODUCTION_EVENT]
+    .filter((checkpoint): checkpoint is OfflineSyncCheckpoint => Boolean(checkpoint))
+    .sort((left, right) => right.cursorUpdatedAt.localeCompare(left.cursorUpdatedAt) || right.cursorId.localeCompare(left.cursorId));
+
+  const latest = legacy[0];
+  if (!latest) {
+    return null;
+  }
+
+  return {
+    entityType: 'ANIMAL_EVENT_LOG',
+    cursorId: latest.cursorId,
+    cursorUpdatedAt: latest.cursorUpdatedAt,
+    lastSuccessAt: latest.lastSuccessAt,
+    lastSyncedEventId: latest.cursorId,
+    lastSyncedAt: latest.lastSuccessAt,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function normalizeOperationStatus(status: string): OfflineOperationEnvelope['status'] {

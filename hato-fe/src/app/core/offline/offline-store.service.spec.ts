@@ -98,6 +98,7 @@ describe('OfflineStoreService', () => {
         'v7-to-v8-session-security',
         'v8-to-v9-integral-herd-management-v2',
         'v9-to-v10-decision-support-derived-state',
+        'v10-to-v11-animal-event-log-consolidation',
       ]);
 
     const saveCountAfterMigration = adapter.saveCount;

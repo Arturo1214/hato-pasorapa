@@ -5,6 +5,7 @@ import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import {
   type AnimalEventOfflineCreatePayload,
+  type AnimalEventLogSnapshotPayload,
   type AnimalEventOfflineMetadata,
   type AnimalEventSnapshotPayload,
   type AnimalOfflineSnapshotPayload,
@@ -19,6 +20,7 @@ import {
   matchesAnimalEventFilters,
   normalizeAnimalEventItem,
 } from './animal-events-timeline.adapter';
+import { animalEventLogToGeneralEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
 
 export interface AnimalEventItem {
   id: string;
@@ -156,10 +158,10 @@ export class AnimalsEventsService {
     };
 
     await this.store.enqueueOperation({
-      entityType: 'ANIMAL_EVENT',
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: payload as unknown as Record<string, unknown>,
+      payload: toAnimalEventLogPayload(createOptimisticEventSnapshot(payload, now)),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
@@ -185,11 +187,14 @@ export class AnimalsEventsService {
   }
 
   private async listLocalEventSnapshots(animalUuid: string, filters: AnimalEventListFilters) {
-    const snapshots = await this.store.listSnapshots('ANIMAL_EVENT');
+    const unifiedSnapshots = await this.store.listSnapshots('ANIMAL_EVENT_LOG');
+    const legacySnapshots = await this.store.listSnapshots('ANIMAL_EVENT');
     const outbox = await this.store.listOutbox();
 
-    return snapshots
-      .map((snapshot) => snapshot.payload as unknown as AnimalEventItem)
+    return [
+      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'GENERAL').map(animalEventLogToGeneralEventItem),
+      ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalEventItem),
+    ]
       .filter((item) => item.animalUuid === animalUuid)
       .filter((item) => matchesAnimalEventFilters(item, filters))
       .map((item) => decorateAnimalEventSnapshot(item, outbox))
@@ -200,7 +205,8 @@ export class AnimalsEventsService {
     const outbox = await this.store.listOutbox();
     return outbox.some(
       (operation) =>
-        operation.entityType === 'ANIMAL_EVENT' &&
+        (operation.entityType === 'ANIMAL_EVENT' ||
+          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'GENERAL')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
         operation.status !== 'failed'
@@ -209,10 +215,10 @@ export class AnimalsEventsService {
 
   private async saveEventSnapshot(item: AnimalEventItem) {
     await this.store.saveSnapshot({
-      key: `ANIMAL_EVENT:${item.id}`,
-      entityType: 'ANIMAL_EVENT',
+      key: `ANIMAL_EVENT_LOG:${item.id}`,
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: item.id,
-      payload: { ...item } satisfies AnimalEventSnapshotPayload,
+      payload: toAnimalEventLogPayload({ ...item } satisfies AnimalEventSnapshotPayload),
       updatedAt: item.updatedAt,
     });
   }
@@ -258,6 +264,28 @@ export class AnimalsEventsService {
   private async refreshPendingState() {
     this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
   }
+}
+
+function toAnimalEventLogPayload(item: AnimalEventSnapshotPayload | AnimalEventItem): AnimalEventLogSnapshotPayload {
+  return {
+    ...item,
+    id: item.id,
+    animalUuid: item.animalUuid,
+    eventCategory: 'GENERAL',
+    eventType: item.type,
+    type: item.type,
+    occurredAt: item.occurredAt,
+    notes: item.notes,
+    performedByUserId: item.performedByUserId,
+    sourceChannel: item.sourceChannel,
+    operationId: item.operationId,
+    metadata: item.metadata,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    clientCreatedAt: item.clientCreatedAt,
+    syncStatus: item.syncStatus,
+    syncMessage: item.syncMessage,
+  };
 }
 
 function createOptimisticEventSnapshot(payload: AnimalEventOfflineCreatePayload, now: string): AnimalEventItem {

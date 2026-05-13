@@ -4,6 +4,7 @@ import { firstValueFrom, from, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import {
+  type AnimalEventLogSnapshotPayload,
   type AnimalReproductionEventOfflineCreatePayload,
   type AnimalReproductionEventOfflineMetadata,
   type AnimalReproductionEventSnapshotPayload,
@@ -17,6 +18,7 @@ import {
   matchesAnimalReproductionEventFilters,
   normalizeAnimalReproductionEventItem,
 } from './animal-reproduction-events-timeline.adapter';
+import { animalEventLogToReproductionEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
 
 export interface AnimalBirthMetadata extends Record<string, unknown> {
   birthDate: string;
@@ -179,10 +181,10 @@ export class AnimalsReproductionEventsService {
     };
 
     await this.store.enqueueOperation({
-      entityType: 'ANIMAL_REPRODUCTION_EVENT',
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: payload as unknown as Record<string, unknown>,
+      payload: toAnimalEventLogPayload(createOptimisticReproductionEventSnapshot(payload, now)),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
@@ -207,11 +209,14 @@ export class AnimalsReproductionEventsService {
   }
 
   private async listLocalEventSnapshots(animalUuid: string, filters: AnimalReproductionEventListFilters) {
-    const snapshots = await this.store.listSnapshots('ANIMAL_REPRODUCTION_EVENT');
+    const unifiedSnapshots = await this.store.listSnapshots('ANIMAL_EVENT_LOG');
+    const legacySnapshots = await this.store.listSnapshots('ANIMAL_REPRODUCTION_EVENT');
     const outbox = await this.store.listOutbox();
 
-    const items = snapshots
-      .map((snapshot) => snapshot.payload as unknown as AnimalReproductionEventItem)
+    const items = [
+      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'REPRODUCTION').map(animalEventLogToReproductionEventItem),
+      ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalReproductionEventItem),
+    ]
       .filter((item) => item.animalUuid === animalUuid)
       .filter((item) => matchesAnimalReproductionEventFilters(item, filters));
 
@@ -222,7 +227,8 @@ export class AnimalsReproductionEventsService {
     const outbox = await this.store.listOutbox();
     return outbox.some(
       (operation) =>
-        operation.entityType === 'ANIMAL_REPRODUCTION_EVENT' &&
+        (operation.entityType === 'ANIMAL_REPRODUCTION_EVENT' ||
+          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'REPRODUCTION')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
         operation.status !== 'failed'
@@ -231,10 +237,10 @@ export class AnimalsReproductionEventsService {
 
   private async saveEventSnapshot(item: AnimalReproductionEventItem) {
     await this.store.saveSnapshot({
-      key: `ANIMAL_REPRODUCTION_EVENT:${item.id}`,
-      entityType: 'ANIMAL_REPRODUCTION_EVENT',
+      key: `ANIMAL_EVENT_LOG:${item.id}`,
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: item.id,
-      payload: { ...item } satisfies AnimalReproductionEventSnapshotPayload,
+      payload: toAnimalEventLogPayload({ ...item } satisfies AnimalReproductionEventSnapshotPayload),
       updatedAt: item.updatedAt,
     });
   }
@@ -247,6 +253,30 @@ export class AnimalsReproductionEventsService {
   private async refreshPendingState() {
     this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
   }
+}
+
+function toAnimalEventLogPayload(
+  item: AnimalReproductionEventSnapshotPayload | AnimalReproductionEventItem
+): AnimalEventLogSnapshotPayload {
+  return {
+    ...item,
+    id: item.id,
+    animalUuid: item.animalUuid,
+    eventCategory: 'REPRODUCTION',
+    eventType: item.reproductionEventType,
+    reproductionEventType: item.reproductionEventType,
+    occurredAt: item.occurredAt,
+    notes: item.notes,
+    performedByUserId: item.performedByUserId,
+    sourceChannel: item.sourceChannel,
+    operationId: item.operationId,
+    metadata: item.metadata,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    clientCreatedAt: item.clientCreatedAt,
+    syncStatus: item.syncStatus,
+    syncMessage: item.syncMessage,
+  };
 }
 
 function createOptimisticReproductionEventSnapshot(

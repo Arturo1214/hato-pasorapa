@@ -17,7 +17,7 @@ export function normalizeAnimalHealthEventItem(raw: Record<string, unknown>): An
   return {
     id: String(raw['id'] ?? raw['operationId'] ?? ''),
     animalUuid: String(raw['animalUuid'] ?? ''),
-    healthEventType: String(raw['healthEventType'] ?? raw['type'] ?? 'VACCINATION') as AnimalHealthEventItem['healthEventType'],
+    healthEventType: String(raw['healthEventType'] ?? raw['eventType'] ?? raw['type'] ?? 'VACCINATION') as AnimalHealthEventItem['healthEventType'],
     occurredAt: String(raw['occurredAt'] ?? ''),
     notes: typeof raw['notes'] === 'string' ? raw['notes'] : null,
     performedByUserId: String(raw['performedByUserId'] ?? ''),
@@ -102,7 +102,10 @@ export function decorateAnimalHealthTimeline(items: AnimalHealthEventItem[], out
 
   return sorted.map((item) => {
     const relatedOperations = outbox.filter(
-      (operation) => operation.entityType === 'ANIMAL_HEALTH_EVENT' && operation.entityId === item.id
+      (operation) =>
+        (operation.entityType === 'ANIMAL_HEALTH_EVENT' || operation.entityType === 'ANIMAL_EVENT_LOG') &&
+        operation.entityId === item.id &&
+        (!operation.payload['eventCategory'] || operation.payload['eventCategory'] === 'HEALTH')
     );
     const conflict = relatedOperations.find((operation) => operation.status === 'conflict');
     const pending = relatedOperations.find(

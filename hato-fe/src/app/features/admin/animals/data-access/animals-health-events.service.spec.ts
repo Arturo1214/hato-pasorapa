@@ -141,8 +141,8 @@ describe('AnimalsHealthEventsService', () => {
       '/api/animals/animal-uuid-1/health-events?healthEventType=DEWORMING&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z'
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
-    await expect(store.listSnapshots('ANIMAL_HEALTH_EVENT')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL_HEALTH_EVENT:health-event-2' }),
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:health-event-2', payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'DEWORMING' }) }),
     ]);
   });
 
@@ -244,16 +244,18 @@ describe('AnimalsHealthEventsService', () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toEqual(
       expect.objectContaining({
-        entityType: 'ANIMAL_HEALTH_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         payload: expect.objectContaining({
+          eventCategory: 'HEALTH',
+          eventType: 'DISEASE_REPORTED',
           healthEventType: 'DISEASE_REPORTED',
           sourceChannel: 'OFFLINE',
         }),
       })
     );
-    await expect(store.listSnapshots('ANIMAL_HEALTH_EVENT')).resolves.toEqual([
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        payload: expect.objectContaining({ syncStatus: 'pending', syncMessage: 'Pendiente de sync.' }),
+        payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'DISEASE_REPORTED', syncStatus: 'pending', syncMessage: 'Pendiente de sync.' }),
       }),
     ]);
     expect(dispatchEvent).not.toHaveBeenCalled();
@@ -285,20 +287,22 @@ describe('AnimalsHealthEventsService', () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toEqual(
       expect.objectContaining({
-        entityType: 'ANIMAL_HEALTH_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         entityId: outbox[0].operationId,
         opType: 'CREATE',
         payload: expect.objectContaining({
           animalUuid: 'animal-uuid-1',
+          eventCategory: 'HEALTH',
+          eventType: 'TREATMENT_STARTED',
           performedByUserId: 'user-1',
           sourceChannel: 'ONLINE',
         }),
       })
     );
-    await expect(store.listSnapshots('ANIMAL_HEALTH_EVENT')).resolves.toEqual([
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        key: `ANIMAL_HEALTH_EVENT:${outbox[0].operationId}`,
-        payload: expect.objectContaining({ healthEventType: 'TREATMENT_STARTED', syncStatus: 'pending' }),
+        key: `ANIMAL_EVENT_LOG:${outbox[0].operationId}`,
+        payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'TREATMENT_STARTED', healthEventType: 'TREATMENT_STARTED', syncStatus: 'pending' }),
       }),
     ]);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
@@ -343,7 +347,7 @@ describe('AnimalsHealthEventsService', () => {
       expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
       expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
     ]);
-    await expect(store.listSnapshots('ANIMAL_HEALTH_EVENT')).resolves.toHaveLength(2);
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toHaveLength(2);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
   });
 

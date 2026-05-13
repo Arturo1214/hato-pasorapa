@@ -103,8 +103,8 @@ describe('AnimalsEventsService', () => {
       '/api/animals/animal-uuid-1/events?eventType=SOLD&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z'
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
-    await expect(store.listSnapshots('ANIMAL_EVENT')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL_EVENT:event-2' }),
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:event-2', payload: expect.objectContaining({ eventCategory: 'GENERAL', eventType: 'SOLD' }) }),
     ]);
   });
 
@@ -173,20 +173,22 @@ describe('AnimalsEventsService', () => {
     expect(outbox).toHaveLength(1);
     expect(outbox[0]).toEqual(
       expect.objectContaining({
-        entityType: 'ANIMAL_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         entityId: outbox[0].operationId,
         opType: 'CREATE',
         payload: expect.objectContaining({
           animalUuid: 'animal-uuid-1',
+          eventCategory: 'GENERAL',
+          eventType: 'TRANSFERRED',
           performedByUserId: 'user-1',
           sourceChannel: 'ONLINE',
         }),
       })
     );
-    await expect(store.listSnapshots('ANIMAL_EVENT')).resolves.toEqual([
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        key: `ANIMAL_EVENT:${outbox[0].operationId}`,
-        payload: expect.objectContaining({ type: 'TRANSFERRED', syncStatus: 'pending' }),
+        key: `ANIMAL_EVENT_LOG:${outbox[0].operationId}`,
+        payload: expect.objectContaining({ eventCategory: 'GENERAL', eventType: 'TRANSFERRED', type: 'TRANSFERRED', syncStatus: 'pending' }),
       }),
     ]);
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));

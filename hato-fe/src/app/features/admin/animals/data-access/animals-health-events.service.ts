@@ -7,6 +7,7 @@ import {
   type AnimalHealthEventOfflineCreatePayload,
   type AnimalHealthEventOfflineMetadata,
   type AnimalHealthEventSnapshotPayload,
+  type AnimalEventLogSnapshotPayload,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
@@ -19,6 +20,7 @@ import {
   matchesAnimalHealthEventFilters,
   normalizeAnimalHealthEventItem,
 } from './animal-health-events-timeline.adapter';
+import { animalEventLogToHealthEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
 
 export interface AnimalHealthEventItem {
   id: string;
@@ -164,10 +166,10 @@ export class AnimalsHealthEventsService {
     };
 
     await this.store.enqueueOperation({
-      entityType: 'ANIMAL_HEALTH_EVENT',
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: payload as unknown as Record<string, unknown>,
+      payload: toAnimalEventLogPayload(createOptimisticHealthEventSnapshot(payload, now)),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
@@ -192,11 +194,14 @@ export class AnimalsHealthEventsService {
   }
 
   private async listLocalEventSnapshots(animalUuid: string, filters: AnimalHealthEventListFilters) {
-    const snapshots = await this.store.listSnapshots('ANIMAL_HEALTH_EVENT');
+    const unifiedSnapshots = await this.store.listSnapshots('ANIMAL_EVENT_LOG');
+    const legacySnapshots = await this.store.listSnapshots('ANIMAL_HEALTH_EVENT');
     const outbox = await this.store.listOutbox();
 
-    const items = snapshots
-      .map((snapshot) => snapshot.payload as unknown as AnimalHealthEventItem)
+    const items = [
+      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'HEALTH').map(animalEventLogToHealthEventItem),
+      ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalHealthEventItem),
+    ]
       .filter((item) => item.animalUuid === animalUuid)
       .filter((item) => matchesAnimalHealthEventFilters(item, filters));
 
@@ -207,7 +212,8 @@ export class AnimalsHealthEventsService {
     const outbox = await this.store.listOutbox();
     return outbox.some(
       (operation) =>
-        operation.entityType === 'ANIMAL_HEALTH_EVENT' &&
+        (operation.entityType === 'ANIMAL_HEALTH_EVENT' ||
+          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'HEALTH')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
         operation.status !== 'failed'
@@ -216,10 +222,10 @@ export class AnimalsHealthEventsService {
 
   private async saveEventSnapshot(item: AnimalHealthEventItem) {
     await this.store.saveSnapshot({
-      key: `ANIMAL_HEALTH_EVENT:${item.id}`,
-      entityType: 'ANIMAL_HEALTH_EVENT',
+      key: `ANIMAL_EVENT_LOG:${item.id}`,
+      entityType: 'ANIMAL_EVENT_LOG',
       entityId: item.id,
-      payload: { ...item } satisfies AnimalHealthEventSnapshotPayload,
+      payload: toAnimalEventLogPayload({ ...item } satisfies AnimalHealthEventSnapshotPayload),
       updatedAt: item.updatedAt,
     });
   }
@@ -255,10 +261,10 @@ export class AnimalsHealthEventsService {
       };
 
       await this.store.enqueueOperation({
-        entityType: 'ANIMAL_HEALTH_EVENT',
+        entityType: 'ANIMAL_EVENT_LOG',
         entityId: operationId,
         opType: 'CREATE',
-        payload: payload as unknown as Record<string, unknown>,
+        payload: toAnimalEventLogPayload(createOptimisticHealthEventSnapshot(payload, now)),
         baseVersion: 0,
         clientCreatedAt: now,
         clientUpdatedAt: now,
@@ -288,6 +294,47 @@ export class AnimalsHealthEventsService {
     }
     return firstValueFrom(this.animalsService.listAnimals({ active: true, page: 0, size: 1000 }));
   }
+}
+
+function toAnimalEventLogPayload(item: AnimalHealthEventSnapshotPayload | AnimalHealthEventItem): AnimalEventLogSnapshotPayload {
+  const metadata = item.metadata as Record<string, unknown>;
+  const visit = typeof metadata['visit'] === 'object' && metadata['visit'] !== null ? metadata['visit'] as Record<string, unknown> : null;
+  const protocol = typeof metadata['protocol'] === 'object' && metadata['protocol'] !== null ? metadata['protocol'] as Record<string, unknown> : null;
+
+  return {
+    ...item,
+    id: item.id,
+    animalUuid: item.animalUuid,
+    eventCategory: 'HEALTH',
+    eventType: item.healthEventType,
+    healthEventType: item.healthEventType,
+    occurredAt: item.occurredAt,
+    notes: item.notes,
+    performedByUserId: item.performedByUserId,
+    sourceChannel: item.sourceChannel,
+    operationId: item.operationId,
+    metadata: item.metadata as Record<string, unknown>,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    clientCreatedAt: item.clientCreatedAt,
+    syncStatus: item.syncStatus,
+    syncMessage: item.syncMessage,
+    visitId: readPayloadString(item, 'visitId') ?? readString(visit, 'visitId'),
+    parentVisitId: readPayloadString(item, 'parentVisitId') ?? readString(visit, 'parentVisitId'),
+    nextDueAt: readPayloadString(item, 'nextDueAt') ?? readString(protocol, 'nextDueAt'),
+    visitStatus: readPayloadString(item, 'visitStatus') ?? readString(visit, 'status') ?? undefined,
+    protocolStatus: readString(protocol, 'status') ?? undefined,
+  };
+}
+
+function readString(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function readPayloadString(record: object, key: string) {
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : null;
 }
 
 function isGlobalVetVisitInput(input: AnimalHealthEventCreateInput) {

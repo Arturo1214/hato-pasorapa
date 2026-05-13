@@ -76,7 +76,7 @@ describe('offline store migrations', () => {
       });
 
     expect(state.schemaVersion).toBe(CURRENT_OFFLINE_SCHEMA_VERSION);
-    expect(appliedMigrations).toEqual(['v9-to-v10-decision-support-derived-state']);
+    expect(appliedMigrations).toEqual(['v9-to-v10-decision-support-derived-state', 'v10-to-v11-animal-event-log-consolidation']);
     expect(state.syncState.meta?.calendarAlerts?.preferences.horizonDays).toBe(3);
     expect(state.syncState.meta?.calendarAlerts?.items).toEqual([]);
     expect(state.syncState.meta?.reporting?.selectedWindow).toBe('7d');

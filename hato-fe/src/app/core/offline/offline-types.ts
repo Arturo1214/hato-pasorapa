@@ -42,6 +42,22 @@ export const SYNC_QUEUE_STATUSES = ['pending', 'in_flight', 'retry_scheduled', '
 export type SyncQueueStatus = (typeof SYNC_QUEUE_STATUSES)[number];
 export const SYNC_HARNESS_MAX_HAS_MORE_PAGES = 10;
 
+export type AnimalOfflineUiStatus = 'synced' | 'pending' | 'conflict' | 'failed' | 'local_only';
+
+export interface AnimalOfflineBadge {
+  status: AnimalOfflineUiStatus;
+  message: string | null;
+  operationId?: string;
+}
+
+export interface AnimalMediaLocalMeta {
+  binaryRef: string;
+  thumbnailRef?: string | null;
+  compressed?: boolean;
+  sizeBytes?: number;
+  checksumSha256?: string;
+}
+
 export interface SyncMetricDictionaryEntry {
   key: 'cycle' | 'queue' | 'errors' | 'conflicts' | 'entityHealth';
   label: string;
@@ -696,6 +712,63 @@ export interface AnimalImageSnapshotPayload extends AnimalImageOfflineCreatePayl
   updatedAt: string;
   syncState: AnimalImageSyncState;
   syncMessage?: string | null;
+}
+
+export interface AnimalMediaStatusSnapshot {
+  syncState?: AnimalImageSyncState | null;
+  binaryRef?: string | null;
+  localMeta?: AnimalMediaLocalMeta | null;
+}
+
+export function mapAnimalOfflineUiStatus(
+  outboxStatus?: OfflineOperationStatus | SyncQueueStatus | null,
+  imageState?: AnimalImageSyncState | null
+): AnimalOfflineUiStatus {
+  if (outboxStatus === 'acked') {
+    return 'synced';
+  }
+
+  if (outboxStatus === 'conflict') {
+    return 'conflict';
+  }
+
+  if (outboxStatus === 'failed' || outboxStatus === 'dead_letter') {
+    return 'failed';
+  }
+
+  if (outboxStatus === 'pending' || outboxStatus === 'in_flight' || outboxStatus === 'retry_scheduled') {
+    return 'pending';
+  }
+
+  if (imageState === 'FAILED') {
+    return 'failed';
+  }
+
+  if (imageState === 'PENDING') {
+    return 'pending';
+  }
+
+  return 'synced';
+}
+
+export function mapAnimalMediaUiStatus(imageSnapshot?: AnimalMediaStatusSnapshot | null): AnimalOfflineUiStatus {
+  if (!imageSnapshot) {
+    return 'synced';
+  }
+
+  if (imageSnapshot.syncState === 'FAILED') {
+    return 'failed';
+  }
+
+  if (imageSnapshot.syncState === 'SYNCED') {
+    return 'synced';
+  }
+
+  if (imageSnapshot.syncState === 'PENDING') {
+    return imageSnapshot.localMeta?.binaryRef || imageSnapshot.binaryRef ? 'local_only' : 'pending';
+  }
+
+  return 'synced';
 }
 
 export interface HerdLotOfflinePayload extends Record<string, unknown> {

@@ -24,17 +24,17 @@ Chain strategy: pending
 
 ## Phase 1: Foundation — Shared Types and Status Mapper
 
-- [ ] 1.1 Add `AnimalOfflineUiStatus` union type (`'synced' | 'pending' | 'conflict' | 'failed' | 'local_only'`), `AnimalOfflineBadge` interface, and `AnimalMediaLocalMeta` interface to `hato-fe/src/app/core/offline/offline-types.ts`
-- [ ] 1.2 Add `mapAnimalOfflineUiStatus(outboxStatus, imageState): AnimalOfflineUiStatus` mapper function to `offline-types.ts`
-- [ ] 1.3 Add `mapAnimalMediaUiStatus(imageSnapshot): AnimalOfflineUiStatus` for image-only local state
-- [ ] 1.4 Write unit specs: `offline-types.spec.ts` — cover all mapper branches
+- [x] 1.1 Add `AnimalOfflineUiStatus` union type (`'synced' | 'pending' | 'conflict' | 'failed' | 'local_only'`), `AnimalOfflineBadge` interface, and `AnimalMediaLocalMeta` interface to `hato-fe/src/app/core/offline/offline-types.ts`
+- [x] 1.2 Add `mapAnimalOfflineUiStatus(outboxStatus, imageState): AnimalOfflineUiStatus` mapper function to `offline-types.ts`
+- [x] 1.3 Add `mapAnimalMediaUiStatus(imageSnapshot): AnimalOfflineUiStatus` for image-only local state
+- [x] 1.4 Write unit specs: `offline-types.spec.ts` — cover all mapper branches
 
 ## Phase 2: Offline Store and Sync Infrastructure
 
-- [ ] 2.1 Review `offline-store.service.ts` — no changes needed; existing helpers sufficient
-- [ ] 2.2 Modify `offline-image-binary-store.service.ts` — add `thumbnailRef?: string | null` and `compressed?: boolean` fields to blob metadata
-- [ ] 2.3 Modify `sync-orchestrator.service.ts` — ensure binary purge on ack preserves `conflict` status for badges
-- [ ] 2.4 Write unit specs for image binary store metadata extension
+- [x] 2.1 Review `offline-store.service.ts` — no changes needed; existing helpers sufficient
+- [x] 2.2 Modify `offline-image-binary-store.service.ts` — add `thumbnailRef?: string | null` and `compressed?: boolean` fields to blob metadata
+- [x] 2.3 Modify `sync-orchestrator.service.ts` — ensure binary purge on ack preserves `conflict` status for badges
+- [x] 2.4 Write unit specs for image binary store metadata extension
 
 ## Phase 3: Animal Feature Services — Use Shared Status Mapper
 

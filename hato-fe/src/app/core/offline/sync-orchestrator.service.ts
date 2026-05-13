@@ -231,6 +231,8 @@ export class SyncOrchestratorService {
               success += 1;
               await this.reconcileAcknowledgedCreateSnapshot(result.operationId, result.entityType, result.entityId, hydratedOperations);
               if (result.entityType === 'ANIMAL_IMAGE') {
+                // Image binaries are purged only after server ack. Conflict/failed paths keep the blob so media badges
+                // can still surface local-only/conflict state and future retry/resolution has the original payload.
                 await this.imageBinaryStore.purgeBinary(result.operationId);
               }
               await this.store.markAcked(result.operationId);

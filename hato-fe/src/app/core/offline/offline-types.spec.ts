@@ -6,9 +6,35 @@ import {
   REPORTING_WINDOWS,
   type AnimalOfflineMutationPayload,
   type AnimalOfflineSnapshotPayload,
+  mapAnimalMediaUiStatus,
+  mapAnimalOfflineUiStatus,
 } from './offline-types';
 
 describe('offline v2 entity types', () => {
+  it('should map animal outbox statuses to a bounded UI status contract', () => {
+    expect(mapAnimalOfflineUiStatus('acked')).toBe('synced');
+    expect(mapAnimalOfflineUiStatus('pending')).toBe('pending');
+    expect(mapAnimalOfflineUiStatus('in_flight')).toBe('pending');
+    expect(mapAnimalOfflineUiStatus('retry_scheduled')).toBe('pending');
+    expect(mapAnimalOfflineUiStatus('conflict')).toBe('conflict');
+    expect(mapAnimalOfflineUiStatus('failed')).toBe('failed');
+    expect(mapAnimalOfflineUiStatus('dead_letter')).toBe('failed');
+  });
+
+  it('should map animal image states when no outbox status is available', () => {
+    expect(mapAnimalOfflineUiStatus(null, 'SYNCED')).toBe('synced');
+    expect(mapAnimalOfflineUiStatus(undefined, 'PENDING')).toBe('pending');
+    expect(mapAnimalOfflineUiStatus(null, 'FAILED')).toBe('failed');
+  });
+
+  it('should derive local-only media status for pending images with a local binary reference', () => {
+    expect(mapAnimalMediaUiStatus({ syncState: 'PENDING', binaryRef: 'image-op-1' })).toBe('local_only');
+    expect(mapAnimalMediaUiStatus({ syncState: 'PENDING', localMeta: { binaryRef: 'image-op-2' } })).toBe('local_only');
+    expect(mapAnimalMediaUiStatus({ syncState: 'PENDING' })).toBe('pending');
+    expect(mapAnimalMediaUiStatus({ syncState: 'SYNCED', binaryRef: 'image-op-3' })).toBe('synced');
+    expect(mapAnimalMediaUiStatus({ syncState: 'FAILED', binaryRef: 'image-op-4' })).toBe('failed');
+  });
+
   it('should expose NOTIFICATION as a supported offline entity with local read-state contracts', () => {
     const snapshot = {
       id: 'notification-1',

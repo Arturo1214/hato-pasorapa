@@ -1357,4 +1357,76 @@ describe('SyncOrchestratorService', () => {
       }),
     ]);
   });
+
+  it('should retain local image binary data when image sync ends in conflict for badge visibility and retry', async () => {
+    const store = createStore();
+    const metrics = new SyncMetricsStore();
+    const imageBinaryStore = {
+      getBase64Data: vi.fn(async () => globalThis.btoa('image')),
+      purgeBinary: vi.fn(async () => undefined),
+    };
+
+    await store.enqueueOperation({
+      entityType: 'ANIMAL_IMAGE',
+      entityId: 'image-conflict-1',
+      opType: 'CREATE',
+      payload: {
+        animalUuid: 'animal-1',
+        operationId: 'image-conflict-op-1',
+        sourceChannel: 'OFFLINE',
+        fileName: 'vaca.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 5,
+        checksumSha256: 'a'.repeat(64),
+        capturedAt: '2026-04-29T10:00:00.000Z',
+        binaryRef: 'image-conflict-op-1',
+      },
+      clientCreatedAt: '2026-04-29T10:00:00.000Z',
+      clientUpdatedAt: '2026-04-29T10:00:00.000Z',
+      operationId: 'image-conflict-op-1',
+    });
+
+    const service = new SyncOrchestratorService({
+      store,
+      imageBinaryStore: imageBinaryStore as never,
+      apiClient: {
+        push: vi.fn(async () => ({
+          results: [
+            {
+              operationId: 'image-conflict-op-1',
+              entityType: 'ANIMAL_IMAGE',
+              entityId: 'image-conflict-1',
+              classification: 'version_conflict',
+              conflict: { reason: 'Imagen duplicada', resolutionHint: 'manual_resolution', serverVersion: 2 },
+            },
+          ],
+        } satisfies PushSyncResponse)),
+        pull: vi.fn(async () => ({
+          entityType: 'ANIMAL_IMAGE',
+          items: [],
+          nextCursor: {
+            entityType: 'ANIMAL_IMAGE',
+            cursorUpdatedAt: '2026-04-29T10:01:00.000Z',
+            cursorId: 'image-cursor',
+            lastSuccessAt: '2026-04-29T10:01:00.000Z',
+          },
+          hasMore: false,
+        } satisfies PullSyncResponse)),
+      },
+      metricsStore: metrics,
+      offlineStatus: { isOnline: () => true },
+      authSession: { getAccessToken: () => 'token' },
+      now: () => '2026-04-29T10:01:00.000Z',
+      random: () => 0,
+      windowRef: window,
+      supportedEntities: ['ANIMAL_IMAGE'],
+    });
+
+    await service.syncNow('manual');
+
+    const operation = await store.getOperation('image-conflict-op-1');
+    expect(operation?.status).toBe('conflict');
+    expect(imageBinaryStore.getBase64Data).toHaveBeenCalledWith('image-conflict-op-1');
+    expect(imageBinaryStore.purgeBinary).not.toHaveBeenCalled();
+  });
 });

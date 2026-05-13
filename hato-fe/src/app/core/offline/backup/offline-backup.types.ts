@@ -13,6 +13,8 @@ export interface BackupImageBinaryEntry {
   mimeType: string;
   sizeBytes: number;
   capturedAt: string;
+  thumbnailRef?: string | null;
+  compressed?: boolean;
   base64: string;
 }
 

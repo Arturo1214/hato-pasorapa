@@ -6,6 +6,8 @@ export interface OfflineImageBinaryRecord {
   mimeType: string;
   sizeBytes: number;
   capturedAt: string;
+  thumbnailRef?: string | null;
+  compressed?: boolean;
 }
 
 export interface OfflineImageBinaryPersistenceAdapter {
@@ -68,6 +70,8 @@ export class OfflineImageBinaryStoreService {
         mimeType: record.mimeType,
         sizeBytes: record.sizeBytes,
         capturedAt: record.capturedAt,
+        thumbnailRef: record.thumbnailRef,
+        compressed: record.compressed,
         base64: await this.getRequiredBase64Data(record),
       }))
     );
@@ -81,6 +85,8 @@ export class OfflineImageBinaryStoreService {
         mimeType: entry.mimeType,
         sizeBytes: entry.sizeBytes,
         capturedAt: entry.capturedAt,
+        thumbnailRef: entry.thumbnailRef,
+        compressed: entry.compressed,
       }))
     );
   }

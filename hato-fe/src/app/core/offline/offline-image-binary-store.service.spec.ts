@@ -46,6 +46,8 @@ describe('OfflineImageBinaryStoreService', () => {
       mimeType: 'image/png',
       sizeBytes: 4,
       capturedAt: '2026-04-28T14:00:00.000Z',
+      thumbnailRef: 'thumb-image-op-3',
+      compressed: true,
     });
 
     const backupEntries = await service.listForBackup();
@@ -54,6 +56,8 @@ describe('OfflineImageBinaryStoreService', () => {
         operationId: 'image-op-3',
         mimeType: 'image/png',
         sizeBytes: 4,
+        thumbnailRef: 'thumb-image-op-3',
+        compressed: true,
         base64: globalThis.btoa('rest'),
       }),
     ]);
@@ -65,10 +69,15 @@ describe('OfflineImageBinaryStoreService', () => {
         sizeBytes: 4,
         capturedAt: '2026-04-28T14:05:00.000Z',
         base64: globalThis.btoa('hola'),
+        thumbnailRef: null,
+        compressed: false,
       },
     ]);
 
     await expect(service.getBinary('image-op-3')).resolves.toBeNull();
     await expect(service.getBase64Data('image-op-4')).resolves.toBe(globalThis.btoa('hola'));
+    await expect(service.getBinary('image-op-4')).resolves.toEqual(
+      expect.objectContaining({ thumbnailRef: null, compressed: false })
+    );
   });
 });

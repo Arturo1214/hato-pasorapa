@@ -9,7 +9,7 @@ import { of, throwError } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { AnimalBirthRegistrationDialogComponent, AnimalDetailPageComponent, AnimalServiceRegistrationDialogComponent, AnimalVetVisitDetailDialogComponent } from './animal-detail-page.component';
-import { AnimalsEventsService } from './data-access/animals-events.service';
+import { AnimalsEventsService, type AnimalEventItem } from './data-access/animals-events.service';
 import { AnimalsHealthEventsService, type AnimalHealthEventItem } from './data-access/animals-health-events.service';
 import { AnimalsImagesService, type AnimalImageItem } from './data-access/animals-images.service';
 import { AnimalsReproductionEventsService, type AnimalReproductionEventItem } from './data-access/animals-reproduction-events.service';
@@ -41,7 +41,7 @@ describe('AnimalDetailPageComponent', () => {
     ...overrides,
   });
 
-  const createImage = (): AnimalImageItem => ({
+  const createImage = (overrides: Partial<AnimalImageItem> = {}): AnimalImageItem => ({
     id: 'image-1',
     animalUuid: 'animal-uuid-1',
     operationId: 'image-1',
@@ -57,6 +57,24 @@ describe('AnimalDetailPageComponent', () => {
     createdAt: '2026-04-26T10:00:00.000Z',
     updatedAt: '2026-04-26T10:00:00.000Z',
     syncState: 'SYNCED',
+    uiStatus: 'synced',
+    ...overrides,
+  });
+
+  const createEvent = (overrides: Partial<AnimalEventItem> = {}): AnimalEventItem => ({
+    id: 'event-1',
+    animalUuid: 'animal-uuid-1',
+    type: 'OBSERVATION',
+    occurredAt: '2026-04-26T10:00:00.000Z',
+    notes: 'Control de campo',
+    performedByUserId: 'user-1',
+    sourceChannel: 'ONLINE',
+    operationId: 'event-operation-1',
+    metadata: {},
+    clientCreatedAt: '2026-04-26T10:00:00.000Z',
+    createdAt: '2026-04-26T10:00:00.000Z',
+    updatedAt: '2026-04-26T10:00:00.000Z',
+    ...overrides,
   });
 
   const genealogy: AnimalGenealogy = {
@@ -120,7 +138,7 @@ describe('AnimalDetailPageComponent', () => {
     ...overrides,
   });
 
-  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; genealogy?: AnimalGenealogy; reproductionEvents?: AnimalReproductionEventItem[]; healthEvents?: AnimalHealthEventItem[] } = {}) => {
+  const configure = async (options: { animalsService?: Partial<AnimalsService>; role?: 'ADMIN' | 'GANADERO'; animal?: AnimalItem; dialogClosedWith?: boolean; genealogy?: AnimalGenealogy; images?: AnimalImageItem[]; events?: AnimalEventItem[]; reproductionEvents?: AnimalReproductionEventItem[]; healthEvents?: AnimalHealthEventItem[] } = {}) => {
     const animalsService = {
       getAnimal: vi.fn(() => of(options.animal ?? createAnimal())),
       getGenealogy: vi.fn(() => of(options.genealogy ?? genealogy)),
@@ -135,8 +153,8 @@ describe('AnimalDetailPageComponent', () => {
         provideHttpClientTesting(),
         provideNoopAnimations(),
         { provide: AnimalsService, useValue: animalsService },
-        { provide: AnimalsImagesService, useValue: { listImages: vi.fn(() => of([createImage()])) } },
-        { provide: AnimalsEventsService, useValue: { listEvents: vi.fn(() => of([{ type: 'OBSERVATION', occurredAt: '2026-04-26T10:00:00.000Z', notes: 'Control de campo' }])) } },
+        { provide: AnimalsImagesService, useValue: { listImages: vi.fn(() => of(options.images ?? [createImage()])) } },
+        { provide: AnimalsEventsService, useValue: { listEvents: vi.fn(() => of(options.events ?? [createEvent()])) } },
         { provide: AnimalsHealthEventsService, useValue: { listEvents: vi.fn(() => of(options.healthEvents ?? [])) } },
         { provide: AnimalsReproductionEventsService, useValue: { listEvents: vi.fn(() => of(options.reproductionEvents ?? [])) } },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'animal-uuid-1' } } } },
@@ -195,6 +213,57 @@ describe('AnimalDetailPageComponent', () => {
 
     expect(text).toContain('Raza');
     expect(text).toContain('Sin raza asignada');
+  });
+
+  it('should render a sync badge in the animal detail header without blocking the ficha', async () => {
+    const { fixture } = await configure({
+      animal: createAnimal({ syncStatus: 'conflict', syncMessage: 'El servidor tiene una versión más nueva.' }),
+    });
+
+    const detailHeader = fixture.nativeElement.querySelector('.animal-detail-status') as HTMLElement | null;
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(detailHeader?.textContent).toContain('Conflicto');
+    expect(detailHeader?.textContent).toContain('El servidor tiene una versión más nueva.');
+    expect(text).toContain('Arete');
+    expect(text).toContain('AR-100');
+  });
+
+  it('should render media badges on the main image and thumbnails for local-only and failed photos', async () => {
+    const { fixture } = await configure({
+      images: [
+        createImage({ id: 'image-local', fileName: 'local.jpg', previewUrl: 'blob:local', syncState: 'PENDING', syncMessage: 'Pendiente de sync.', uiStatus: 'local_only' }),
+        createImage({ id: 'image-failed', fileName: 'failed.jpg', previewUrl: 'blob:failed', syncState: 'FAILED', syncMessage: 'No se pudo subir.', uiStatus: 'failed' }),
+      ],
+    });
+
+    await selectTab(fixture, 'Imágenes');
+
+    const gallery = fixture.nativeElement.querySelector('.gallery') as HTMLElement;
+    expect(gallery.textContent).toContain('Solo local');
+    expect(gallery.textContent).toContain('Error');
+    expect(gallery.textContent).toContain('No se pudo subir.');
+  });
+
+  it('should render timeline badges for animal, health and reproduction events while keeping vet visit details visible', async () => {
+    const { fixture } = await configure({
+      events: [createEvent({ syncStatus: 'pending', syncMessage: 'Pendiente de sync.' })],
+      healthEvents: [createHealthEvent({ syncStatus: 'conflict', syncMessage: 'Visita con conflicto remoto.' })],
+      reproductionEvents: [createReproductionEvent({ syncStatus: 'failed', syncMessage: 'No se pudo sincronizar.' })],
+    });
+
+    await selectTab(fixture, 'Historial');
+    expect(fixture.nativeElement.textContent).toContain('Pendiente');
+    expect(fixture.nativeElement.textContent).toContain('Control de campo');
+
+    await selectTab(fixture, 'Salud');
+    expect(fixture.nativeElement.textContent).toContain('Conflicto');
+    expect(fixture.nativeElement.textContent).toContain('Visita veterinaria');
+    expect(fixture.nativeElement.textContent).toContain('Detalles');
+
+    await selectTab(fixture, 'Reproducción');
+    expect(fixture.nativeElement.textContent).toContain('Error');
+    expect(fixture.nativeElement.textContent).toContain('Servicio reproductivo');
   });
 
   it('should render veterinary visits in Spanish with formatted date, context and details action', async () => {

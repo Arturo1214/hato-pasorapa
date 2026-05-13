@@ -73,7 +73,7 @@ describe('AnimalsPageComponent', () => {
   });
 
   const createImagesServiceMock = () => ({
-    listImages: vi.fn(() => of([] as AnimalImageItem[])),
+    listImages: vi.fn((_animalUuid: string) => of([] as AnimalImageItem[])),
     addImages: vi.fn(() => of({ outcome: 'queued', message: 'Imágenes encoladas. Se disparó la sincronización automática.' })),
   });
 
@@ -508,6 +508,65 @@ describe('AnimalsPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.animal-identity__primary')?.textContent).toContain('AR-100');
     expect(fixture.nativeElement.querySelector('.animal-identity__meta')?.textContent).toContain('Marca Sur');
     expect(fixture.nativeElement.textContent).toContain('420 kg');
+  });
+
+  it('should render Spanish sync badges for pending, synced and conflict animal rows', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([
+      createAnimal({ uuid: 'pending-animal', arete: 'PEND-001', syncStatus: 'pending', syncMessage: 'Pendiente de sync.' }),
+      createAnimal({ uuid: 'synced-animal', arete: 'SYNC-001', syncStatus: 'synced' }),
+      createAnimal({ uuid: 'conflict-animal', arete: 'CONF-001', syncStatus: 'conflict', syncMessage: 'Versión remota cambió.' }),
+    ]));
+
+    const { fixture } = await configure(animalsServiceMock);
+
+    const rowBadges = Array.from(fixture.nativeElement.querySelectorAll('.animal-sync-badge') as NodeListOf<HTMLElement>);
+    expect(rowBadges.map((badge) => badge.textContent?.trim())).toEqual([
+      'Pendiente',
+      'Sincronizado',
+      'Conflicto',
+    ]);
+    expect(fixture.nativeElement.textContent).toContain('Versión remota cambió.');
+  });
+
+  it('should mark pending and failed animal thumbnails with visible media badges', async () => {
+    const animalsServiceMock = createAnimalsServiceMock();
+    const imagesServiceMock = createImagesServiceMock();
+    animalsServiceMock.listAnimals.mockReturnValue(of([
+      createAnimal({ uuid: 'local-image-animal', arete: 'IMG-LOCAL' }),
+      createAnimal({ uuid: 'failed-image-animal', arete: 'IMG-FAILED' }),
+    ]));
+    imagesServiceMock.listImages.mockImplementation((animalUuid: string) => of([
+      {
+        id: `${animalUuid}-image`,
+        animalUuid,
+        operationId: `${animalUuid}-operation`,
+        fileName: `${animalUuid}.jpg`,
+        mimeType: 'image/jpeg',
+        sizeBytes: 1200,
+        checksumSha256: 'a'.repeat(64),
+        capturedAt: '2026-04-26T10:00:00.000Z',
+        sourceChannel: 'OFFLINE',
+        binaryRef: `${animalUuid}-binary`,
+        previewUrl: `blob:${animalUuid}`,
+        clientCreatedAt: '2026-04-26T10:00:00.000Z',
+        createdAt: '2026-04-26T10:00:00.000Z',
+        updatedAt: '2026-04-26T10:00:00.000Z',
+        syncState: animalUuid === 'failed-image-animal' ? 'FAILED' : 'PENDING',
+        syncMessage: animalUuid === 'failed-image-animal' ? 'No se pudo subir.' : 'Pendiente de sync.',
+        uiStatus: animalUuid === 'failed-image-animal' ? 'failed' : 'local_only',
+      },
+    ] satisfies AnimalImageItem[]));
+
+    const { fixture } = await configure(
+      animalsServiceMock,
+      createEventsServiceMock(),
+      createReproductionEventsServiceMock(),
+      imagesServiceMock,
+    );
+
+    const thumbnailBadges = Array.from(fixture.nativeElement.querySelectorAll('.animal-thumbnail__sync') as NodeListOf<HTMLElement>);
+    expect(thumbnailBadges.map((badge) => badge.textContent?.trim())).toEqual(['Solo local', 'Error']);
   });
 
   it('should render a clear livestock placeholder when an animal has no images', async () => {

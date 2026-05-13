@@ -52,10 +52,10 @@ Chain strategy: pending
 
 ## Phase 5: Animal Pages — Row and Media Badges
 
-- [ ] 5.1 Modify animal list component — render row badges from `mapAnimalOfflineUiStatus()`
-- [ ] 5.2 Modify `animal-detail-page.component.ts` — render badge in detail header and photo thumbnails
-- [ ] 5.3 Modify animal image card/thumbnail component — show `local_only`/`syncing`/`error` badges
-- [ ] 5.4 Write component specs: animal list badges, detail badges, media card badges
+- [x] 5.1 Modify animal list component — render row badges from `mapAnimalOfflineUiStatus()`
+- [x] 5.2 Modify `animal-detail-page.component.ts` — render badge in detail header and photo thumbnails
+- [x] 5.3 Modify animal image card/thumbnail component — show `local_only`/`syncing`/`error` badges
+- [x] 5.4 Write component specs: animal list badges, detail badges, media card badges
 
 ## Phase 6: Routes — Guard GANADERO Sync/Backup/Conflict Routes
 
@@ -65,7 +65,7 @@ Chain strategy: pending
 ## Phase 7: Tests
 
 - [x] 7.1 Update all `*.spec.ts` for modified files
-- [ ] 7.2 Run `ng test` — no production build required
+- [x] 7.2 Run `ng test` — no production build required
 
 ## Implementation Order
 

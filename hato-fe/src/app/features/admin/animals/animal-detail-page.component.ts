@@ -66,6 +66,12 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
       } @else if (errorMessage()) {
         <mat-card appearance="outlined" role="alert"><p>{{ errorMessage() }}</p></mat-card>
       } @else if (animal()) {
+        @if (animal()?.syncStatus; as status) {
+          <mat-card appearance="outlined" class="animal-detail-status" role="status" aria-live="polite">
+            <span class="offline-badge" [ngClass]="offlineBadgeClass(status)">{{ animalStatusLabel(status) }}</span>
+            @if (animal()?.syncMessage) { <span>{{ animal()?.syncMessage }}</span> }
+          </mat-card>
+        }
         <mat-tab-group>
           <mat-tab label="Ficha">
             <mat-card appearance="outlined" class="detail-card">
@@ -90,10 +96,22 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
             <mat-card appearance="outlined" class="detail-card gallery">
               @if (images().length) {
                 @let mainImage = images()[0];
-                <img class="main-image" [src]="mainImage.previewUrl" [alt]="imageAlt(animal())" />
+                <figure class="main-image-frame">
+                  <img class="main-image" [src]="mainImage.previewUrl" [alt]="imageAlt(animal())" />
+                  <figcaption>
+                    <span class="offline-badge" [ngClass]="offlineBadgeClass(mainImage.uiStatus)">{{ mediaStatusLabel(mainImage.uiStatus) }}</span>
+                    @if (mainImage.syncMessage) { <span>{{ mainImage.syncMessage }}</span> }
+                  </figcaption>
+                </figure>
                 <div class="thumbnail-strip" aria-label="Miniaturas del animal">
                   @for (image of images(); track image.id) {
-                    <img [src]="image.previewUrl" [alt]="image.fileName" />
+                    <figure class="thumbnail-frame">
+                      <img [src]="image.previewUrl" [alt]="image.fileName" />
+                      <figcaption>
+                        <span class="offline-badge" [ngClass]="offlineBadgeClass(image.uiStatus)">{{ mediaStatusLabel(image.uiStatus) }}</span>
+                        @if (image.syncMessage) { <span>{{ image.syncMessage }}</span> }
+                      </figcaption>
+                    </figure>
                   }
                 </div>
               } @else {
@@ -110,8 +128,10 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
                     <li class="event-list__item">
                       <div class="event-list__summary">
                         <strong>{{ formatTimelineDate(event.occurredAt) }} · {{ healthEventLabel(event.healthEventType) }}</strong>
+                        @if (event.syncStatus) { <span class="offline-badge" [ngClass]="offlineBadgeClass(event.syncStatus)">{{ animalStatusLabel(event.syncStatus) }}</span> }
                         @if (!isFieldVetVisit(event) && event.notes) { — {{ event.notes }} }
                       </div>
+                      @if (event.syncMessage) { <p class="event-sync-message">{{ event.syncMessage }}</p> }
                       @if (healthEventContextRows(event).length) {
                         <dl class="event-context">
                           @for (row of healthEventContextRows(event); track row.label) {
@@ -168,7 +188,10 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
                 <ul class="event-list">
                   @for (event of reproductionEvents(); track event.id) {
                     <li>
-                      {{ event.occurredAt }} · {{ reproductionEventLabel(event.reproductionEventType) }} @if (event.notes) { — {{ event.notes }} }
+                      {{ event.occurredAt }} · {{ reproductionEventLabel(event.reproductionEventType) }}
+                      @if (event.syncStatus) { <span class="offline-badge" [ngClass]="offlineBadgeClass(event.syncStatus)">{{ animalStatusLabel(event.syncStatus) }}</span> }
+                      @if (event.notes) { — {{ event.notes }} }
+                      @if (event.syncMessage) { <span class="event-metadata">{{ event.syncMessage }}</span> }
                       @if (pregnancyExpectedBirthDateLabel(event); as expectedBirthDate) {
                         <span class="event-metadata">Fecha probable de parto: {{ expectedBirthDate }}</span>
                       }
@@ -186,7 +209,12 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
               @if (events().length) {
                 <ul class="event-list">
                   @for (event of events(); track event.id) {
-                    <li>{{ event.occurredAt }} · {{ animalEventLabel(event.type) }} @if (event.notes) { — {{ event.notes }} }</li>
+                    <li>
+                      {{ event.occurredAt }} · {{ animalEventLabel(event.type) }}
+                      @if (event.syncStatus) { <span class="offline-badge" [ngClass]="offlineBadgeClass(event.syncStatus)">{{ animalStatusLabel(event.syncStatus) }}</span> }
+                      @if (event.notes) { — {{ event.notes }} }
+                      @if (event.syncMessage) { <span class="event-metadata">{{ event.syncMessage }}</span> }
+                    </li>
                   }
                 </ul>
               } @else {
@@ -281,14 +309,19 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .animal-detail-page { display: grid; gap: 1rem; padding: 1rem; }
     .detail-actions { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     .detail-actions mat-icon { margin-inline-end: .25rem; }
+    .animal-detail-status { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem; color: var(--mat-sys-on-surface-variant); }
     .detail-card { margin-top: 1rem; padding: 1rem; }
     .ficha-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; margin: 0; }
     .ficha-grid__wide { grid-column: 1 / -1; }
     dt { color: var(--mat-sys-on-surface-variant); font-size: .8rem; }
     dd { margin: .25rem 0 0; font-weight: 600; }
-    .main-image { width: min(36rem, 100%); max-height: 24rem; object-fit: cover; border-radius: 1rem; }
+    .main-image-frame { display: grid; gap: .5rem; margin: 0; width: min(36rem, 100%); }
+    .main-image { width: 100%; max-height: 24rem; object-fit: cover; border-radius: 1rem; }
+    figcaption { display: flex; align-items: center; gap: .5rem; color: var(--mat-sys-on-surface-variant); font-size: .85rem; }
     .thumbnail-strip { display: flex; gap: .75rem; margin-top: .75rem; overflow-x: auto; }
-    .thumbnail-strip img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
+    .thumbnail-frame { display: grid; gap: .35rem; margin: 0; max-width: 8rem; }
+    .thumbnail-frame img { width: 5rem; height: 4rem; object-fit: cover; border-radius: .75rem; }
+    .thumbnail-frame figcaption { display: grid; gap: .2rem; }
     .event-list { margin: 0; padding-left: 1.25rem; }
     .event-list__item { margin-bottom: 1rem; }
     .event-list__summary { margin-bottom: .5rem; }
@@ -297,6 +330,11 @@ import { ANIMAL_CATEGORY, ANIMAL_CATEGORY_OPTIONS, ANIMAL_SEX, AnimalsService, t
     .event-context dt { font-size: .75rem; }
     .event-context dd { font-weight: 500; overflow-wrap: anywhere; }
     .event-metadata { display: block; margin-top: .25rem; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
+    .event-sync-message { margin: .25rem 0 0; color: var(--mat-sys-on-surface-variant); font-size: .9rem; }
+    .offline-badge { display: inline-flex; width: fit-content; align-items: center; padding: .12rem .5rem; border-radius: 999px; background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface-variant); font-size: .75rem; font-weight: 700; vertical-align: middle; }
+    .offline-badge--pending, .offline-badge--local-only { background: color-mix(in srgb, var(--mat-sys-tertiary) 88%, transparent); color: var(--mat-sys-on-tertiary); }
+    .offline-badge--synced { background: color-mix(in srgb, var(--mat-sys-primary) 82%, transparent); color: var(--mat-sys-on-primary); }
+    .offline-badge--conflict, .offline-badge--failed { background: color-mix(in srgb, var(--mat-sys-error) 86%, transparent); color: var(--mat-sys-on-error); }
     .vet-visit-chain { margin-top: .75rem; padding: .75rem; border: 1px solid var(--mat-sys-outline-variant); border-radius: .75rem; background: var(--mat-sys-surface-container-low); }
     .vet-visit-chain h3 { margin: 0 0 .5rem; font-size: .95rem; }
     .vet-visit-chain ol { margin: 0; padding-left: 1.25rem; }
@@ -409,6 +447,12 @@ export class AnimalDetailPageComponent {
   }
 
   imageAlt(animal: AnimalItem | null) { return `Foto de ${animalName(animal)}`; }
+
+  animalStatusLabel(status: AnimalItem['syncStatus']) { return animalStatusLabel(status); }
+
+  mediaStatusLabel(status: AnimalImageItem['uiStatus']) { return mediaStatusLabel(status); }
+
+  offlineBadgeClass(status: AnimalItem['syncStatus'] | AnimalImageItem['uiStatus']) { return `offline-badge--${status ?? 'synced'}`; }
 
   animalName(animal: AnimalItem | null | undefined) { return animalName(animal); }
 
@@ -1022,6 +1066,40 @@ export class AnimalBirthRegistrationDialogComponent {
 
 function animalName(animal: AnimalItem | null | undefined) {
   return animal?.arete || animal?.marca || animal?.tatuaje || 'animal sin identificador';
+}
+
+function animalStatusLabel(status: AnimalItem['syncStatus']) {
+  switch (status) {
+    case 'pending':
+      return 'Pendiente';
+    case 'conflict':
+      return 'Conflicto';
+    case 'failed':
+      return 'Error';
+    case 'local_only':
+      return 'Solo local';
+    case 'synced':
+      return 'Sincronizado';
+    default:
+      return 'Sincronizado';
+  }
+}
+
+function mediaStatusLabel(status: AnimalImageItem['uiStatus']) {
+  switch (status) {
+    case 'local_only':
+      return 'Solo local';
+    case 'pending':
+      return 'Pendiente';
+    case 'failed':
+      return 'Error';
+    case 'conflict':
+      return 'Conflicto';
+    case 'synced':
+      return 'Sincronizada';
+    default:
+      return 'Sincronizada';
+  }
 }
 
 function sireLabel(animal: AnimalItem) {

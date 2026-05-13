@@ -107,8 +107,16 @@ const ANIMAL_TABLE_ACTION = {
                 <mat-icon aria-label="Sin foto del animal">pets</mat-icon>
               }
               @if (image?.syncState) {
-                <span class="animal-thumbnail__sync" [class.animal-thumbnail__sync--pending]="image?.syncState === 'PENDING'">
-                  {{ image?.syncState === 'PENDING' ? 'Pendiente' : image?.syncState === 'FAILED' ? 'Error' : 'Sync' }}
+                <span
+                  class="animal-thumbnail__sync"
+                  [class.animal-status-badge--pending]="image?.uiStatus === 'pending'"
+                  [class.animal-status-badge--local-only]="image?.uiStatus === 'local_only'"
+                  [class.animal-status-badge--failed]="image?.uiStatus === 'failed'"
+                  [class.animal-status-badge--synced]="image?.uiStatus === 'synced'"
+                  [attr.aria-label]="mediaStatusAriaLabel(image)"
+                  [title]="image?.syncMessage || mediaStatusLabel(image?.uiStatus)"
+                >
+                  {{ mediaStatusLabel(image?.uiStatus) }}
                 </span>
               }
             </div>
@@ -118,6 +126,21 @@ const ANIMAL_TABLE_ACTION = {
             @let animal = animalFromRow(row);
             <div class="animal-identity">
               <strong class="animal-identity__primary">{{ animal.arete || 'Sin arete' }}</strong>
+              @if (animal.syncStatus) {
+                <span
+                  class="animal-sync-badge"
+                  [class.animal-status-badge--pending]="animal.syncStatus === 'pending'"
+                  [class.animal-status-badge--synced]="animal.syncStatus === 'synced'"
+                  [class.animal-status-badge--conflict]="animal.syncStatus === 'conflict'"
+                  [class.animal-status-badge--failed]="animal.syncStatus === 'failed'"
+                  [title]="animal.syncMessage || animalStatusLabel(animal.syncStatus)"
+                >
+                  {{ animalStatusLabel(animal.syncStatus) }}
+                </span>
+                @if (animal.syncMessage) {
+                  <span class="animal-identity__meta">{{ animal.syncMessage }}</span>
+                }
+              }
               <span class="animal-identity__meta">Marca: {{ animal.marca || '—' }} · Tatuaje: {{ animal.tatuaje || '—' }}</span>
               <span class="animal-identity__meta">Color: {{ animal.color || '—' }}</span>
             </div>
@@ -192,10 +215,6 @@ const ANIMAL_TABLE_ACTION = {
         line-height: 1.2;
       }
 
-      .animal-thumbnail__sync--pending {
-        background: color-mix(in srgb, var(--mat-sys-tertiary) 88%, transparent);
-      }
-
       .animal-identity {
         display: grid;
         gap: 0.2rem;
@@ -209,6 +228,33 @@ const ANIMAL_TABLE_ACTION = {
       .animal-identity__meta {
         color: var(--mat-sys-on-surface-variant);
         font-size: 0.8rem;
+      }
+
+      .animal-sync-badge {
+        justify-self: start;
+        padding: 0.12rem 0.5rem;
+        border-radius: 999px;
+        background: var(--mat-sys-surface-container-high);
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .animal-status-badge--pending,
+      .animal-status-badge--local-only {
+        background: color-mix(in srgb, var(--mat-sys-tertiary) 88%, transparent);
+        color: var(--mat-sys-on-tertiary);
+      }
+
+      .animal-status-badge--synced {
+        background: color-mix(in srgb, var(--mat-sys-primary) 82%, transparent);
+        color: var(--mat-sys-on-primary);
+      }
+
+      .animal-status-badge--conflict,
+      .animal-status-badge--failed {
+        background: color-mix(in srgb, var(--mat-sys-error) 86%, transparent);
+        color: var(--mat-sys-on-error);
       }
     `,
   ],
@@ -379,6 +425,18 @@ export class AnimalsPageComponent {
 
   thumbnailAlt(animal: AnimalItem): string {
     return `Foto de ${animal.arete || animal.marca || animal.tatuaje || 'animal sin identificador'}`;
+  }
+
+  animalStatusLabel(status: AnimalItem['syncStatus']) {
+    return animalStatusLabel(status);
+  }
+
+  mediaStatusLabel(status: AnimalImageItem['uiStatus']) {
+    return mediaStatusLabel(status);
+  }
+
+  mediaStatusAriaLabel(image: AnimalImageItem | undefined) {
+    return image ? `Estado de foto: ${mediaStatusLabel(image.uiStatus)}` : null;
   }
 
   private openEditDialog(animal: AnimalItem) {
@@ -1032,6 +1090,40 @@ function animalCategoryLabel(value: unknown) {
 
 function animalSexLabel(value: unknown) {
   return ANIMAL_SEX_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—');
+}
+
+function animalStatusLabel(status: AnimalItem['syncStatus']) {
+  switch (status) {
+    case 'pending':
+      return 'Pendiente';
+    case 'conflict':
+      return 'Conflicto';
+    case 'failed':
+      return 'Error';
+    case 'local_only':
+      return 'Solo local';
+    case 'synced':
+      return 'Sincronizado';
+    default:
+      return 'Sincronizado';
+  }
+}
+
+function mediaStatusLabel(status: AnimalImageItem['uiStatus']) {
+  switch (status) {
+    case 'local_only':
+      return 'Solo local';
+    case 'pending':
+      return 'Pendiente';
+    case 'failed':
+      return 'Error';
+    case 'conflict':
+      return 'Conflicto';
+    case 'synced':
+      return 'Sincronizada';
+    default:
+      return 'Sincronizada';
+  }
 }
 
 function isCastrationEligibleAnimal(animal: AnimalItem) {

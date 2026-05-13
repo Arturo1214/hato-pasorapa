@@ -19,7 +19,7 @@ databaseChangeLog:
             dbms: postgresql
             sql: |
               UPDATE animals
-              SET birth_date = (admission_date - INTERVAL '6 months')::date
+              SET birth_date = (admission_date - INTERVAL '6' MONTH)::date
               WHERE category = 'TERNERO'
                 AND birth_date IS NULL
                 AND admission_date IS NOT NULL;

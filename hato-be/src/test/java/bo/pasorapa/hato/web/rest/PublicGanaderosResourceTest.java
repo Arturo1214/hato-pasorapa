@@ -10,6 +10,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -26,19 +27,21 @@ class PublicGanaderosResourceTest {
 
     @Test
     void shouldRegisterPublicGanaderoAndReturnJwt() {
+        String email = "ganadera-%s@hato.bo".formatted(UUID.randomUUID());
+
         given()
                 .contentType(ContentType.JSON)
-                .header("X-Forwarded-For", "10.10.10.10")
+                .header("X-Forwarded-For", "public-success-" + UUID.randomUUID())
                 .body("""
                         {
                           "businessIdentifier": "12345678",
                           "name": "Ganadera Norte",
-                          "email": "ganadera@hato.bo",
+                          "email": "%s",
                           "password": "Ganadera9",
                           "website": "",
                           "formIssuedAt": "2026-05-02T22:59:55Z"
                         }
-                        """)
+                        """.formatted(email))
                 .when()
                 .post("/api/public/ganaderos")
         .then()
@@ -46,7 +49,7 @@ class PublicGanaderosResourceTest {
                 .body("accessToken", not(blankOrNullString()))
                 .body("tokenType", equalTo("Bearer"))
                 .body("expiresInSeconds", equalTo(28800))
-                .body("user.username", equalTo("ganadera@hato.bo"))
+                .body("user.username", equalTo(email))
                 .body("user.role", equalTo("GANADERO"));
     }
 
@@ -54,7 +57,7 @@ class PublicGanaderosResourceTest {
     void shouldRejectFilledHoneypotWithGenericMessage() {
         given()
                 .contentType(ContentType.JSON)
-                .header("X-Forwarded-For", "10.10.10.10")
+                .header("X-Forwarded-For", "public-honeypot-" + UUID.randomUUID())
                 .body("""
                         {
                           "businessIdentifier": "12345678",
@@ -76,7 +79,7 @@ class PublicGanaderosResourceTest {
     void shouldRejectFastSubmissionWithGenericMessage() {
         given()
                 .contentType(ContentType.JSON)
-                .header("X-Forwarded-For", "10.10.10.10")
+                .header("X-Forwarded-For", "public-fast-" + UUID.randomUUID())
                 .body("""
                         {
                           "businessIdentifier": "12345678",
@@ -98,12 +101,12 @@ class PublicGanaderosResourceTest {
     void shouldRejectInputsThatOverflowMirroredUserColumns() {
         given()
                 .contentType(ContentType.JSON)
-                .header("X-Forwarded-For", "10.10.10.10")
+                .header("X-Forwarded-For", "public-overflow-" + UUID.randomUUID())
                 .body("""
                         {
                           "businessIdentifier": "12345678",
                           "name": "Ganadera Norte",
-                          "email": "campo-muy-largo-para-usuario-publico-001@registro-ganadero-pasorapa.bo",
+                          "email": "campo-muy-largo-para-usuario-publico-001-extra-largo@registro-ganadero-pasorapa.bo",
                           "password": "Ganadera9",
                           "website": "",
                           "formIssuedAt": "2026-05-02T22:59:55Z"

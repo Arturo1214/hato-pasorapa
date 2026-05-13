@@ -40,10 +40,12 @@ describe('AdminReportingPageComponent', () => {
   });
 
   it('should switch reports and render filters appropriate to the selected report', async () => {
+    const defaultDateFilters = expectedDefaultDateFilters();
+
     await fixture.componentInstance.selectReport('health-activity');
     fixture.detectChanges();
 
-    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('health-activity', expect.objectContaining({ from: '2026-05-01', to: '2026-05-10', limit: 200 }));
+    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('health-activity', expect.objectContaining(defaultDateFilters));
     expect(fixture.nativeElement.textContent).toContain('Tipo de evento');
     expect(fixture.componentInstance.healthEventTypeOptions.map((option) => option.label)).toEqual(
       expect.arrayContaining(['Vacunación', 'Visita veterinaria de campo'])
@@ -53,7 +55,7 @@ describe('AdminReportingPageComponent', () => {
     await fixture.componentInstance.selectReport('notification-reach');
     fixture.detectChanges();
 
-    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('notification-reach', expect.objectContaining({ from: '2026-05-01', to: '2026-05-10', limit: 200 }));
+    expect(fakeStore.loadReport).toHaveBeenLastCalledWith('notification-reach', expect.objectContaining(defaultDateFilters));
     expect(fixture.nativeElement.textContent).toContain('Desde');
     expect(fixture.nativeElement.textContent).toContain('Hasta');
     expect(fixture.nativeElement.textContent).toContain('Segmentación');
@@ -144,4 +146,17 @@ function createFakeStore() {
     }),
     setFilter: vi.fn((filter) => filtersState.update((current) => ({ ...current, ...filter }))),
   };
+}
+
+function expectedDefaultDateFilters() {
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  return { from: formatDateInput(from), to: formatDateInput(today), limit: 200 };
+}
+
+function formatDateInput(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

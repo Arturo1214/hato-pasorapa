@@ -7,6 +7,8 @@ import static org.hamcrest.Matchers.hasSize;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -25,6 +27,9 @@ class AdminReportsResourceTest {
     UserRepository userRepository;
 
     @Inject
+    GanaderoRepository ganaderoRepository;
+
+    @Inject
     PasswordHasher passwordHasher;
 
     @Inject
@@ -36,6 +41,7 @@ class AdminReportsResourceTest {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("reports-admin", Role.ADMIN, "ReportsAdmin9"));
             userRepository.persist(buildUser("reports-ganadero", Role.GANADERO, "ReportsCampo9"));
+            ganaderoRepository.persist(buildGanadero("NIT-REPORTS-GANADERO", "reports-ganadero@hato.bo"));
         });
     }
 
@@ -146,5 +152,15 @@ class AdminReportsResourceTest {
         user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
+    }
+
+    private Ganadero buildGanadero(String businessIdentifier, String email) {
+        Ganadero ganadero = new Ganadero();
+        ganadero.setId(UUID.randomUUID());
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(businessIdentifier);
+        ganadero.setEmail(email);
+        ganadero.setActive(true);
+        return ganadero;
     }
 }

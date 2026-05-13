@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.equalTo;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -44,6 +45,7 @@ class AdminDashboardResourceTest {
             userRepository.persist(buildUser("root-admin", Role.ADMIN, UserStatus.ACTIVE, "RootAdmin9"));
             userRepository.persist(buildUser("admin-baja", Role.ADMIN, UserStatus.INACTIVE, "AdminBaja9"));
             userRepository.persist(buildUser("ganadero-activo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
+            ganaderoRepository.persist(buildGanadero("NIT-DASHBOARD-ACTIVO", "ganadero-activo@hato.bo"));
             userRepository.persist(buildUser("ganadero-bloqueado", Role.GANADERO, UserStatus.BLOCKED, "Ganadero8"));
         });
     }
@@ -107,5 +109,15 @@ class AdminDashboardResourceTest {
         user.setRole(role);
         user.setStatus(status);
         return user;
+    }
+
+    private Ganadero buildGanadero(String businessIdentifier, String email) {
+        Ganadero ganadero = new Ganadero();
+        ganadero.setId(UUID.randomUUID());
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(businessIdentifier);
+        ganadero.setEmail(email);
+        ganadero.setActive(true);
+        return ganadero;
     }
 }

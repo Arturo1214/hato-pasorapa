@@ -17,6 +17,12 @@ describe('AnimalsSummaryWidgetComponent', () => {
   it('should display males and females grid rows', () => {
     expect(fixture.nativeElement.textContent).toContain('Machos');
     expect(fixture.nativeElement.textContent).toContain('Hembras');
-    expect(fixture.nativeElement.querySelectorAll('[data-testid="animals-summary-row"]')).toHaveLength(5);
+    expect(fixture.nativeElement.textContent).toContain('9');
+    expect(fixture.nativeElement.querySelectorAll('canvas')).toHaveLength(2);
+    expect(fixture.componentInstance.categoryChartData().labels).toEqual(['Vaquillas', 'Vacas', 'Toros', 'Terneros', 'Bueyes']);
+    expect(fixture.componentInstance.categoryChartData().datasets).toEqual([
+      expect.objectContaining({ label: 'Machos', data: [0, 0, 2, 1, 0] }),
+      expect.objectContaining({ label: 'Hembras', data: [1, 3, 0, 2, 0] }),
+    ]);
   });
 });

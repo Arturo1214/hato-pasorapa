@@ -10,7 +10,7 @@ import jakarta.ws.rs.core.MediaType;
 
 @Path("/api/admin/dashboard/users")
 @Produces(MediaType.APPLICATION_JSON)
-@RolesAllowed({"ADMIN", "GANADERO"})
+@RolesAllowed("ADMIN")
 public class AdminDashboardResource {
 
     private final AdminDashboardService adminDashboardService;

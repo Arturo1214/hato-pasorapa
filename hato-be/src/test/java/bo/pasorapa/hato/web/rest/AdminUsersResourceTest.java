@@ -10,6 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -30,6 +32,9 @@ class AdminUsersResourceTest {
     UserRepository userRepository;
 
     @Inject
+    GanaderoRepository ganaderoRepository;
+
+    @Inject
     OperationLogRepository operationLogRepository;
 
     @Inject
@@ -44,6 +49,7 @@ class AdminUsersResourceTest {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("root-admin", "root-admin@hato.bo", Role.ADMIN, UserStatus.ACTIVE, "RootAdmin9"));
             userRepository.persist(buildUser("campo-user", "campo@hato.bo", Role.GANADERO, UserStatus.ACTIVE, "CampoUser9"));
+            ganaderoRepository.persist(buildGanadero("NIT-ADMIN-USERS-CAMPO", "campo@hato.bo"));
         });
     }
 
@@ -150,7 +156,7 @@ class AdminUsersResourceTest {
                 .when()
                 .post("/api/auth/login")
                 .then()
-                .statusCode(403)
+                .statusCode(401)
                 .body("code", equalTo("ACCOUNT_INACTIVE"));
     }
 
@@ -299,5 +305,15 @@ class AdminUsersResourceTest {
         user.setRole(role);
         user.setStatus(status);
         return user;
+    }
+
+    private Ganadero buildGanadero(String businessIdentifier, String email) {
+        Ganadero ganadero = new Ganadero();
+        ganadero.setId(UUID.randomUUID());
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(businessIdentifier);
+        ganadero.setEmail(email);
+        ganadero.setActive(true);
+        return ganadero;
     }
 }

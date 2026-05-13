@@ -6,12 +6,14 @@ import static org.hamcrest.Matchers.hasSize;
 
 import bo.pasorapa.hato.domain.AdminNotification;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
+import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AdminNotificationTargetingMode;
 import bo.pasorapa.hato.repository.AdminNotificationRecipientRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -30,6 +32,7 @@ class NotificationRecipientsResourceTest {
     private static final UUID OTHER_USER_ID = UUID.fromString("67f0af67-f6db-4bb0-aeb1-56cfb2ce3002");
 
     @Inject UserRepository userRepository;
+    @Inject GanaderoRepository ganaderoRepository;
     @Inject PasswordHasher passwordHasher;
     @Inject AdminNotificationRepository adminNotificationRepository;
     @Inject AdminNotificationRecipientRepository adminNotificationRecipientRepository;
@@ -44,7 +47,9 @@ class NotificationRecipientsResourceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("notif-ganadero", USER_ID, Role.GANADERO, "Ganadero9"));
+            ganaderoRepository.persist(buildGanadero("NIT-NOTIF-GANADERO", "notif-ganadero@hato.bo"));
             userRepository.persist(buildUser("notif-ganadero-b", OTHER_USER_ID, Role.GANADERO, "Ganadero8"));
+            ganaderoRepository.persist(buildGanadero("NIT-NOTIF-GANADERO-B", "notif-ganadero-b@hato.bo"));
             userRepository.persist(buildUser("notif-admin", UUID.fromString("67f0af67-f6db-4bb0-aeb1-56cfb2ce3999"), Role.ADMIN, "RootAdmin9"));
             recipientId = seedRecipient(USER_ID, UUID.fromString("67f0af67-f6db-4bb0-aeb1-56cfb2ce3111"));
             newestRecipientId = seedRecipient(USER_ID, UUID.fromString("67f0af67-f6db-4bb0-aeb1-56cfb2ce3222"));
@@ -147,5 +152,15 @@ class NotificationRecipientsResourceTest {
         user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
+    }
+
+    private Ganadero buildGanadero(String businessIdentifier, String email) {
+        Ganadero ganadero = new Ganadero();
+        ganadero.setId(UUID.randomUUID());
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(businessIdentifier);
+        ganadero.setEmail(email);
+        ganadero.setActive(true);
+        return ganadero;
     }
 }

@@ -39,6 +39,7 @@ describe('SidebarComponent integration', () => {
       'Dashboard',
       'Usuarios',
       'Ganaderos',
+      'Razas',
       'Notificaciones',
       'Reportes',
     ]);

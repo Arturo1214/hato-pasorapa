@@ -34,7 +34,7 @@ describe('calendar alerts integration', () => {
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ role: 'GANADERO', displayName: 'Ganadero Root' }),
+            currentUser: () => ({ role: 'GANADERO', displayName: 'Ganadero Root', ganaderoId: 'gan-1' }),
             logout: vi.fn(),
           },
         },

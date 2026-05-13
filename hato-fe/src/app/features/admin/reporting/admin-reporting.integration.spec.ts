@@ -30,7 +30,9 @@ describe('AdminReportingPageComponent integration', () => {
     fixture = TestBed.createComponent(AdminReportingPageComponent);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    httpMock.verify();
+  });
 
   it('should load a selected report, render its DataTable rows, and export the loaded dataset', async () => {
     fixture.detectChanges();
@@ -38,7 +40,7 @@ describe('AdminReportingPageComponent integration', () => {
     await fixture.whenStable();
 
     const loadPromise = fixture.componentInstance.selectReport('health-activity');
-    const request = httpMock.expectOne('/api/admin/reports/health-activity?from=2026-05-01&to=2026-05-10&limit=200');
+    const request = httpMock.expectOne(`/api/admin/reports/health-activity?${expectedDefaultDateQuery()}`);
     expect(request.request.headers.get('Authorization')).toBe('Bearer admin-token');
     request.flush({
       rows: [
@@ -71,3 +73,16 @@ describe('AdminReportingPageComponent integration', () => {
     );
   });
 });
+
+function expectedDefaultDateQuery() {
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  return `from=${formatDateInput(from)}&to=${formatDateInput(today)}&limit=200`;
+}
+
+function formatDateInput(value: Date) {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, '0');
+  const day = `${value.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

@@ -7,6 +7,8 @@ import static org.hamcrest.Matchers.hasSize;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
+import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -25,6 +27,9 @@ class AdminNotificationsResourceTest {
     UserRepository userRepository;
 
     @Inject
+    GanaderoRepository ganaderoRepository;
+
+    @Inject
     PasswordHasher passwordHasher;
 
     @Inject
@@ -36,7 +41,9 @@ class AdminNotificationsResourceTest {
             integrationDatabaseCleaner.clean();
             userRepository.persist(buildUser("root-admin", Role.ADMIN, "RootAdmin9"));
             userRepository.persist(buildUser("campo-a", Role.GANADERO, "CampoUser9"));
+            ganaderoRepository.persist(buildGanadero("NIT-NOTIF-CAMPO-A", "campo-a@hato.bo"));
             userRepository.persist(buildUser("campo-b", Role.GANADERO, "CampoUser8"));
+            ganaderoRepository.persist(buildGanadero("NIT-NOTIF-CAMPO-B", "campo-b@hato.bo"));
         });
     }
 
@@ -204,5 +211,15 @@ class AdminNotificationsResourceTest {
         user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
+    }
+
+    private Ganadero buildGanadero(String businessIdentifier, String email) {
+        Ganadero ganadero = new Ganadero();
+        ganadero.setId(UUID.randomUUID());
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(businessIdentifier);
+        ganadero.setEmail(email);
+        ganadero.setActive(true);
+        return ganadero;
     }
 }

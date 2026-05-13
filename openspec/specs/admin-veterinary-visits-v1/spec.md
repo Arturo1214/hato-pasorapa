@@ -39,67 +39,28 @@ The system MUST provide a central admin/ganadero screen with a Material table li
 
 ### Requirement: Visit lifecycle state machine
 
-The system MUST support visit lifecycle states: PROGRAMADA, ATENDIDA, REPROGRAMADA, FINALIZADA, CANCELADA; transitions MUST be explicit and reversible except ATENDIDA→FINALIZADA/CANCELADA and REPROGRAMADA→ATENDIDA. Finalization SHALL ONLY be reachable from the ATENDIDA state through the attend flow — it MUST NOT appear as a direct row action.
+The system MUST support visit lifecycle states: `PROGRAMADA`, `ATENDIDA`, `CANCELADA`; transitions MUST be explicit. A visit in `ATENDIDA` has a derived chain status: `ACTIVE` when a child `PROGRAMADA` visit exists with `parentVisitId` referencing this visit, or `CLOSED` when the user selected "Finalizar" in the attend flow. Terminal states (`CANCELADA`, `ATENDIDA` with chain=`CLOSED`) MUST block all further transitions. Finalization SHALL ONLY be reachable through the attend flow — it MUST NOT appear as a direct row action.
 
-#### Scenario: Programar nueva visita
+#### Scenario: Programar nueva visita (Programada mode)
 
-- GIVEN a new visit dialog is submitted
+- GIVEN a new visit dialog is submitted in "Programada" mode
+- WHEN the form is valid with `Fecha de visita` filled
+- THEN the visit is created with estado=`PROGRAMADA`
+- AND only scheduling fields are visible; clinical fields and finalization controls are hidden
+
+#### Scenario: Crear atendidos inmediata con fecha actual
+
+- GIVEN a new visit dialog is submitted in "Atendida inmediata" mode
 - WHEN the form is valid
-- THEN the visit is created with estado=PROGRAMADA
+- THEN the visit is created with estado=`PROGRAMADA` and `fecha` set to the current moment
+- AND clinical fields are visible
 
-#### Scenario: Atender visita con hallazgos y plan
+#### Scenario: Atender visita con hallazgos
 
-- GIVEN a visit in estado PROGRAMADA
-- WHEN the user marks as ATENDIDA with hallazgos, notas, costo, and Plan de tratamiento
-- THEN estado changes to ATENDIDA, all clinical fields are persisted
-- AND the user CAN either schedule a follow-up (→ REPROGRAMADA) or finalize the chain (→ FINALIZADA)
-
-#### Scenario: Atender sin hallazgos
-
-- GIVEN a visit in estado PROGRAMADA
-- WHEN the user attempts to mark as ATENDIDA without hallazgos
-- THEN the system MUST reject with validation error
-
-#### Scenario: Cancelar con razón
-
-- GIVEN a visit in any non-terminal state
-- WHEN the user cancels with a written reason
-- THEN estado changes to CANCELADA
-- AND the cancel reason is persisted in metadata
-
-#### Scenario: Cancelar sin razón
-
-- GIVEN a visit in any non-terminal state
-- WHEN the user attempts to cancel without providing a reason
-- THEN the system MUST reject the cancellation
-
-#### Scenario: Reprogramar desde atendida crea visita vinculada
-
-- GIVEN a visit in estado ATENDIDA
-- WHEN the user chooses "Reprogramar"
-- THEN a new visit entry is created with parentVisitId referencing the parent
-- AND estado=PROGRAMADA for the new visit
-- AND the parent visit remains visible with reference to the follow-up
-
-#### Scenario: Finalizar cadena desde atendida
-
-- GIVEN a visit in estado ATENDIDA
-- WHEN the user chooses "Finalizar" from the attend flow
-- THEN estado changes to FINALIZADA
-- AND chain derived status becomes CLOSED
-
-#### Scenario: Reprogramar cadena
-
-- GIVEN a visit in estado REPROGRAMADA
-- WHEN the user marks it as ATENDIDA
-- THEN estado changes to ATENDIDA
-- AND the user CAN continue the chain or close it
-
-#### Scenario: Cancelar visita
-
-- GIVEN a visit in any non-final state
-- WHEN the user cancels the visit
-- THEN estado changes to CANCELADA
+- GIVEN a visit in estado=`PROGRAMADA`
+- WHEN the user marks it as `ATENDIDA` with hallazgos (required), notas, costo (optional BOB), and Plan de tratamiento (behind "Tiene tratamiento" toggle)
+- THEN estado changes to `ATENDIDA` and clinical fields are persisted
+- AND the user MUST choose "Finalizar" (chain=CLOSED) or "Programar próxima visita"
 
 ### Requirement: Visit metadata with veterinarian per visit
 

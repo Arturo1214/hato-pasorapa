@@ -8,42 +8,32 @@ Definir seguimiento básico de tratamientos por eventos append-only de inicio, c
 
 ### Requirement: Continuidad de tratamiento sin updates destructivos
 
-The system MUST model treatment lifecycle using appended events. Visit chain lifecycle (`PROGRAMADA` → `ATENDIDA` → `REPROGRAMADA` | `FINALIZADA` | `CANCELADA`) is tracked per visit independently. A visit chain is considered ACTIVE when any visit in the chain has estado not in a terminal state. A chain is CLOSED when all visits are FINALIZADA or CANCELADA, or when an explicit chain-close event is recorded. A visit with parentVisitId set MUST be considered part of the parent chain. Timeline queries MUST expose linked visit notes over time by following parentVisitId chains.
+The system MUST model treatment lifecycle using appended events. Visit chain lifecycle (`PROGRAMADA` → `ATENDIDA` → child `PROGRAMADA` via `parentVisitId` | chain=`CLOSED`) is tracked per visit independently. A visit chain is `ACTIVE` when a child visit with matching `parentVisitId` and estado=`PROGRAMADA` exists. A chain is `CLOSED` when the parent visit is in `ATENDIDA` with chain=`CLOSED` or when all visits are `CANCELADA`. A visit with `parentVisitId` set MUST be considered part of the parent chain. Timeline queries MUST expose the complete chain: estados, cancel reasons, hallazgos, notas, treatment plans, and next visits with their attended/canceled descendants.
 
-#### Scenario: Seguimiento con reprogramación
+#### Scenario: Cadena activa via child visit
 
-- GIVEN Visit1 (estado=ATENDIDA) and Visit2 created as a reprogrammed follow-up
-- WHEN the chain is queried
-- THEN the chain status is ACTIVE
-- AND both visits are retained with their respective veterinarianIds
-
-#### Scenario: Cerrar cadena explícitamente
-
-- GIVEN a chain with multiple visits in ATENDIDA/REPROGRAMADA states
-- WHEN the user marks the chain as FINALIZADA
-- THEN the final visit's estado becomes FINALIZADA
-- AND chain derived status becomes CLOSED
-
-#### Scenario: Cadena activa con visita vinculada
-
-- GIVEN Visit1 (estado=ATENDIDA) and Visit2 with parentVisitId=Visit1.id (estado=PROGRAMADA)
+- GIVEN Visit1 (estado=`ATENDIDA`, chain=`ACTIVE`) and Visit2 (parentVisitId=Visit1.id, estado=`PROGRAMADA`)
 - WHEN the chain status is derived
-- THEN the chain is ACTIVE
-- AND Visit2 is displayed in the timeline as a follow-up linked to Visit1
+- THEN chain is `ACTIVE`
 
 #### Scenario: Cerrar cadena via attend flow
 
-- GIVEN a visit in estado=ATENDIDA
-- WHEN the user selects "Finalizar" from the attend flow
-- THEN estado becomes FINALIZADA
-- AND chain derived status becomes CLOSED
+- GIVEN Visit1 in estado=`ATENDIDA` and user selected "Finalizar"
+- THEN chain status becomes `CLOSED`; estado remains `ATENDIDA`
 
-#### Scenario: Timeline muestra historial de visitas vinculadas
+#### Scenario: Child canceled preserves parent as ATENDIDA
 
-- GIVEN an animal with VisitA (específica, estado=ATENDIDA) and VisitB (parentVisitId=VisitA.id, estado=ATENDIDA)
+- GIVEN Visit1 (estado=`ATENDIDA`, no child) and Visit2 (parentVisitId=Visit1.id, estado=`CANCELADA`, cancelReason set)
+- WHEN the chain is projected
+- THEN Visit1 remains `ATENDIDA`
+- AND Visit2 shows as `CANCELADA` with cancelReason in the chain view
+
+#### Scenario: Timeline muestra historial de visitas vinculadas con razones de cancelación
+
+- GIVEN VisitA (específica, estado=`ATENDIDA`) and VisitB (parentVisitId=VisitA.id, estado=`CANCELADA`, cancelReason="Animal vendido")
 - WHEN the animal health timeline is queried
-- THEN both visits appear in chronological order
-- AND each entry is linked via parentVisitId reference
+- THEN both appear in chronological order
+- AND VisitB shows estado=`CANCELADA` with cancelReason
 
 ### Requirement: Metadata mínima tipada para tratamiento
 

@@ -25,37 +25,25 @@ The system MUST persist each health event as append-only in the unified `animal_
 
 ### Requirement: Metadata tipada para visita veterinaria de campo
 
-The system MUST accept `FIELD_VET_VISIT` events with typed metadata blocks for `visit`, `checklist`, `clinicalNote`, `protocol`, `cost`, `treatmentPlan`, and `cancelReason` — all preserved verbatim in the unified log with `eventCategory=HEALTH`. Validation rules for `modo`, `veterinarianId`, `atencionNotas`, `estado`, `parentVisitId`, `nextControlAt`, `clinicalNote.findings` when `estado=ATENDIDA`, and `cancelReason` when `estado=CANCELADA` MUST NOT be weakened.
+The system MUST accept `FIELD_VET_VISIT` events with typed metadata blocks for: `visit` (visitId, modo, veterinarianId, atencionNotas, estado, parentVisitId, nextControlAt), `checklist`, `clinicalNote` (reason, findings — findings required when estado=`ATENDIDA`), `protocol`, `cost` (optional, FIELD_VET_VISIT only), `treatmentPlan` (optional), and `cancelReason` (required when estado=`CANCELADA`). The `visit.estado` field MUST accept `PROGRAMADA`, `ATENDIDA`, and `CANCELADA` only; `FINALIZADA` and `REPROGRAMADA` are not valid estado values for ledger events.
 
-#### Scenario: Evento FIELD_VET_VISIT con metadata extendida
+#### Scenario: FIELD_VET_VISIT with ATENDIDA and parentVisitId
 
-- GIVEN a payload `FIELD_VET_VISIT` with all visit blocks including modo, veterinarianId, atencionNotas, estado
+- GIVEN a payload `FIELD_VET_VISIT` with estado=`ATENDIDA` and parentVisitId set
 - WHEN the event is validated
-- THEN the system accepts and persists the record in unified log with `eventCategory=HEALTH`
+- THEN it is accepted and persisted
 
-#### Scenario: Campo modo ausente
+#### Scenario: Cancel without cancelReason rejected
 
-- GIVEN a `FIELD_VET_VISIT` without the `modo` field in visit block
-- WHEN the event is validated
-- THEN the system MUST reject the operation for incomplete contract
-
-#### Scenario: FIELD_VET_VISIT completo con cost y treatmentPlan
-
-- GIVEN a FIELD_VET_VISIT payload with all required visit blocks, cost block, and treatmentPlan
-- WHEN the event is validated
-- THEN the system accepts and persists all blocks
-
-#### Scenario: Cancel sin cancelReason
-
-- GIVEN a FIELD_VET_VISIT with estado=CANCELADA and no cancelReason
+- GIVEN a `FIELD_VET_VISIT` with estado=`CANCELADA` and no cancelReason
 - WHEN the event is validated
 - THEN the system MUST reject with ANIMAL_HEALTH_EVENT_VET_CANCEL_REASON_REQUIRED
 
-#### Scenario: Attend sin findings
+#### Scenario: FINALIZADA estado rejected
 
-- GIVEN a FIELD_VET_VISIT with estado=ATENDIDA and missing clinicalNote.findings
+- GIVEN a `FIELD_VET_VISIT` with estado=`FINALIZADA`
 - WHEN the event is validated
-- THEN the system MUST reject the operation
+- THEN the system MUST reject — finalization is a chain closure flag, not a visit estado
 
 ### Requirement: Cost block solo para FIELD_VET_VISIT
 

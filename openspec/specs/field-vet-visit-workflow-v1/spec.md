@@ -48,41 +48,45 @@ The system MUST require a typed checklist (boolean item value and optional per-i
 
 ### Requirement: Protocolo y seguimiento con veterinario por visita
 
-The system MUST support extended lifecycle: `PROGRAMADA` → `ATENDIDA` → `REPROGRAMADA` | `FINALIZADA` | `CANCELADA`. Each visit in the chain MUST store its own `veterinarianId` and SHALL store `atencionNotas`. When status transitions to `CANCELADA`, the metadata MUST include `cancelReason` (non-empty string). When status transitions to `ATENDIDA`, the metadata MUST include `clinicalNote.findings` (non-empty string). The system SHALL derive follow-up status as `ACTIVE` when estado is not in a terminal state and `CLOSED` when FINALIZADA or CANCELADA.
+The system MUST support visit lifecycle: `PROGRAMADA` → `ATENDIDA` → (child `PROGRAMADA` via `parentVisitId` | chain=`CLOSED`). Each visit MUST store its own `veterinarianId` and `atencionNotas`. When status transitions to `CANCELADA`, metadata MUST include `cancelReason` (non-empty string). When status transitions to `ATENDIDA`, metadata MUST include `clinicalNote.findings` (non-empty string). The system SHALL derive chain status as `ACTIVE` when a child `PROGRAMADA` with matching `parentVisitId` exists, and `CLOSED` when the user selected "Finalizar" in the attend flow.
 
-#### Scenario: Seguimiento con veterinario diferente
+#### Scenario: Seguimiento activo via child visit
 
-- GIVEN a visit chain: Visit1 (vet=Dr.A, estado=ATENDIDA) → Visit2 (vet=Dr.B, estado=PROGRAMADA)
-- WHEN the chain status is queried
-- THEN each visit retains its own veterinarianId independently
-- AND the chain status is ACTIVE because Visit2 is PROGRAMADA
+- GIVEN Visit1 (estado=`ATENDIDA`) and Visit2 (parentVisitId=Visit1.id, estado=`PROGRAMADA`)
+- WHEN the chain status is derived
+- THEN chain is `ACTIVE`
+- AND Visit2 is the scheduled follow-up
 
-#### Scenario: Cerrar cadena de seguimiento
+#### Scenario: Finalizar cierra cadena sin cambiar estado
 
-- GIVEN a visit in estado ATENDIDA
-- WHEN the user marks the chain as FINALIZADA
-- THEN the visit estado becomes FINALIZADA
-- AND derived chain status becomes CLOSED
-
-#### Scenario: Cancelar visita requiere reason
-
-- GIVEN a field visit with status transitioning to CANCELADA
-- WHEN the payload is validated without cancelReason or with empty cancelReason
-- THEN the system MUST reject the operation with ANIMAL_HEALTH_EVENT_VET_CANCEL_REASON_REQUIRED
+- GIVEN Visit1 in estado=`ATENDIDA` with no child visits and user selected "Finalizar"
+- THEN chain status becomes `CLOSED`
+- AND estado remains `ATENDIDA`
 
 #### Scenario: Atender requiere findings
 
-- GIVEN a field visit with status transitioning to ATENDIDA
-- WHEN the payload lacks clinicalNote.findings or it is empty
-- THEN the system MUST reject the operation
+- GIVEN a visit transitioning to `ATENDIDA`
+- WHEN payload lacks `clinicalNote.findings` or it is empty
+- THEN the system MUST reject
 
-#### Scenario: Seguimiento activo con próximo control
+#### Scenario: Cancelar requiere reason
 
-- GIVEN a chain with Visit1 (estado=ATENDIDA, nextControlAt set) and Visit2 (estado=PROGRAMADA, parentVisitId=Visit1.id)
-- WHEN the chain status is queried
-- THEN the chain is ACTIVE
-- AND nextControlAt reflects the scheduled follow-up date
-- AND Visit2 links to Visit1 via parentVisitId
+- GIVEN a visit transitioning to `CANCELADA`
+- WHEN payload lacks `cancelReason` or it is empty
+- THEN the system MUST reject with ANIMAL_HEALTH_EVENT_VET_CANCEL_REASON_REQUIRED
+
+#### Scenario: Child visit carries parentVisitId
+
+- GIVEN Visit1 in estado=`ATENDIDA`
+- WHEN a follow-up visit is created
+- THEN the new visit stores `parentVisitId=Visit1.id` and estado=`PROGRAMADA`
+
+#### Scenario: Canceled child preserves parent ATENDIDA
+
+- GIVEN Visit1 (estado=`ATENDIDA`) and Visit2 (parentVisitId=Visit1.id, estado=`CANCELADA`, cancelReason set)
+- WHEN the chain is queried
+- THEN Visit1 remains `ATENDIDA`
+- AND Visit2 shows `CANCELADA` with cancelReason
 
 ### Requirement: Cost and treatment plan in visit metadata
 

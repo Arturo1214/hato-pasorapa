@@ -1,0 +1,70 @@
+databaseChangeLog:
+  - changeSet:
+      id: 021-drop-animal-events-view
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - viewExists:
+            viewName: animal_events_view
+      changes:
+        - dropView:
+            viewName: animal_events_view
+  - changeSet:
+      id: 021-drop-animal-health-events-view
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - viewExists:
+            viewName: animal_health_events_view
+      changes:
+        - dropView:
+            viewName: animal_health_events_view
+  - changeSet:
+      id: 021-drop-animal-reproduction-events-view
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - viewExists:
+            viewName: animal_reproduction_events_view
+      changes:
+        - dropView:
+            viewName: animal_reproduction_events_view
+  - changeSet:
+      id: 021-drop-animal-events-table
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: animal_events
+      changes:
+        - dropTable:
+            tableName: animal_events
+            cascadeConstraints: true
+  - changeSet:
+      id: 021-drop-animal-health-events-table
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: animal_health_events
+      changes:
+        - dropTable:
+            tableName: animal_health_events
+            cascadeConstraints: true
+  - changeSet:
+      id: 021-drop-animal-reproduction-events-table
+      author: pasorapa
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: animal_reproduction_events
+      changes:
+        - dropTable:
+            tableName: animal_reproduction_events
+            cascadeConstraints: true

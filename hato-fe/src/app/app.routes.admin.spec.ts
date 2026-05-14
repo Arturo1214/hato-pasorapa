@@ -53,9 +53,6 @@ describe('admin routes', () => {
       'ganadero/visitas',
       'ganadero/calendario',
       'ganadero/notificaciones',
-      'ganadero/sincronizacion',
-      'ganadero/backups',
-      'ganadero/conflictos',
       '403',
     ]);
 

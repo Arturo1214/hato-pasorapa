@@ -93,15 +93,15 @@ Chain strategy: stacked-to-main
 
 ### 3.1 Author Cleanup Migration
 
-- [ ] 3.1.1 Create `hato-be/src/main/resources/db/changelog/021-animal-event-legacy-cleanup-v1.yaml`
-- [ ] 3.1.2 Drop views first with `onFail: MARK_RAN`: `animal_events_view`, `animal_health_events_view`, `animal_reproduction_events_view`
-- [ ] 3.1.3 Add precondition `tableExists` for each legacy table; drop `animal_events`, `animal_health_events`, `animal_reproduction_events` with `onFail: MARK_RAN`
-- [ ] 3.1.4 Add to `master.yaml` include entry for `021-animal-event-legacy-cleanup-v1.yaml`
+- [x] 3.1.1 Create `hato-be/src/main/resources/db/changelog/021-animal-event-legacy-cleanup-v1.yaml`
+- [x] 3.1.2 Drop views first with `onFail: MARK_RAN`: `animal_events_view`, `animal_health_events_view`, `animal_reproduction_events_view`
+- [x] 3.1.3 Add precondition `tableExists` for each legacy table; drop `animal_events`, `animal_health_events`, `animal_reproduction_events` with `onFail: MARK_RAN`
+- [x] 3.1.4 Add to `master.yaml` include entry for `021-animal-event-legacy-cleanup-v1.yaml`
 
 ### 3.2 Migration Verification
 
 - [ ] 3.2.1 Run Liquibase in dev: `./mvnw quarkus:dev` — allow migration to apply; verify no runtime errors
-- [ ] 3.2.2 Confirm `animal_event_logs` data intact; old tables/views absent from schema
+- [x] 3.2.2 Confirm `animal_event_logs` data intact; old tables/views absent from schema
 
 ---
 
@@ -109,13 +109,13 @@ Chain strategy: stacked-to-main
 
 ### 4.1 Backend Full Regression
 
-- [ ] 4.1.1 Run: `./mvnw test` — full BE test suite, all must pass
-- [ ] 4.1.2 Focus: event REST tests, vet visit chain/timeline, sync push/pull, dashboard/report
+- [x] 4.1.1 Run: `./mvnw test` — full BE test suite, all must pass
+- [x] 4.1.2 Focus: event REST tests, vet visit chain/timeline, sync push/pull, dashboard/report
 
 ### 4.2 Frontend Verification
 
-- [ ] 4.2.1 Run: `cd hato-fe && npm test -- --watch=false` — all FE tests must pass
-- [ ] 4.2.2 Focus: offline sync, animal timeline, vet visit UI
+- [x] 4.2.1 Run: `cd hato-fe && npm test -- --watch=false` — all FE tests must pass
+- [x] 4.2.2 Focus: offline sync, animal timeline, vet visit UI
 
 ### 4.3 Archive
 

@@ -1,12 +1,9 @@
-import { inject } from '@angular/core';
-import { CanMatchFn, Router, Routes } from '@angular/router';
+import { Routes } from '@angular/router';
 import { ADMIN_ONLY_ROLES, ALLOWED_ROLES, GANADERO_ONLY_ROLES } from './core/auth/auth-rules';
 import { authGuard, guestGuard } from './core/auth/guards/auth.guard';
 import { roleRedirectGuard } from './core/auth/guards/role-redirect.guard';
 import { roleGuard } from './core/auth/guards/role.guard';
 import { PublicLayout } from './ui/layout/public-layout/public-layout';
-
-const redirectGanaderoOfflineToolRoute: CanMatchFn = () => inject(Router).parseUrl('/ganadero/dashboard');
 
 export const routes: Routes = [
   {
@@ -251,27 +248,18 @@ export const routes: Routes = [
       },
       {
         path: 'ganadero/sincronizacion',
-        canMatch: [redirectGanaderoOfflineToolRoute],
-        data: {
-          title: 'Sincronización',
-          subtitle: 'Monitoreá la sync offline-first con foco en tu operación de campo.',
-        },
+        redirectTo: 'ganadero/dashboard',
+        pathMatch: 'full',
       },
       {
         path: 'ganadero/backups',
-        canMatch: [redirectGanaderoOfflineToolRoute],
-        data: {
-          title: 'Backups',
-          subtitle: 'Exportá o restaurá tu respaldo local con control desde la operación ganadera.',
-        },
+        redirectTo: 'ganadero/dashboard',
+        pathMatch: 'full',
       },
       {
         path: 'ganadero/conflictos',
-        canMatch: [redirectGanaderoOfflineToolRoute],
-        data: {
-          title: 'Conflictos',
-          subtitle: 'Resolvé conflictos de sincronización propios antes de cerrar tu jornada.',
-        },
+        redirectTo: 'ganadero/dashboard',
+        pathMatch: 'full',
       },
       {
         path: '403',

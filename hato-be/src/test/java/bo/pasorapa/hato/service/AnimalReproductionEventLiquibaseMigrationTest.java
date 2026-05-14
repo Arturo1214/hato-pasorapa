@@ -1,5 +1,6 @@
 package bo.pasorapa.hato.service;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -22,10 +23,11 @@ class AnimalReproductionEventLiquibaseMigrationTest {
                 "sa")) {
             applyChangelog(connection, "db/changelog/master.yaml");
 
-            assertTrue(tableExists(connection, "animal_reproduction_events"));
-            assertTrue(uniqueConstraintExists(connection, "ANIMAL_REPRODUCTION_EVENTS", "uk_animal_reproduction_events_operation_id"));
-            assertTrue(indexExists(connection, "ANIMAL_REPRODUCTION_EVENTS", "idx_animal_reproduction_events_animal_occurred_event"));
-            assertTrue(indexExists(connection, "ANIMAL_REPRODUCTION_EVENTS", "idx_animal_reproduction_events_updated_event"));
+            assertFalse(tableExists(connection, "animal_reproduction_events"));
+            assertTrue(tableExists(connection, "animal_event_logs"));
+            assertTrue(uniqueConstraintExists(connection, "ANIMAL_EVENT_LOGS", "uk_animal_event_logs_operation_id"));
+            assertTrue(indexExists(connection, "ANIMAL_EVENT_LOGS", "idx_animal_event_logs_animal_occurred_event"));
+            assertTrue(indexExists(connection, "ANIMAL_EVENT_LOGS", "idx_animal_event_logs_category_type_updated_event"));
             assertTrue(columnExists(connection, "ANIMALS", "MOTHER_ANIMAL_UUID"));
             assertTrue(columnExists(connection, "ANIMALS", "FATHER_ANIMAL_UUID"));
             assertTrue(columnExists(connection, "ANIMALS", "BIRTH_DATE"));

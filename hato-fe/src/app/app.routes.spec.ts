@@ -27,7 +27,7 @@ describe('app routes', () => {
     expect(publicShell.some((route) => route.path === 'admin/bootstrap')).toBe(true);
   });
 
-  it('should redirect ganadero manual offline tooling routes and keep admin conflicts admin-only', () => {
+  it('should redirect ganadero manual offline tooling routes with valid Angular redirect routes and keep admin conflicts admin-only', () => {
     const protectedShell = routes.find((candidate) => candidate.path === '' && candidate.loadComponent)?.children ?? [];
     const routePaths = protectedShell.map((route) => route.path);
     const adminConflictsRoute = protectedShell.find((route) => route.path === 'admin/conflictos');
@@ -43,7 +43,9 @@ describe('app routes', () => {
       'ganadero/backups',
       'ganadero/conflictos',
     ]);
-    expect(ganaderoOfflineToolRoutes.every((route) => route.canMatch?.length === 1)).toBe(true);
+    expect(ganaderoOfflineToolRoutes.every((route) => route.redirectTo === 'ganadero/dashboard')).toBe(true);
+    expect(ganaderoOfflineToolRoutes.every((route) => route.pathMatch === 'full')).toBe(true);
+    expect(ganaderoOfflineToolRoutes.every((route) => route.canMatch === undefined)).toBe(true);
     expect(ganaderoOfflineToolRoutes.every((route) => route.loadComponent === undefined)).toBe(true);
   });
 

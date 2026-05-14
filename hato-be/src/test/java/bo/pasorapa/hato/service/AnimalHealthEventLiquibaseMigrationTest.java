@@ -1,5 +1,6 @@
 package bo.pasorapa.hato.service;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -22,10 +23,11 @@ class AnimalHealthEventLiquibaseMigrationTest {
                 "sa")) {
             applyChangelog(connection, "db/changelog/master.yaml");
 
-            assertTrue(tableExists(connection, "animal_health_events"));
-            assertTrue(uniqueConstraintExists(connection, "uk_animal_health_events_operation_id"));
-            assertTrue(indexExists(connection, "idx_animal_health_events_animal_occurred_event"));
-            assertTrue(indexExists(connection, "idx_animal_health_events_updated_event"));
+            assertFalse(tableExists(connection, "animal_health_events"));
+            assertTrue(tableExists(connection, "animal_event_logs"));
+            assertTrue(uniqueConstraintExists(connection, "ANIMAL_EVENT_LOGS", "uk_animal_event_logs_operation_id"));
+            assertTrue(indexExists(connection, "ANIMAL_EVENT_LOGS", "idx_animal_event_logs_animal_occurred_event"));
+            assertTrue(indexExists(connection, "ANIMAL_EVENT_LOGS", "idx_animal_event_logs_category_type_updated_event"));
         }
     }
 
@@ -43,8 +45,8 @@ class AnimalHealthEventLiquibaseMigrationTest {
         }
     }
 
-    private boolean indexExists(Connection connection, String indexName) throws Exception {
-        try (ResultSet resultSet = connection.getMetaData().getIndexInfo(null, null, "ANIMAL_HEALTH_EVENTS", false, false)) {
+    private boolean indexExists(Connection connection, String tableName, String indexName) throws Exception {
+        try (ResultSet resultSet = connection.getMetaData().getIndexInfo(null, null, tableName, false, false)) {
             while (resultSet.next()) {
                 if (indexName.equalsIgnoreCase(resultSet.getString("INDEX_NAME"))) {
                     return true;
@@ -54,10 +56,10 @@ class AnimalHealthEventLiquibaseMigrationTest {
         }
     }
 
-    private boolean uniqueConstraintExists(Connection connection, String constraintName) throws Exception {
+    private boolean uniqueConstraintExists(Connection connection, String tableName, String constraintName) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = 'UNIQUE'") ) {
-            statement.setString(1, "ANIMAL_HEALTH_EVENTS");
+            statement.setString(1, tableName);
             statement.setString(2, constraintName.toUpperCase());
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();

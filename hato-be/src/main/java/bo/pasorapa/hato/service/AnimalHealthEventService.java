@@ -5,9 +5,8 @@ import bo.pasorapa.hato.domain.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository.VetVisitQuery;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository.VetVisitQuery;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -34,7 +33,6 @@ import java.util.UUID;
 @ApplicationScoped
 public class AnimalHealthEventService {
 
-    private final AnimalHealthEventRepository animalHealthEventRepository;
     private final AnimalEventLogRepository animalEventLogRepository;
     private final AnimalRepository animalRepository;
     private final UserRepository userRepository;
@@ -42,13 +40,11 @@ public class AnimalHealthEventService {
     private final AnimalHealthEventMapper animalHealthEventMapper;
 
     public AnimalHealthEventService(
-            AnimalHealthEventRepository animalHealthEventRepository,
             AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository,
             AnimalHealthEventMapper animalHealthEventMapper) {
-        this.animalHealthEventRepository = animalHealthEventRepository;
         this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.userRepository = userRepository;
@@ -63,7 +59,9 @@ public class AnimalHealthEventService {
 
     @Transactional
     public AnimalHealthEvent create(AnimalHealthEventRequest request, UUID authenticatedUserId) {
-        AnimalHealthEvent existing = animalHealthEventRepository.findByOperationId(request.operationId()).orElse(null);
+        AnimalHealthEvent existing = animalEventLogRepository.findByOperationId(request.operationId())
+                .map(animalHealthEventMapper::toAnimalHealthEvent)
+                .orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -78,11 +76,10 @@ public class AnimalHealthEventService {
         validateNextDueAt(request.healthEventType(), request.occurredAt(), request.metadata());
 
         AnimalHealthEvent event = animalHealthEventMapper.toEntity(animal, request, effectivePerformedByUserId);
-        animalHealthEventRepository.persist(event);
-        animalHealthEventRepository.flush();
-        animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(event));
+        var eventLog = animalHealthEventMapper.toAnimalEventLog(event);
+        animalEventLogRepository.persist(eventLog);
         animalEventLogRepository.flush();
-        return event;
+        return animalHealthEventMapper.toAnimalHealthEvent(eventLog);
     }
 
     public List<AnimalHealthEventResponse> list(
@@ -106,12 +103,12 @@ public class AnimalHealthEventService {
             requireAnimalOwnedByAuthenticatedGanadero(animalUuid, currentUserId);
         }
 
-        List<AnimalHealthEvent> timeline = animalHealthEventRepository.listHistory(
+        List<AnimalHealthEvent> timeline = toHealthEvents(animalEventLogRepository.listHealthHistory(
                 animalUuid,
                 healthEventType,
                 occurredFrom == null ? null : occurredFrom.toLocalDateTime(),
                 occurredTo == null ? null : occurredTo.toLocalDateTime(),
-                visitId);
+                visitId));
 
         Map<String, FollowUpProjection> projections = buildFollowUpProjections(timeline);
         return timeline.stream()
@@ -401,7 +398,7 @@ public class AnimalHealthEventService {
         }
 
         String treatmentCaseId = animalHealthEventMapper.readTreatmentCaseId(metadata);
-        List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByTreatmentCase(animalUuid, treatmentCaseId);
+        List<AnimalHealthEvent> timeline = toHealthEvents(animalEventLogRepository.listHealthByTreatmentCase(animalUuid, treatmentCaseId));
         boolean hasStarted = timeline.stream().anyMatch(event -> event.getHealthEventType() == AnimalHealthEventType.TREATMENT_STARTED);
         boolean hasClosed = timeline.stream().anyMatch(event -> event.getHealthEventType() == AnimalHealthEventType.TREATMENT_CLOSED);
 
@@ -460,7 +457,7 @@ public class AnimalHealthEventService {
         }
 
         String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
-        List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByVisit(animalUuid, visitId, null, null);
+        List<AnimalHealthEvent> timeline = toHealthEvents(animalEventLogRepository.listHealthByVisit(animalUuid, visitId, null, null));
         boolean hasStarted = timeline.stream().anyMatch(event -> hasFieldVetStatus(event, "STARTED") || hasFieldVetStatus(event, "FOLLOW_UP_REQUIRED"));
         boolean hasClosed = timeline.stream().anyMatch(event -> hasFieldVetStatus(event, "CLOSED"));
 
@@ -511,7 +508,7 @@ public class AnimalHealthEventService {
     }
 
     private void validateFieldVetVisitLifecycle(UUID animalUuid, String visitId, String parentVisitId, String nextStatus) {
-        List<AnimalHealthEvent> timeline = animalHealthEventRepository.listByVisit(animalUuid, visitId, null, null);
+        List<AnimalHealthEvent> timeline = toHealthEvents(animalEventLogRepository.listHealthByVisit(animalUuid, visitId, null, null));
         String currentStatus = timeline.stream()
                 .map(event -> normalizeVisitStatus(animalHealthEventMapper.readFieldVetVisitStatus(
                         animalHealthEventMapper.readMetadataJson(event.getMetadataJson()))))
@@ -542,7 +539,7 @@ public class AnimalHealthEventService {
             return;
         }
 
-        boolean hasDifferentPendingChildForParent = animalHealthEventRepository.findByParentVisitId(parentVisitId).stream()
+        boolean hasDifferentPendingChildForParent = toHealthEvents(animalEventLogRepository.findByParentVisitId(parentVisitId)).stream()
                 .filter(event -> event.getAnimal() != null && animalUuid.equals(event.getAnimal().getUuid()))
                 .map(event -> animalHealthEventMapper.readMetadataJson(event.getMetadataJson()))
                 .map(this::readVisit)

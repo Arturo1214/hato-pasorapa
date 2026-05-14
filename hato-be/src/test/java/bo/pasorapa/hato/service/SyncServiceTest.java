@@ -21,10 +21,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
@@ -78,16 +75,7 @@ class SyncServiceTest {
     AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
-    AnimalEventRepository animalEventRepository;
-
-    @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
-
-    @Inject
     AnimalImageRepository animalImageRepository;
-
-    @Inject
-    AnimalReproductionEventRepository animalReproductionEventRepository;
 
     @Inject
     UserRepository userRepository;
@@ -266,7 +254,6 @@ class SyncServiceTest {
         assertEquals("no_conflict", firstResponse.results().getFirst().classification());
         assertEquals("no_conflict", replayResponse.results().getFirst().classification());
         assertEquals(1, animalEventLogRepository.count());
-        assertEquals(0, animalEventRepository.count());
         assertEquals(targetOwnerId, projected.getOwnerGanadero().getId());
     }
 
@@ -709,7 +696,7 @@ class SyncServiceTest {
 
         assertEquals("no_conflict", firstResponse.results().getFirst().classification());
         assertEquals("no_conflict", replayResponse.results().getFirst().classification());
-        assertEquals(1, animalHealthEventRepository.count());
+        assertEquals(1, animalEventLogRepository.count("eventCategory", AnimalEventCategory.HEALTH));
         assertEquals("TREATMENT_STARTED", pullResponse.items().getFirst().get("healthEventType"));
     }
 
@@ -936,7 +923,6 @@ class SyncServiceTest {
         assertEquals("no_conflict", firstResponse.results().getFirst().classification());
         assertEquals("no_conflict", replayResponse.results().getFirst().classification());
         assertEquals(1, animalEventLogRepository.count());
-        assertEquals(0, animalReproductionEventRepository.count());
         assertEquals("BIRTH", pullResponse.items().getFirst().get("eventType"));
         assertEquals("REPRODUCTION", pullResponse.items().getFirst().get("eventCategory"));
         assertEquals(motherUuid, calf.getMotherAnimalUuid());

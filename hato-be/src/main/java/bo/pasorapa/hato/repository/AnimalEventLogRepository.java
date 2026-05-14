@@ -3,6 +3,7 @@ package bo.pasorapa.hato.repository;
 import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
+import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import io.quarkus.hibernate.orm.panache.PanacheRepositoryBase;
 import io.quarkus.panache.common.Page;
@@ -54,6 +55,122 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
         }
         query.append(" order by log.occurredAt asc, log.createdAt asc, log.eventId asc");
         return find(query.toString(), params.toArray()).list();
+    }
+
+    public List<AnimalEventLog> findUpcomingGeneralForGanadero(UUID ganaderoId, LocalDateTime since, int limit) {
+        return find(
+                        "from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.ownerGanadero.id = ?2 and log.occurredAt >= ?3 order by log.occurredAt asc, log.eventId asc",
+                        AnimalEventCategory.GENERAL,
+                        ganaderoId,
+                        since)
+                .page(0, limit)
+                .list();
+    }
+
+    public List<AnimalEventLog> listHealthHistory(
+            UUID animalUuid,
+            AnimalHealthEventType healthEventType,
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo,
+            String visitId) {
+        StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.uuid = ?2");
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalEventCategory.HEALTH);
+        params.add(animalUuid);
+        if (healthEventType != null) {
+            query.append(" and log.eventType = ?").append(params.size() + 1);
+            params.add(healthEventType.name());
+        }
+        if (occurredFrom != null) {
+            query.append(" and log.occurredAt >= ?").append(params.size() + 1);
+            params.add(occurredFrom);
+        }
+        if (occurredTo != null) {
+            query.append(" and log.occurredAt <= ?").append(params.size() + 1);
+            params.add(occurredTo);
+        }
+        if (visitId != null && !visitId.isBlank()) {
+            query.append(" and log.visitId = ?").append(params.size() + 1);
+            params.add(visitId);
+        }
+        query.append(" order by log.occurredAt asc, log.clientCreatedAt asc, log.operationId asc");
+        return find(query.toString(), params.toArray()).list();
+    }
+
+    public List<AnimalEventLog> listHealthByTreatmentCase(UUID animalUuid, String treatmentCaseId) {
+        if (treatmentCaseId == null || treatmentCaseId.isBlank()) {
+            return List.of();
+        }
+        return find(
+                        "from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and animal.uuid = ?2 and log.metadataJson like ?3 order by log.occurredAt asc, log.clientCreatedAt asc, log.operationId asc",
+                        AnimalEventCategory.HEALTH,
+                        animalUuid,
+                        "%\"treatmentCaseId\":\"" + treatmentCaseId.trim() + "\"%")
+                .list();
+    }
+
+    public List<AnimalEventLog> listHealthByVisit(UUID animalUuid, String visitId, LocalDateTime occurredFrom, LocalDateTime occurredTo) {
+        return listHealthHistory(animalUuid, AnimalHealthEventType.FIELD_VET_VISIT, occurredFrom, occurredTo, visitId);
+    }
+
+    public List<AnimalEventLog> findUpcomingHealthVisits(UUID ganaderoId, int limit) {
+        return find(
+                        "from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and log.eventType = ?2 and animal.ownerGanadero.id = ?3 order by log.occurredAt asc, log.eventId asc",
+                        AnimalEventCategory.HEALTH,
+                        "FIELD_VET_VISIT",
+                        ganaderoId)
+                .page(0, limit)
+                .list();
+    }
+
+    public List<HealthActivityRow> listHealthActivity(
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo,
+            AnimalHealthEventType type,
+            UUID ganaderoId,
+            UUID animalUuid,
+            int limit) {
+        StringBuilder query = new StringBuilder(
+                """
+                select new bo.pasorapa.hato.repository.AnimalEventLogRepository$HealthActivityRow(
+                    log.eventId,
+                    log.occurredAt,
+                    log.eventType,
+                    ganadero.id,
+                    ganadero.name,
+                    animal.uuid,
+                    animal.code,
+                    animal.tag,
+                    log.notes
+                )
+                from AnimalEventLog log
+                join log.animal animal
+                join animal.ownerGanadero ganadero
+                where log.eventCategory = ?1 and log.occurredAt >= ?2 and log.occurredAt <= ?3
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalEventCategory.HEALTH);
+        params.add(occurredFrom);
+        params.add(occurredTo);
+        if (type != null) {
+            query.append(" and log.eventType = ?").append(params.size() + 1);
+            params.add(type.name());
+        }
+        if (ganaderoId != null) {
+            query.append(" and ganadero.id = ?").append(params.size() + 1);
+            params.add(ganaderoId);
+        }
+        if (animalUuid != null) {
+            query.append(" and animal.uuid = ?").append(params.size() + 1);
+            params.add(animalUuid);
+        }
+        query.append(" order by log.occurredAt desc, log.eventId desc");
+
+        var typedQuery = getEntityManager().createQuery(query.toString(), HealthActivityRow.class);
+        for (int index = 0; index < params.size(); index++) {
+            typedQuery.setParameter(index + 1, params.get(index));
+        }
+        return typedQuery.setMaxResults(limit).getResultList();
     }
 
     public List<AnimalEventLog> findGeneralByAnimalUuidForProjection(UUID animalUuid) {
@@ -170,7 +287,7 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
         return new VetVisitQueryResult(grouped.subList(fromIndex, toIndex), grouped.size());
     }
 
-    public List<AnimalEventLog> findFieldVetVisitsByOwner(UUID ownerId, AnimalHealthEventRepository.VetVisitQuery filter) {
+    public List<AnimalEventLog> findFieldVetVisitsByOwner(UUID ownerId, VetVisitQuery filter) {
         StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and log.eventType = ?2");
         List<Object> params = new ArrayList<>();
         params.add(AnimalEventCategory.HEALTH);
@@ -239,4 +356,25 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
     }
 
     public record VetVisitQueryResult(List<AnimalEventLog> items, long total) {}
+
+    public record VetVisitQuery(
+            UUID animalUuid,
+            String visitId,
+            String mode,
+            String status,
+            LocalDateTime occurredFrom,
+            LocalDateTime occurredTo,
+            int limit,
+            int offset) {}
+
+    public record HealthActivityRow(
+            UUID eventId,
+            LocalDateTime occurredAt,
+            String type,
+            UUID ganaderoId,
+            String ganaderoName,
+            UUID animalUuid,
+            String animalCode,
+            String animalTag,
+            String notes) {}
 }

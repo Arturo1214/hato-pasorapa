@@ -17,11 +17,8 @@ import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
@@ -58,19 +55,10 @@ class SyncResourceTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalEventRepository animalEventRepository;
-
-    @Inject
     AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
-
-    @Inject
     AnimalImageRepository animalImageRepository;
-
-    @Inject
-    AnimalReproductionEventRepository animalReproductionEventRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -371,7 +359,6 @@ class SyncResourceTest {
                 .body("items[0].metadata.protocol.status", equalTo("STARTED"));
 
         org.junit.jupiter.api.Assertions.assertEquals(1, animalEventLogRepository.count());
-        org.junit.jupiter.api.Assertions.assertEquals(1, animalHealthEventRepository.count());
     }
 
     @Test

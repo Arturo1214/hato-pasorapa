@@ -8,7 +8,6 @@ import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -44,9 +43,6 @@ class AnimalHealthEventServiceTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
-
-    @Inject
     AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
@@ -54,9 +50,6 @@ class AnimalHealthEventServiceTest {
 
     @Inject
     AnimalHealthEventMapper animalHealthEventMapper;
-
-    @Inject
-    AnimalHealthEventCompatibilityView animalHealthEventCompatibilityView;
 
     @Inject
     IntegrationDatabaseCleaner integrationDatabaseCleaner;
@@ -88,7 +81,7 @@ class AnimalHealthEventServiceTest {
 
         assertEquals(operationId, created.getOperationId());
         assertEquals(created.getEventId(), replayed.getEventId());
-        assertEquals(1, animalHealthEventRepository.count());
+        assertEquals(1, animalEventLogRepository.count("eventCategory", bo.pasorapa.hato.domain.enumeration.AnimalEventCategory.HEALTH));
     }
 
     @Test
@@ -248,7 +241,7 @@ class AnimalHealthEventServiceTest {
                 "2026-04-27T18:00:00Z"), USER_ID));
 
         assertEquals("ANIMAL_HEALTH_EVENT_TREATMENT_CASE_CLOSED", exception.code());
-        assertEquals(3, animalHealthEventRepository.listByTreatmentCase(animalUuid, "CASE-001").size());
+        assertEquals(3, animalHealthEventService.list(animalUuid, null, null, null, null).size());
     }
 
     @Test
@@ -358,19 +351,6 @@ class AnimalHealthEventServiceTest {
         assertEquals("VISIT-UNIFIED-LATEST", latest.get(0).getVisitId());
         assertEquals("CANCELADA", latest.get(0).getVisitStatus());
         assertEquals(animalUuid, latest.get(0).getAnimal().getUuid());
-    }
-
-    @Test
-    void shouldReadLegacyHealthEventsThroughCompatibilityViewDuringTransition() {
-        UUID animalUuid = UUID.fromString("33e6c94d-4f97-47f1-9c27-db25b2d28cc4");
-        seedAnimal(animalUuid);
-        seedLegacyOnlyFieldVetEvent(animalUuid, "VISIT-COMPAT-LEGACY", "SPECIFIC", "PROGRAMADA", "Dra. Compat", 1, "2026-05-10T08:00:00");
-
-        var events = animalHealthEventCompatibilityView.findByVisitId("VISIT-COMPAT-LEGACY");
-
-        assertEquals(1, events.size());
-        assertEquals("VISIT-COMPAT-LEGACY", animalHealthEventMapper.readVisitId(animalHealthEventMapper.readMetadataJson(events.get(0).getMetadataJson())));
-        assertEquals(0, animalEventLogRepository.findByVisitIdRoot("VISIT-COMPAT-LEGACY").size());
     }
 
     @Test
@@ -864,46 +844,7 @@ class AnimalHealthEventServiceTest {
             event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(metadata));
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
             event.setUpdatedAt(event.getCreatedAt());
-            animalHealthEventRepository.persist(event);
             animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(event));
-        });
-    }
-
-    private void seedLegacyOnlyFieldVetEvent(
-            UUID animalUuid,
-            String visitId,
-            String mode,
-            String status,
-            String veterinarianName,
-            int targetAnimalCount,
-            String occurredAt) {
-        QuarkusTransaction.requiringNew().run(() -> {
-            LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
-            metadata.put("visit", Map.of(
-                    "visitId", visitId,
-                    "mode", mode,
-                    "status", status,
-                    "veterinarian", Map.of("name", veterinarianName),
-                    "targetAnimalCount", targetAnimalCount,
-                    "atencionNotas", "Compatibilidad"));
-            metadata.put("checklist", List.of(Map.of("code", "TEMPERATURE", "ok", true)));
-            metadata.put("clinicalNote", Map.of("reason", "Control", "findings", "Ok", "plan", "Seguimiento"));
-            metadata.put("protocol", Map.of("status", "STARTED"));
-
-            var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
-            event.setEventId(UUID.randomUUID());
-            event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
-            event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);
-            event.setOccurredAt(LocalDateTime.parse(occurredAt));
-            event.setClientCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
-            event.setNotes("Solo legacy");
-            event.setPerformedByUserId(USER_ID);
-            event.setSourceChannel("OFFLINE");
-            event.setOperationId(UUID.randomUUID());
-            event.setMetadataJson(animalHealthEventMapper.writeMetadataJson(metadata));
-            event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
-            event.setUpdatedAt(event.getCreatedAt());
-            animalHealthEventRepository.persist(event);
         });
     }
 

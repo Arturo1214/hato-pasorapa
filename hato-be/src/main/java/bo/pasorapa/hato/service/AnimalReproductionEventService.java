@@ -10,7 +10,6 @@ import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
@@ -28,7 +27,6 @@ import java.util.UUID;
 @ApplicationScoped
 public class AnimalReproductionEventService {
 
-    private final AnimalReproductionEventRepository animalReproductionEventRepository;
     private final AnimalEventLogRepository animalEventLogRepository;
     private final AnimalRepository animalRepository;
     private final AnimalReproductionEventMapper animalReproductionEventMapper;
@@ -36,13 +34,11 @@ public class AnimalReproductionEventService {
     private final GanaderoRepository ganaderoRepository;
 
     public AnimalReproductionEventService(
-            AnimalReproductionEventRepository animalReproductionEventRepository,
             AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             AnimalReproductionEventMapper animalReproductionEventMapper,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository) {
-        this.animalReproductionEventRepository = animalReproductionEventRepository;
         this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.animalReproductionEventMapper = animalReproductionEventMapper;
@@ -96,29 +92,8 @@ public class AnimalReproductionEventService {
                         occurredTo == null ? null : occurredTo.toLocalDateTime())
                 .stream()
                 .map(animalReproductionEventMapper::toAnimalReproductionEvent)
-                .collect(java.util.stream.Collectors.collectingAndThen(
-                        java.util.stream.Collectors.toCollection(java.util.ArrayList::new),
-                        unifiedEvents -> {
-                            unifiedEvents.addAll(animalReproductionEventRepository.listHistory(
-                                    animalUuid,
-                                    reproductionEventType,
-                                    occurredFrom == null ? null : occurredFrom.toLocalDateTime(),
-                                    occurredTo == null ? null : occurredTo.toLocalDateTime()));
-                            return unifiedEvents.stream()
-                                    .collect(java.util.stream.Collectors.toMap(
-                                            AnimalReproductionEvent::getOperationId,
-                                            event -> event,
-                                            (left, right) -> left,
-                                            java.util.LinkedHashMap::new))
-                                    .values()
-                                    .stream()
-                                    .sorted(java.util.Comparator.comparing(AnimalReproductionEvent::getOccurredAt)
-                                            .thenComparing(AnimalReproductionEvent::getClientCreatedAt)
-                                            .thenComparing(AnimalReproductionEvent::getOperationId)
-                                            .reversed())
-                                    .map(animalReproductionEventMapper::toResponse)
-                                    .toList();
-                        }));
+                .map(animalReproductionEventMapper::toResponse)
+                .toList();
     }
 
     public Map<String, Object> toPullItem(AnimalReproductionEvent event) {
@@ -234,7 +209,6 @@ public class AnimalReproductionEventService {
 
         AnimalReproductionEvent serviceEvent = animalEventLogRepository.findByEventIdOrOperationId(AnimalEventCategory.REPRODUCTION, serviceEventUuid)
                 .map(animalReproductionEventMapper::toAnimalReproductionEvent)
-                .or(() -> animalReproductionEventRepository.findByEventIdOrOperationId(serviceEventUuid))
                 .orElseThrow(() -> new BusinessException(
                         "ANIMAL_REPRODUCTION_EVENT_SERVICE_REFERENCE_NOT_FOUND",
                         "No encontramos el servicio reproductivo asociado al diagnóstico.",

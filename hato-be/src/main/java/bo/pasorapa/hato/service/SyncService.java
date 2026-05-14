@@ -19,10 +19,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalImageRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.HerdCostLedgerRepository;
 import bo.pasorapa.hato.repository.HerdLotAssignmentRepository;
@@ -105,10 +102,7 @@ public class SyncService {
     private final AnimalRepository animalRepository;
     private final AdminNotificationRepository adminNotificationRepository;
     private final AnimalEventLogRepository animalEventLogRepository;
-    private final AnimalEventRepository animalEventRepository;
-    private final AnimalHealthEventRepository animalHealthEventRepository;
     private final AnimalImageRepository animalImageRepository;
-    private final AnimalReproductionEventRepository animalReproductionEventRepository;
     private final UserRepository userRepository;
     private final GanaderoRepository ganaderoRepository;
     private final HerdLotRepository herdLotRepository;
@@ -136,10 +130,7 @@ public class SyncService {
             AnimalRepository animalRepository,
             AdminNotificationRepository adminNotificationRepository,
             AnimalEventLogRepository animalEventLogRepository,
-            AnimalEventRepository animalEventRepository,
-            AnimalHealthEventRepository animalHealthEventRepository,
             AnimalImageRepository animalImageRepository,
-            AnimalReproductionEventRepository animalReproductionEventRepository,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository,
             HerdLotRepository herdLotRepository,
@@ -165,10 +156,7 @@ public class SyncService {
         this.animalRepository = animalRepository;
         this.adminNotificationRepository = adminNotificationRepository;
         this.animalEventLogRepository = animalEventLogRepository;
-        this.animalEventRepository = animalEventRepository;
-        this.animalHealthEventRepository = animalHealthEventRepository;
         this.animalImageRepository = animalImageRepository;
-        this.animalReproductionEventRepository = animalReproductionEventRepository;
         this.userRepository = userRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.herdLotRepository = herdLotRepository;

@@ -2,13 +2,14 @@ package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.Raza;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.RazaRepository;
@@ -43,7 +44,7 @@ public class AnimalService {
     private static final int MAX_GENEALOGY_GENERATIONS = 3;
 
     private final AnimalRepository animalRepository;
-    private final AnimalEventRepository animalEventRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final GanaderoRepository ganaderoRepository;
     private final UserRepository userRepository;
     private final RazaRepository razaRepository;
@@ -53,7 +54,7 @@ public class AnimalService {
 
     public AnimalService(
             AnimalRepository animalRepository,
-            AnimalEventRepository animalEventRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             GanaderoRepository ganaderoRepository,
             UserRepository userRepository,
             RazaRepository razaRepository,
@@ -61,7 +62,7 @@ public class AnimalService {
             AnimalEventMapper animalEventMapper,
             AnimalReproductionEventService animalReproductionEventService) {
         this.animalRepository = animalRepository;
-        this.animalEventRepository = animalEventRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.userRepository = userRepository;
         this.razaRepository = razaRepository;
@@ -242,7 +243,9 @@ public class AnimalService {
 
     @Transactional
     public AnimalEvent applyCastration(AnimalEventRequest request, UUID authenticatedUserId) {
-        AnimalEvent existing = animalEventRepository.findByOperationId(request.operationId()).orElse(null);
+        AnimalEvent existing = animalEventLogRepository.findByOperationId(request.operationId())
+                .map(animalEventMapper::toAnimalEvent)
+                .orElse(null);
         if (existing != null) {
             return existing;
         }
@@ -252,11 +255,12 @@ public class AnimalService {
 
         UUID effectivePerformedByUserId = resolvePerformedByUserId(request, authenticatedUserId);
         AnimalEvent event = animalEventMapper.toEntity(animal, request, effectivePerformedByUserId);
-        animalEventRepository.persist(event);
-        animalEventRepository.flush();
+        AnimalEventLog eventLog = animalEventMapper.toAnimalEventLog(animal, request, effectivePerformedByUserId);
+        animalEventLogRepository.persist(eventLog);
+        animalEventLogRepository.flush();
         applyCastrationTransition(animal);
         animalRepository.flush();
-        return event;
+        return animalEventMapper.toAnimalEvent(eventLog);
     }
 
     @Transactional

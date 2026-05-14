@@ -1,7 +1,7 @@
 package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.repository.AdminNotificationRecipientRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.service.dto.admin.reports.HealthActivityFilter;
 import bo.pasorapa.hato.service.dto.admin.reports.HealthActivityResponse;
@@ -31,15 +31,15 @@ public class AdminReportsService {
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100.00");
 
     private final AnimalRepository animalRepository;
-    private final AnimalHealthEventRepository animalHealthEventRepository;
+    private final AnimalEventLogRepository animalEventLogRepository;
     private final AdminNotificationRecipientRepository adminNotificationRecipientRepository;
 
     public AdminReportsService(
             AnimalRepository animalRepository,
-            AnimalHealthEventRepository animalHealthEventRepository,
+            AnimalEventLogRepository animalEventLogRepository,
             AdminNotificationRecipientRepository adminNotificationRecipientRepository) {
         this.animalRepository = animalRepository;
-        this.animalHealthEventRepository = animalHealthEventRepository;
+        this.animalEventLogRepository = animalEventLogRepository;
         this.adminNotificationRecipientRepository = adminNotificationRecipientRepository;
     }
 
@@ -58,7 +58,7 @@ public class AdminReportsService {
 
     public HealthActivityResponse getHealthActivity(HealthActivityFilter filter) {
         validateRequiredDateWindow(filter.from, filter.to);
-        List<HealthActivityResponse.HealthActivityRow> rows = animalHealthEventRepository
+        List<HealthActivityResponse.HealthActivityRow> rows = animalEventLogRepository
                 .listHealthActivity(
                         startOfDay(filter.from),
                         endOfDay(filter.to),
@@ -70,7 +70,7 @@ public class AdminReportsService {
                 .map(row -> new HealthActivityResponse.HealthActivityRow(
                         row.eventId(),
                         row.occurredAt(),
-                        row.type(),
+                        bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType.valueOf(row.type()),
                         row.ganaderoId(),
                         row.ganaderoName(),
                         row.animalUuid(),

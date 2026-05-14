@@ -123,9 +123,6 @@ public class AnimalEventMapper {
     public AnimalEventType validateGeneralEventType(String eventType) {
         try {
             AnimalEventType parsed = AnimalEventType.valueOf(eventType);
-            if (parsed == AnimalEventType.CASTRATION) {
-                throw new IllegalArgumentException("ANIMAL_EVENT_LOG_GENERAL_TYPE_INVALID");
-            }
             return parsed;
         } catch (Exception exception) {
             throw new IllegalArgumentException("ANIMAL_EVENT_LOG_GENERAL_TYPE_INVALID");

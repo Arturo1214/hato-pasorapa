@@ -119,8 +119,8 @@ Chain strategy: stacked-to-main
 
 ### 4.3 Archive
 
-- [ ] 4.3.1 Persist final tasks artifact to Engram `sdd/animal-event-legacy-cleanup-v1/tasks`
-- [ ] 4.3.2 Update OpenSpec `tasks.md` with final state
+- [x] 4.3.1 Persist final tasks artifact to Engram `sdd/animal-event-legacy-cleanup-v1/tasks`
+- [x] 4.3.2 Update OpenSpec `tasks.md` with final state
 
 ---
 

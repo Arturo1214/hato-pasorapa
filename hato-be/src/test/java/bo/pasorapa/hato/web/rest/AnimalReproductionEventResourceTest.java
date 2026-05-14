@@ -6,7 +6,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.service.model.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -14,7 +14,7 @@ import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -46,7 +46,7 @@ class AnimalReproductionEventResourceTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalReproductionEventRepository animalReproductionEventRepository;
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -348,7 +348,7 @@ class AnimalReproductionEventResourceTest {
             event.setMetadataJson(mapper.writeMetadataJson(metadata));
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(suffix.endsWith("100") ? 1 : suffix.endsWith("200") ? 2 : 3));
             event.setUpdatedAt(event.getCreatedAt());
-            animalReproductionEventRepository.persist(event);
+            animalEventLogRepository.persist(mapper.toAnimalEventLog(event));
             return eventId;
         });
     }

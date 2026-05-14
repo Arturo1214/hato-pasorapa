@@ -6,7 +6,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -14,7 +14,6 @@ import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -53,9 +52,6 @@ class VetVisitResourceTest {
 
     @Inject
     AnimalRepository animalRepository;
-
-    @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
 
     @Inject
     AnimalEventLogRepository animalEventLogRepository;
@@ -312,7 +308,6 @@ class VetVisitResourceTest {
             event.setMetadataJson(mapper.writeMetadataJson(metadata));
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(1));
             event.setUpdatedAt(event.getCreatedAt());
-            animalHealthEventRepository.persist(event);
             animalEventLogRepository.persist(mapper.toAnimalEventLog(event));
         });
     }

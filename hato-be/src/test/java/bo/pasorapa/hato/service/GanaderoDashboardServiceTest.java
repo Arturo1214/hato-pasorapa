@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import bo.pasorapa.hato.domain.AdminNotification;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.service.model.AnimalEvent;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -18,12 +18,13 @@ import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AdminNotificationRecipientRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
+import bo.pasorapa.hato.service.mapper.AnimalEventMapper;
+import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -45,8 +46,9 @@ class GanaderoDashboardServiceTest {
 
     @Inject GanaderoDashboardService ganaderoDashboardService;
     @Inject AnimalRepository animalRepository;
-    @Inject AnimalEventRepository animalEventRepository;
-    @Inject AnimalHealthEventRepository animalHealthEventRepository;
+    @Inject AnimalEventLogRepository animalEventLogRepository;
+    @Inject AnimalEventMapper animalEventMapper;
+    @Inject AnimalHealthEventMapper animalHealthEventMapper;
     @Inject AdminNotificationRepository adminNotificationRepository;
     @Inject AdminNotificationRecipientRepository adminNotificationRecipientRepository;
     @Inject GanaderoRepository ganaderoRepository;
@@ -71,39 +73,39 @@ class GanaderoDashboardServiceTest {
 
             Animal ownAnimal = animalRepository.findByUuid(UUID.fromString("20000000-0000-4000-8000-000000000001")).orElseThrow();
             Animal otherAnimal = animalRepository.findByUuid(UUID.fromString("20000000-0000-4000-8000-000000000007")).orElseThrow();
-            animalEventRepository.persist(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000001"), ownAnimal, LocalDateTime.of(2099, 1, 10, 9, 0), "Evento propio 1"));
-            animalEventRepository.persist(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000002"), ownAnimal, LocalDateTime.of(2099, 1, 11, 9, 0), "Evento propio 2"));
-            animalEventRepository.persist(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000003"), otherAnimal, LocalDateTime.of(2099, 1, 9, 9, 0), "Evento ajeno"));
-            animalEventRepository.persist(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000004"), ownAnimal, LocalDateTime.of(2000, 1, 1, 9, 0), "Evento pasado"));
+            animalEventLogRepository.persist(animalEventMapper.toAnimalEventLog(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000001"), ownAnimal, LocalDateTime.of(2099, 1, 10, 9, 0), "Evento propio 1")));
+            animalEventLogRepository.persist(animalEventMapper.toAnimalEventLog(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000002"), ownAnimal, LocalDateTime.of(2099, 1, 11, 9, 0), "Evento propio 2")));
+            animalEventLogRepository.persist(animalEventMapper.toAnimalEventLog(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000003"), otherAnimal, LocalDateTime.of(2099, 1, 9, 9, 0), "Evento ajeno")));
+            animalEventLogRepository.persist(animalEventMapper.toAnimalEventLog(buildAnimalEvent(UUID.fromString("30000000-0000-4000-8000-000000000004"), ownAnimal, LocalDateTime.of(2000, 1, 1, 9, 0), "Evento pasado")));
 
-            animalHealthEventRepository.persist(buildHealthEvent(
+            animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(buildHealthEvent(
                     UUID.fromString("40000000-0000-4000-8000-000000000001"),
                     ownAnimal,
                     LocalDateTime.of(2099, 2, 10, 9, 0),
                     "VISIT-1",
                     "STARTED",
-                    "2099-02-20T00:00:00Z"));
-            animalHealthEventRepository.persist(buildHealthEvent(
+                    "2099-02-20T00:00:00Z")));
+            animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(buildHealthEvent(
                     UUID.fromString("40000000-0000-4000-8000-000000000002"),
                     ownAnimal,
                     LocalDateTime.of(2099, 2, 11, 9, 0),
                     "VISIT-2",
                     "FOLLOW_UP_REQUIRED",
-                    "2099-02-21T00:00:00Z"));
-            animalHealthEventRepository.persist(buildHealthEvent(
+                    "2099-02-21T00:00:00Z")));
+            animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(buildHealthEvent(
                     UUID.fromString("40000000-0000-4000-8000-000000000003"),
                     ownAnimal,
                     LocalDateTime.of(2099, 2, 12, 9, 0),
                     "VISIT-3",
                     "CLOSED",
-                    null));
-            animalHealthEventRepository.persist(buildHealthEvent(
+                    null)));
+            animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(buildHealthEvent(
                     UUID.fromString("40000000-0000-4000-8000-000000000004"),
                     ownAnimal,
                     LocalDateTime.of(2099, 2, 13, 9, 0),
                     "VISIT-4",
                     "FOLLOW_UP_REQUIRED",
-                    "2000-02-21T00:00:00Z"));
+                    "2000-02-21T00:00:00Z")));
 
             adminNotificationRecipientRepository.persist(buildNotificationRecipient(UUID.fromString("50000000-0000-4000-8000-000000000001"), USER_ID, false));
             adminNotificationRecipientRepository.persist(buildNotificationRecipient(UUID.fromString("50000000-0000-4000-8000-000000000002"), USER_ID, false));

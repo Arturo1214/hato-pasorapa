@@ -5,13 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.service.model.AnimalEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
@@ -42,9 +41,6 @@ class AnimalEventServiceTest {
 
     @Inject
     AnimalRepository animalRepository;
-
-    @Inject
-    AnimalEventRepository animalEventRepository;
 
     @Inject
     AnimalEventLogRepository animalEventLogRepository;
@@ -185,7 +181,6 @@ class AnimalEventServiceTest {
         var listed = animalEventService.list(animalUuid, AnimalEventType.OBSERVATION, null, null);
 
         assertEquals(operationId, created.getOperationId());
-        assertEquals(0, animalEventRepository.count());
         assertEquals(1, animalEventLogRepository.count("eventCategory", AnimalEventCategory.GENERAL));
         assertEquals(1, listed.size());
         assertEquals(AnimalEventType.OBSERVATION, listed.getFirst().type());

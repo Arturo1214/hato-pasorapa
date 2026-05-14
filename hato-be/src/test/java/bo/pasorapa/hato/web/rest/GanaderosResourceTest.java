@@ -9,7 +9,6 @@ import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
@@ -36,9 +35,6 @@ class GanaderosResourceTest {
 
     @Inject
     AnimalRepository animalRepository;
-
-    @Inject
-    AnimalEventRepository animalEventRepository;
 
     @Inject
     OperationLogRepository operationLogRepository;

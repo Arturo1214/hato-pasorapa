@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;

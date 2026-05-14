@@ -1,12 +1,12 @@
 package bo.pasorapa.hato.service.mapper;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
 import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventResponse;
+import bo.pasorapa.hato.service.model.AnimalEvent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;

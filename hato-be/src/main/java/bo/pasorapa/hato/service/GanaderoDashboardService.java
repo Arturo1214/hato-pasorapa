@@ -1,6 +1,5 @@
 package bo.pasorapa.hato.service;
 
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
@@ -11,6 +10,7 @@ import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
 import bo.pasorapa.hato.service.dto.ganadero.dashboard.AnimalsSummaryResponse;
 import bo.pasorapa.hato.service.dto.ganadero.dashboard.UpcomingEventResponse;
 import bo.pasorapa.hato.service.dto.ganadero.dashboard.UpcomingVisitResponse;

@@ -1,10 +1,7 @@
 package bo.pasorapa.hato.support;
 
-import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.HerdCostLedgerRepository;
@@ -23,9 +20,6 @@ public class IntegrationDatabaseCleaner {
     private final SyncOperationReceiptRepository syncOperationReceiptRepository;
     private final SyncConflictAuditLedgerRepository syncConflictAuditLedgerRepository;
     private final OperationLogRepository operationLogRepository;
-    private final AnimalReproductionEventRepository animalReproductionEventRepository;
-    private final AnimalHealthEventRepository animalHealthEventRepository;
-    private final AnimalEventRepository animalEventRepository;
     private final AnimalEventLogRepository animalEventLogRepository;
     private final HerdCostLedgerRepository herdCostLedgerRepository;
     private final HerdProductivityLedgerRepository herdProductivityLedgerRepository;
@@ -40,9 +34,6 @@ public class IntegrationDatabaseCleaner {
             SyncOperationReceiptRepository syncOperationReceiptRepository,
             SyncConflictAuditLedgerRepository syncConflictAuditLedgerRepository,
             OperationLogRepository operationLogRepository,
-            AnimalReproductionEventRepository animalReproductionEventRepository,
-            AnimalHealthEventRepository animalHealthEventRepository,
-            AnimalEventRepository animalEventRepository,
             AnimalEventLogRepository animalEventLogRepository,
             HerdCostLedgerRepository herdCostLedgerRepository,
             HerdProductivityLedgerRepository herdProductivityLedgerRepository,
@@ -55,9 +46,6 @@ public class IntegrationDatabaseCleaner {
         this.syncOperationReceiptRepository = syncOperationReceiptRepository;
         this.syncConflictAuditLedgerRepository = syncConflictAuditLedgerRepository;
         this.operationLogRepository = operationLogRepository;
-        this.animalReproductionEventRepository = animalReproductionEventRepository;
-        this.animalHealthEventRepository = animalHealthEventRepository;
-        this.animalEventRepository = animalEventRepository;
         this.animalEventLogRepository = animalEventLogRepository;
         this.herdCostLedgerRepository = herdCostLedgerRepository;
         this.herdProductivityLedgerRepository = herdProductivityLedgerRepository;
@@ -74,9 +62,6 @@ public class IntegrationDatabaseCleaner {
         syncOperationReceiptRepository.deleteAll();
         operationLogRepository.deleteAll();
         animalEventLogRepository.deleteAll();
-        animalReproductionEventRepository.deleteAll();
-        animalHealthEventRepository.deleteAll();
-        animalEventRepository.deleteAll();
         herdCostLedgerRepository.deleteAll();
         herdProductivityLedgerRepository.deleteAll();
         herdLotAssignmentRepository.deleteAll();

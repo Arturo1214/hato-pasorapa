@@ -5,7 +5,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
+import bo.pasorapa.hato.service.model.AnimalEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -13,11 +13,12 @@ import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
+import bo.pasorapa.hato.service.mapper.AnimalEventMapper;
 import bo.pasorapa.hato.service.security.PasswordHasher;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -44,7 +45,10 @@ class AnimalEventResourceTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalEventRepository animalEventRepository;
+    AnimalEventLogRepository animalEventLogRepository;
+
+    @Inject
+    AnimalEventMapper mapper;
 
     @Inject
     GanaderoRepository ganaderoRepository;
@@ -201,7 +205,7 @@ class AnimalEventResourceTest {
             event.setMetadataJson(type == AnimalEventType.OBSERVATION ? "{\"reasonCode\":\"NOTE\"}" : "{\"reasonCode\":\"SALE\"}");
             event.setCreatedAt(LocalDateTime.parse(occurredAt).plusMinutes(type == AnimalEventType.SOLD ? 1 : operationId.equals(UUID.fromString("00000000-0000-0000-0000-000000000200")) ? 2 : 3));
             event.setUpdatedAt(event.getCreatedAt());
-            animalEventRepository.persist(event);
+            animalEventLogRepository.persist(mapper.toAnimalEventLog(event));
         });
     }
 }

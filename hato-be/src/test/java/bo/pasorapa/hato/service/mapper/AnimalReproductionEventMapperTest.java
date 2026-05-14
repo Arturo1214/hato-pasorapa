@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalEventLog;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.service.model.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import com.fasterxml.jackson.databind.ObjectMapper;

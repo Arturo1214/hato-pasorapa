@@ -13,7 +13,6 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.RazaRepository;
@@ -50,9 +49,6 @@ class AnimalServiceTest {
 
     @Inject
     AnimalRepository animalRepository;
-
-    @Inject
-    AnimalEventRepository animalEventRepository;
 
     @Inject
     GanaderoRepository ganaderoRepository;

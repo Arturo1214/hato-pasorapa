@@ -831,7 +831,7 @@ class AnimalHealthEventServiceTest {
                 metadata.put("cost", Map.of("amount", costAmount, "currency", "BOB"));
             }
 
-            var event = new bo.pasorapa.hato.domain.AnimalHealthEvent();
+            var event = new bo.pasorapa.hato.service.model.AnimalHealthEvent();
             event.setEventId(eventId);
             event.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
             event.setHealthEventType(AnimalHealthEventType.FIELD_VET_VISIT);

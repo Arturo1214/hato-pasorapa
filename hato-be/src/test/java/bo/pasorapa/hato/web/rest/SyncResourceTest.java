@@ -13,7 +13,7 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.AnimalImage;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.service.model.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;

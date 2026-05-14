@@ -3,9 +3,7 @@ package bo.pasorapa.hato.support;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.OperationLog;
 import bo.pasorapa.hato.domain.Role;
@@ -14,13 +12,9 @@ import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
-import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
-import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
-import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
-import bo.pasorapa.hato.repository.AnimalEventRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.repository.AnimalRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.OperationLogRepository;
 import bo.pasorapa.hato.repository.SyncOperationReceiptRepository;
@@ -50,13 +44,7 @@ class IntegrationDatabaseCleanerTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalEventRepository animalEventRepository;
-
-    @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
-
-    @Inject
-    AnimalReproductionEventRepository animalReproductionEventRepository;
+    AnimalEventLogRepository animalEventLogRepository;
 
     @Inject
     OperationLogRepository operationLogRepository;
@@ -73,9 +61,7 @@ class IntegrationDatabaseCleanerTest {
         QuarkusTransaction.requiringNew().run(() -> {
             assertEquals(0, syncOperationReceiptRepository.count());
             assertEquals(0, operationLogRepository.count());
-            assertEquals(0, animalReproductionEventRepository.count());
-            assertEquals(0, animalHealthEventRepository.count());
-            assertEquals(0, animalEventRepository.count());
+            assertEquals(0, animalEventLogRepository.count());
             assertEquals(0, animalRepository.count());
             assertEquals(0, ganaderoRepository.count());
             assertEquals(0, userRepository.count());
@@ -119,9 +105,11 @@ class IntegrationDatabaseCleanerTest {
         animal.setVersion(0L);
         animalRepository.persist(animal);
 
-        AnimalEvent animalEvent = new AnimalEvent();
+        AnimalEventLog animalEvent = new AnimalEventLog();
+        animalEvent.setEventId(UUID.fromString("5d38ed1d-b1de-42d5-a771-c715cc2d3071"));
         animalEvent.setAnimal(animal);
-        animalEvent.setType(AnimalEventType.OBSERVATION);
+        animalEvent.setEventCategory(AnimalEventCategory.GENERAL);
+        animalEvent.setEventType("OBSERVATION");
         animalEvent.setOccurredAt(LocalDateTime.of(2026, 4, 27, 10, 0));
         animalEvent.setClientCreatedAt(LocalDateTime.of(2026, 4, 27, 10, 0));
         animalEvent.setNotes("Weight recorded");
@@ -129,31 +117,7 @@ class IntegrationDatabaseCleanerTest {
         animalEvent.setSourceChannel("ONLINE");
         animalEvent.setOperationId(UUID.fromString("5d38ed1d-b1de-42d5-a771-c715cc2d3071"));
         animalEvent.setMetadataJson("{}");
-        animalEventRepository.persist(animalEvent);
-
-        AnimalHealthEvent animalHealthEvent = new AnimalHealthEvent();
-        animalHealthEvent.setAnimal(animal);
-        animalHealthEvent.setHealthEventType(AnimalHealthEventType.TREATMENT_STARTED);
-        animalHealthEvent.setOccurredAt(LocalDateTime.of(2026, 4, 27, 11, 0));
-        animalHealthEvent.setClientCreatedAt(LocalDateTime.of(2026, 4, 27, 11, 0));
-        animalHealthEvent.setNotes("Treatment recorded");
-        animalHealthEvent.setPerformedByUserId(user.getId());
-        animalHealthEvent.setSourceChannel("ONLINE");
-        animalHealthEvent.setOperationId(UUID.fromString("cf83fd8d-8739-4140-a182-48f1f92f11a0"));
-        animalHealthEvent.setMetadataJson("{}");
-        animalHealthEventRepository.persist(animalHealthEvent);
-
-        AnimalReproductionEvent animalReproductionEvent = new AnimalReproductionEvent();
-        animalReproductionEvent.setAnimal(animal);
-        animalReproductionEvent.setReproductionEventType(AnimalReproductionEventType.SERVICE);
-        animalReproductionEvent.setOccurredAt(LocalDateTime.of(2026, 4, 27, 12, 0));
-        animalReproductionEvent.setClientCreatedAt(LocalDateTime.of(2026, 4, 27, 12, 0));
-        animalReproductionEvent.setNotes("Service recorded");
-        animalReproductionEvent.setPerformedByUserId(user.getId());
-        animalReproductionEvent.setSourceChannel("ONLINE");
-        animalReproductionEvent.setOperationId(UUID.fromString("ce557cf1-6baa-40c4-ae57-bfd685d4d56f"));
-        animalReproductionEvent.setMetadataJson("{\"serviceMethod\":\"NATURAL\"}");
-        animalReproductionEventRepository.persist(animalReproductionEvent);
+        animalEventLogRepository.persist(animalEvent);
 
         OperationLog operationLog = new OperationLog();
         operationLog.setOperationId(UUID.fromString("e45a287f-7f40-43d4-bb8c-7ec5f3bd7147"));

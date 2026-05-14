@@ -72,20 +72,20 @@ Chain strategy: stacked-to-main
 
 ### 2.1 Delete Legacy Repository Files
 
-- [ ] 2.1.1 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalEventRepository.java`
-- [ ] 2.1.2 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalHealthEventRepository.java`
-- [ ] 2.1.3 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalReproductionEventRepository.java`
+- [x] 2.1.1 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalEventRepository.java`
+- [x] 2.1.2 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalHealthEventRepository.java`
+- [x] 2.1.3 Delete `hato-be/src/main/java/bo/pasorapa/hato/repository/AnimalReproductionEventRepository.java`
 
 ### 2.2 Delete Legacy JPA Entity Files
 
-- [ ] 2.2.1 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalEvent.java`
-- [ ] 2.2.2 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalHealthEvent.java`
-- [ ] 2.2.3 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalReproductionEvent.java`
+- [x] 2.2.1 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalEvent.java`
+- [x] 2.2.2 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalHealthEvent.java`
+- [x] 2.2.3 Delete `hato-be/src/main/java/bo/pasorapa/hato/domain/AnimalReproductionEvent.java`
 
 ### 2.3 Compile Verification
 
-- [ ] 2.3.1 Compile: `./mvnw -DskipTests compile` — must pass with zero references to deleted classes
-- [ ] 2.3.2 Run full test suite: `./mvnw test` — all must pass
+- [x] 2.3.1 Compile: `./mvnw -DskipTests compile` — must pass with zero references to deleted classes
+- [x] 2.3.2 Run full test suite: `./mvnw test` — all must pass
 
 ---
 

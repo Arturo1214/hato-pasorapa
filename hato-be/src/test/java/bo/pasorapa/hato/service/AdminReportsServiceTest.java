@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import bo.pasorapa.hato.domain.AdminNotification;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -17,7 +17,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AdminNotificationRecipientRepository;
 import bo.pasorapa.hato.repository.AdminNotificationRepository;
-import bo.pasorapa.hato.repository.AnimalHealthEventRepository;
+import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
@@ -25,6 +25,7 @@ import bo.pasorapa.hato.service.dto.admin.reports.HealthActivityFilter;
 import bo.pasorapa.hato.service.dto.admin.reports.InventoryByGanaderoFilter;
 import bo.pasorapa.hato.service.dto.admin.reports.NotificationReachFilter;
 import bo.pasorapa.hato.service.error.BusinessException;
+import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -46,7 +47,10 @@ class AdminReportsServiceTest {
     AnimalRepository animalRepository;
 
     @Inject
-    AnimalHealthEventRepository animalHealthEventRepository;
+    AnimalEventLogRepository animalEventLogRepository;
+
+    @Inject
+    AnimalHealthEventMapper animalHealthEventMapper;
 
     @Inject
     AdminNotificationRepository adminNotificationRepository;
@@ -257,7 +261,7 @@ class AdminReportsServiceTest {
         event.setPerformedByUserId(adminUserId);
         event.setSourceChannel("WEB");
         event.setOperationId(UUID.randomUUID());
-        animalHealthEventRepository.persist(event);
+        animalEventLogRepository.persist(animalHealthEventMapper.toAnimalEventLog(event));
     }
 
     private AdminNotification persistNotification(UUID id, String title, LocalDateTime publishedAt) {

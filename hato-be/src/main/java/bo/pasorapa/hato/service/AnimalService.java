@@ -1,7 +1,6 @@
 package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
 import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.Raza;
 import bo.pasorapa.hato.domain.Role;
@@ -24,6 +23,7 @@ import bo.pasorapa.hato.service.dto.birthregistration.BirthRegistrationResponse;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.mapper.AnimalEventMapper;
 import bo.pasorapa.hato.service.mapper.AnimalMapper;
+import bo.pasorapa.hato.service.model.AnimalEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.core.Response;

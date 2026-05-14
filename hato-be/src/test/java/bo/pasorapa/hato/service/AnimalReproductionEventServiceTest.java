@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
+import bo.pasorapa.hato.service.model.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
@@ -15,7 +15,6 @@ import bo.pasorapa.hato.domain.enumeration.AnimalReproductionEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
-import bo.pasorapa.hato.repository.AnimalReproductionEventRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
 import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
@@ -45,9 +44,6 @@ class AnimalReproductionEventServiceTest {
 
     @Inject
     AnimalRepository animalRepository;
-
-    @Inject
-    AnimalReproductionEventRepository animalReproductionEventRepository;
 
     @Inject
     AnimalEventLogRepository animalEventLogRepository;
@@ -89,7 +85,6 @@ class AnimalReproductionEventServiceTest {
         assertEquals(operationId, created.getOperationId());
         assertEquals(created.getEventId(), replayed.getEventId());
         assertEquals(1, animalEventLogRepository.count("eventCategory", AnimalEventCategory.REPRODUCTION));
-        assertEquals(0, animalReproductionEventRepository.count());
     }
 
     @Test

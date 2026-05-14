@@ -1,11 +1,8 @@
 package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
-import bo.pasorapa.hato.domain.AnimalEvent;
 import bo.pasorapa.hato.domain.AnimalEventLog;
-import bo.pasorapa.hato.domain.AnimalHealthEvent;
 import bo.pasorapa.hato.domain.AnimalImage;
-import bo.pasorapa.hato.domain.AnimalReproductionEvent;
 import bo.pasorapa.hato.domain.AdminNotificationRecipient;
 import bo.pasorapa.hato.domain.Ganadero;
 import bo.pasorapa.hato.domain.HerdCostLedger;
@@ -36,6 +33,9 @@ import bo.pasorapa.hato.service.dto.animalimage.AnimalImageRequest;
 import bo.pasorapa.hato.service.dto.animalreproductionevent.AnimalReproductionEventRequest;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.mapper.SyncPayloadMapper;
+import bo.pasorapa.hato.service.model.AnimalEvent;
+import bo.pasorapa.hato.service.model.AnimalHealthEvent;
+import bo.pasorapa.hato.service.model.AnimalReproductionEvent;
 import bo.pasorapa.hato.service.mapper.AdminNotificationMapper;
 import bo.pasorapa.hato.service.mapper.AnimalEventMapper;
 import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;

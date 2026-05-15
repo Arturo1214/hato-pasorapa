@@ -1,0 +1,530 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-baseline-current-schema
+      author: pasorapa
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: username, type: VARCHAR(80), constraints: { nullable: false, unique: true } }
+              - column: { name: email, type: VARCHAR(120), constraints: { nullable: false, unique: true } }
+              - column: { name: display_name, type: VARCHAR(120), constraints: { nullable: false } }
+              - column: { name: password_hash, type: VARCHAR(512), constraints: { nullable: false } }
+              - column: { name: role, type: VARCHAR(30), constraints: { nullable: false } }
+              - column: { name: status, type: VARCHAR(30), constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: last_synced_at, type: TIMESTAMP }
+        - createIndex:
+            tableName: users
+            indexName: idx_users_role_status
+            columns:
+              - column: { name: role }
+              - column: { name: status }
+
+        - createTable:
+            tableName: ganaderos
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: business_identifier, type: VARCHAR(80), constraints: { nullable: false, unique: true } }
+              - column: { name: name, type: VARCHAR(160), constraints: { nullable: false } }
+              - column: { name: email, type: VARCHAR(120), constraints: { unique: true } }
+              - column: { name: contact_info, type: CLOB }
+              - column: { name: active, type: BOOLEAN, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: last_synced_at, type: TIMESTAMP }
+        - createIndex:
+            tableName: ganaderos
+            indexName: idx_ganaderos_active
+            columns:
+              - column: { name: active }
+        - createIndex:
+            tableName: ganaderos
+            indexName: idx_ganaderos_email
+            unique: true
+            columns:
+              - column: { name: email }
+
+        - createTable:
+            tableName: operation_log
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: resource_type, type: VARCHAR(60), constraints: { nullable: false } }
+              - column: { name: resource_id, type: UUID }
+              - column: { name: performed_by_user_id, type: UUID }
+              - column: { name: action, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+        - createIndex:
+            tableName: operation_log
+            indexName: idx_operation_log_operation_id
+            columns:
+              - column: { name: operation_id }
+
+        - createTable:
+            tableName: razas
+            columns:
+              - column: { name: id, type: BIGSERIAL, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: uuid, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: nombre, type: VARCHAR(120), constraints: { nullable: false } }
+              - column: { name: nombre_normalizado, type: VARCHAR(120), constraints: { nullable: false, unique: true } }
+              - column: { name: descripcion, type: VARCHAR(500) }
+              - column: { name: origen, type: VARCHAR(120) }
+              - column: { name: tipo, type: VARCHAR(30), defaultValue: UNCLASSIFIED, constraints: { nullable: false } }
+              - column: { name: activo, type: BOOLEAN, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: sort_order, type: INT, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+        - createIndex:
+            tableName: razas
+            indexName: idx_razas_activo_sort
+            columns:
+              - column: { name: activo }
+              - column: { name: sort_order }
+              - column: { name: nombre }
+
+        - createTable:
+            tableName: animals
+            columns:
+              - column: { name: id, type: BIGSERIAL, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: uuid, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: code, type: VARCHAR(50), constraints: { nullable: false, unique: true } }
+              - column: { name: tag, type: VARCHAR(50), constraints: { nullable: false, unique: true } }
+              - column: { name: owner_ganadero_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: arete, type: VARCHAR(80) }
+              - column: { name: marca, type: VARCHAR(80) }
+              - column: { name: tatuaje, type: VARCHAR(80) }
+              - column: { name: arete_normalized, type: VARCHAR(80), constraints: { unique: true } }
+              - column: { name: marca_normalized, type: VARCHAR(80) }
+              - column: { name: tatuaje_normalized, type: VARCHAR(80) }
+              - column: { name: category, type: VARCHAR(30), constraints: { nullable: false } }
+              - column: { name: sex, type: VARCHAR(10) }
+              - column: { name: active, type: BOOLEAN, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: admission_date, type: DATE, constraints: { nullable: false } }
+              - column: { name: weight_kg, type: "NUMERIC(10,2)" }
+              - column: { name: color, type: VARCHAR(120) }
+              - column: { name: description, type: VARCHAR(500) }
+              - column: { name: breed_id, type: BIGINT }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: last_synced_at, type: TIMESTAMP }
+              - column: { name: mother_animal_uuid, type: UUID }
+              - column: { name: father_animal_uuid, type: UUID }
+              - column: { name: birth_date, type: DATE }
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: owner_ganadero_id
+            referencedTableName: ganaderos
+            referencedColumnNames: id
+            constraintName: fk_animals_owner_ganadero
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: breed_id
+            referencedTableName: razas
+            referencedColumnNames: id
+            constraintName: fk_animals_breed
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: mother_animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_animals_mother_animal_uuid
+        - addForeignKeyConstraint:
+            baseTableName: animals
+            baseColumnNames: father_animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_animals_father_animal_uuid
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_category_active
+            columns:
+              - column: { name: category }
+              - column: { name: active }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_updated_at_uuid
+            columns:
+              - column: { name: updated_at }
+              - column: { name: uuid }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_owner_ganadero
+            columns:
+              - column: { name: owner_ganadero_id }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_marca_normalized
+            columns:
+              - column: { name: marca_normalized }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_tatuaje_normalized
+            columns:
+              - column: { name: tatuaje_normalized }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_owner_report
+            columns:
+              - column: { name: owner_ganadero_id }
+              - column: { name: active }
+              - column: { name: category }
+              - column: { name: sex }
+        - createIndex:
+            tableName: animals
+            indexName: idx_animals_breed
+            columns:
+              - column: { name: breed_id }
+
+        - createTable:
+            tableName: sync_operation_receipts
+            columns:
+              - column: { name: operation_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: entity_type, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: entity_id, type: VARCHAR(80), constraints: { nullable: false } }
+              - column: { name: classification, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: server_version, type: INTEGER }
+              - column: { name: client_version, type: INTEGER }
+              - column: { name: reason, type: VARCHAR(255) }
+              - column: { name: resolution_hint, type: VARCHAR(80) }
+              - column: { name: server_state_json, type: CLOB }
+              - column: { name: operation_type, type: VARCHAR(40) }
+              - column: { name: payload_json, type: CLOB }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+        - createIndex:
+            tableName: sync_operation_receipts
+            indexName: idx_sync_operation_receipts_entity
+            columns:
+              - column: { name: entity_type }
+              - column: { name: entity_id }
+        - createIndex:
+            tableName: sync_operation_receipts
+            indexName: idx_sync_operation_receipts_operation_type
+            columns:
+              - column: { name: operation_type }
+
+        - createTable:
+            tableName: sync_conflict_audit_ledger
+            columns:
+              - column: { name: id, type: BIGINT, autoIncrement: true, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: entity_type, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: entity_id, type: VARCHAR(80), constraints: { nullable: false } }
+              - column: { name: operation_type, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: event_type, type: VARCHAR(20), constraints: { nullable: false } }
+              - column: { name: decision, type: VARCHAR(40) }
+              - column: { name: result_status, type: VARCHAR(40) }
+              - column: { name: reason, type: VARCHAR(500) }
+              - column: { name: actor_user_id, type: UUID }
+              - column: { name: policy_key, type: VARCHAR(120), constraints: { nullable: false } }
+              - column: { name: retention_expires_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, defaultValueComputed: CURRENT_TIMESTAMP, constraints: { nullable: false } }
+        - createIndex:
+            tableName: sync_conflict_audit_ledger
+            indexName: idx_sync_conflict_audit_ledger_operation
+            columns:
+              - column: { name: operation_id }
+              - column: { name: created_at }
+        - createIndex:
+            tableName: sync_conflict_audit_ledger
+            indexName: idx_sync_conflict_audit_ledger_retention
+            columns:
+              - column: { name: retention_expires_at }
+
+        - createTable:
+            tableName: animal_event_logs
+            columns:
+              - column: { name: event_id, type: UUID, constraints: { primaryKey: true, primaryKeyName: pk_animal_event_logs, nullable: false } }
+              - column: { name: animal_uuid, type: UUID }
+              - column: { name: event_category, type: VARCHAR(20), constraints: { nullable: false } }
+              - column: { name: event_type, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: occurred_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: client_created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: notes, type: VARCHAR(500) }
+              - column: { name: performed_by_user_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: source_channel, type: VARCHAR(20), constraints: { nullable: false } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: metadata_json, type: CLOB }
+              - column: { name: visit_id, type: VARCHAR(80) }
+              - column: { name: parent_visit_id, type: VARCHAR(80) }
+              - column: { name: visit_status, type: VARCHAR(30) }
+              - column: { name: protocol_status, type: VARCHAR(30) }
+              - column: { name: next_due_at, type: TIMESTAMP }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: animal_event_logs
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_animal_event_logs_animal_uuid
+        - addUniqueConstraint:
+            tableName: animal_event_logs
+            columnNames: operation_id
+            constraintName: uk_animal_event_logs_operation_id
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_animal_occurred_event
+            columns:
+              - column: { name: animal_uuid }
+              - column: { name: occurred_at }
+              - column: { name: event_id }
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_category_type_updated_event
+            columns:
+              - column: { name: event_category }
+              - column: { name: event_type }
+              - column: { name: updated_at }
+              - column: { name: event_id }
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_operation_id
+            columns:
+              - column: { name: operation_id }
+        - createIndex:
+            tableName: animal_event_logs
+            indexName: idx_animal_event_logs_vet_projection
+            columns:
+              - column: { name: visit_id }
+              - column: { name: parent_visit_id }
+              - column: { name: visit_status }
+              - column: { name: next_due_at }
+
+        - createTable:
+            tableName: animal_images
+            columns:
+              - column: { name: image_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: animal_uuid, type: UUID, constraints: { nullable: false } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true, uniqueConstraintName: uk_animal_images_operation_id } }
+              - column: { name: file_name, type: VARCHAR(255), constraints: { nullable: false } }
+              - column: { name: mime_type, type: VARCHAR(80), constraints: { nullable: false } }
+              - column: { name: size_bytes, type: BIGINT, constraints: { nullable: false } }
+              - column: { name: checksum_sha256, type: VARCHAR(64), constraints: { nullable: false } }
+              - column: { name: relative_path, type: VARCHAR(512), constraints: { nullable: false } }
+              - column: { name: thumbnail_ref, type: VARCHAR(512) }
+              - column: { name: captured_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: source_channel, type: VARCHAR(20), constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: animal_images
+            baseColumnNames: animal_uuid
+            constraintName: fk_animal_images_animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            onDelete: CASCADE
+        - createIndex:
+            tableName: animal_images
+            indexName: idx_animal_images_animal_captured_image
+            columns:
+              - column: { name: animal_uuid }
+              - column: { name: captured_at }
+              - column: { name: image_id }
+        - createIndex:
+            tableName: animal_images
+            indexName: idx_animal_images_updated_image
+            columns:
+              - column: { name: updated_at }
+              - column: { name: image_id }
+
+        - createTable:
+            tableName: admin_notifications
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: title, type: VARCHAR(160), constraints: { nullable: false } }
+              - column: { name: body, type: VARCHAR(2000), constraints: { nullable: false } }
+              - column: { name: targeting_mode, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: include_user_ids_json, type: VARCHAR(4000) }
+              - column: { name: exclude_user_ids_json, type: VARCHAR(4000) }
+              - column: { name: recipient_count, type: INT, constraints: { nullable: false } }
+              - column: { name: created_by_user_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: published_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+        - createTable:
+            tableName: admin_notification_recipients
+            columns:
+              - column: { name: id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: notification_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: recipient_user_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: read, type: BOOLEAN, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: admin_notifications
+            baseColumnNames: created_by_user_id
+            constraintName: fk_admin_notifications_created_by_user
+            referencedTableName: users
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: admin_notification_recipients
+            baseColumnNames: notification_id
+            constraintName: fk_admin_notification_recipients_notification
+            referencedTableName: admin_notifications
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: admin_notification_recipients
+            baseColumnNames: recipient_user_id
+            constraintName: fk_admin_notification_recipients_user
+            referencedTableName: users
+            referencedColumnNames: id
+        - addUniqueConstraint:
+            tableName: admin_notification_recipients
+            columnNames: notification_id, recipient_user_id
+            constraintName: uk_admin_notification_recipient_once
+        - createIndex:
+            tableName: admin_notifications
+            indexName: idx_admin_notifications_updated_id
+            columns:
+              - column: { name: updated_at }
+              - column: { name: id }
+        - createIndex:
+            tableName: admin_notifications
+            indexName: idx_admin_notifications_published_id
+            columns:
+              - column: { name: published_at }
+              - column: { name: id }
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_pull
+            columns:
+              - column: { name: recipient_user_id }
+              - column: { name: updated_at }
+              - column: { name: notification_id }
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_user_read
+            columns:
+              - column: { name: recipient_user_id }
+              - column: { name: read }
+        - createIndex:
+            tableName: admin_notification_recipients
+            indexName: idx_admin_notification_recipient_notification_read
+            columns:
+              - column: { name: notification_id }
+              - column: { name: read }
+
+        - createTable:
+            tableName: herd_lots
+            columns:
+              - column: { name: lot_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: name, type: VARCHAR(120), constraints: { nullable: false } }
+              - column: { name: description, type: VARCHAR(500) }
+              - column: { name: active, type: BOOLEAN, constraints: { nullable: false } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, constraints: { nullable: false } }
+        - createIndex:
+            tableName: herd_lots
+            indexName: idx_herd_lots_updated_id
+            columns:
+              - column: { name: updated_at }
+              - column: { name: lot_id }
+
+        - createTable:
+            tableName: herd_lot_assignments
+            columns:
+              - column: { name: assignment_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: animal_uuid, type: UUID, constraints: { nullable: false } }
+              - column: { name: lot_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: from_date, type: DATE, constraints: { nullable: false } }
+              - column: { name: to_date, type: DATE }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: herd_lot_assignments
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_herd_lot_assignment_animal
+        - addForeignKeyConstraint:
+            baseTableName: herd_lot_assignments
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_lot_assignment_lot
+        - createIndex:
+            tableName: herd_lot_assignments
+            indexName: idx_herd_lot_assignments_animal_dates
+            columns:
+              - column: { name: animal_uuid }
+              - column: { name: from_date }
+              - column: { name: to_date }
+        - createIndex:
+            tableName: herd_lot_assignments
+            indexName: idx_herd_lot_assignments_updated_id
+            columns:
+              - column: { name: updated_at }
+              - column: { name: assignment_id }
+
+        - createTable:
+            tableName: herd_productivity_ledger
+            columns:
+              - column: { name: entry_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: animal_uuid, type: UUID, constraints: { nullable: false } }
+              - column: { name: lot_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: period_key, type: VARCHAR(7), constraints: { nullable: false } }
+              - column: { name: metric_type, type: VARCHAR(40), constraints: { nullable: false } }
+              - column: { name: metric_value, type: "DECIMAL(14,2)", constraints: { nullable: false } }
+              - column: { name: identity_key, type: VARCHAR(220), constraints: { nullable: false, unique: true } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: herd_productivity_ledger
+            baseColumnNames: animal_uuid
+            referencedTableName: animals
+            referencedColumnNames: uuid
+            constraintName: fk_herd_productivity_animal
+        - addForeignKeyConstraint:
+            baseTableName: herd_productivity_ledger
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_productivity_lot
+        - createIndex:
+            tableName: herd_productivity_ledger
+            indexName: idx_herd_productivity_updated_id
+            columns:
+              - column: { name: updated_at }
+              - column: { name: entry_id }
+
+        - createTable:
+            tableName: herd_cost_ledger
+            columns:
+              - column: { name: entry_id, type: UUID, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: lot_id, type: UUID, constraints: { nullable: false } }
+              - column: { name: period_key, type: VARCHAR(7), constraints: { nullable: false } }
+              - column: { name: category, type: VARCHAR(80), constraints: { nullable: false } }
+              - column: { name: source, type: VARCHAR(80), constraints: { nullable: false } }
+              - column: { name: amount, type: "DECIMAL(14,2)", constraints: { nullable: false } }
+              - column: { name: currency, type: VARCHAR(12), constraints: { nullable: false } }
+              - column: { name: identity_key, type: VARCHAR(220), constraints: { nullable: false, unique: true } }
+              - column: { name: operation_id, type: UUID, constraints: { nullable: false, unique: true } }
+              - column: { name: created_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: updated_at, type: TIMESTAMP, constraints: { nullable: false } }
+              - column: { name: version, type: BIGINT, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: herd_cost_ledger
+            baseColumnNames: lot_id
+            referencedTableName: herd_lots
+            referencedColumnNames: lot_id
+            constraintName: fk_herd_cost_lot
+        - createIndex:
+            tableName: herd_cost_ledger
+            indexName: idx_herd_cost_updated_id
+            columns:
+              - column: { name: updated_at }
+              - column: { name: entry_id }

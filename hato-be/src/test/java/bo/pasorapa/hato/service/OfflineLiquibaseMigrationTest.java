@@ -17,12 +17,11 @@ import org.junit.jupiter.api.Test;
 class OfflineLiquibaseMigrationTest {
 
     @Test
-    void shouldMigrateLegacyAnimalsAndCreateOfflineSyncFoundationTables() throws Exception {
+    void shouldCreateAnimalsAndOfflineSyncFoundationTablesFromCurrentBaseline() throws Exception {
         try (Connection connection = DriverManager.getConnection(
                 "jdbc:h2:mem:offline-sync-migration;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
                 "sa",
                 "sa")) {
-            applyChangelog(connection, "db/changelog/test/legacy-master.yaml");
             applyChangelog(connection, "db/changelog/master.yaml");
 
             try (PreparedStatement statement = connection.prepareStatement(

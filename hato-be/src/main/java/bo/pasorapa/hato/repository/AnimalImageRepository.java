@@ -23,16 +23,31 @@ public class AnimalImageRepository implements PanacheRepositoryBase<AnimalImage,
     }
 
     public List<AnimalImage> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
-        if (cursorUpdatedAt == null) {
-            return find("from AnimalImage order by updatedAt asc, imageId asc").page(0, limitPlusOne).list();
-        }
+        return listChangedSinceForOwner(null, cursorUpdatedAt, cursorId, limitPlusOne);
+    }
 
-        UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
-        return find(
-                        "from AnimalImage where updatedAt > ?1 or (updatedAt = ?1 and imageId > ?2) order by updatedAt asc, imageId asc",
-                        cursorUpdatedAt,
-                        effectiveCursorId)
-                .page(0, limitPlusOne)
-                .list();
+    public List<AnimalImage> listChangedSinceForOwner(UUID ownerGanaderoId, LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
+        StringBuilder query = new StringBuilder("from AnimalImage image left join fetch image.animal animal");
+        java.util.List<Object> params = new java.util.ArrayList<>();
+        if (ownerGanaderoId != null || cursorUpdatedAt != null) {
+            query.append(" where ");
+            if (ownerGanaderoId != null) {
+                query.append("animal.ownerGanadero.id = ?").append(params.size() + 1);
+                params.add(ownerGanaderoId);
+            }
+            if (cursorUpdatedAt != null) {
+                if (!params.isEmpty()) {
+                    query.append(" and ");
+                }
+                UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
+                query.append("(image.updatedAt > ?").append(params.size() + 1)
+                        .append(" or (image.updatedAt = ?").append(params.size() + 1)
+                        .append(" and image.imageId > ?").append(params.size() + 2).append("))");
+                params.add(cursorUpdatedAt);
+                params.add(effectiveCursorId);
+            }
+        }
+        query.append(" order by image.updatedAt asc, image.imageId asc");
+        return find(query.toString(), params.toArray()).page(0, limitPlusOne).list();
     }
 }

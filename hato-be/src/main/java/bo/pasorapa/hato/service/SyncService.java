@@ -116,6 +116,7 @@ public class SyncService {
     private final AnimalHealthEventService animalHealthEventService;
     private final AnimalImageService animalImageService;
     private final AnimalReproductionEventService animalReproductionEventService;
+    private final AnimalAccessService animalAccessService;
     private final AdminUserService adminUserService;
     private final GanaderoService ganaderoService;
     private final SyncPayloadMapper syncPayloadMapper;
@@ -144,6 +145,7 @@ public class SyncService {
             AnimalHealthEventService animalHealthEventService,
             AnimalImageService animalImageService,
             AnimalReproductionEventService animalReproductionEventService,
+            AnimalAccessService animalAccessService,
             AdminUserService adminUserService,
             GanaderoService ganaderoService,
             SyncPayloadMapper syncPayloadMapper,
@@ -170,6 +172,7 @@ public class SyncService {
         this.animalHealthEventService = animalHealthEventService;
         this.animalImageService = animalImageService;
         this.animalReproductionEventService = animalReproductionEventService;
+        this.animalAccessService = animalAccessService;
         this.adminUserService = adminUserService;
         this.ganaderoService = ganaderoService;
         this.syncPayloadMapper = syncPayloadMapper;
@@ -222,11 +225,12 @@ public class SyncService {
                 ? null
                 : cursorUpdatedAt.withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
         UUID effectiveCursorId = syncPayloadMapper.parseUuid(cursorId);
+        UUID scopedGanaderoId = isAnimalLinkedEntity(entityType) ? animalAccessService.resolveAllowedGanaderoId(currentUserId) : null;
 
         return switch (entityType) {
             case ANIMAL -> buildPullResponse(
                     entityType,
-                    animalRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalRepository.listChangedSinceForOwner(scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     animal -> new PullCursorItem(toPullItem(animal), animal.getUpdatedAt().atOffset(ZoneOffset.UTC), animal.getUuid().toString()));
@@ -268,31 +272,31 @@ public class SyncService {
                     entry -> new PullCursorItem(toPullItem(entry), entry.getUpdatedAt().atOffset(ZoneOffset.UTC), entry.getEntryId().toString()));
             case ANIMAL_EVENT_LOG -> buildPullResponse(
                     entityType,
-                    animalEventLogRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSinceForOwner(null, scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     event -> new PullCursorItem(toPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_EVENT -> buildPullResponse(
                     entityType,
-                    animalEventLogRepository.listChangedSince(AnimalEventCategory.GENERAL, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSinceForOwner(AnimalEventCategory.GENERAL, scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     event -> new PullCursorItem(toLegacyAnimalEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_HEALTH_EVENT -> buildPullResponse(
                     entityType,
-                    animalEventLogRepository.listChangedSince(AnimalEventCategory.HEALTH, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSinceForOwner(AnimalEventCategory.HEALTH, scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     event -> new PullCursorItem(toLegacyAnimalHealthEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_REPRODUCTION_EVENT -> buildPullResponse(
                     entityType,
-                    animalEventLogRepository.listChangedSince(AnimalEventCategory.REPRODUCTION, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalEventLogRepository.listChangedSinceForOwner(AnimalEventCategory.REPRODUCTION, scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     event -> new PullCursorItem(toLegacyAnimalReproductionEventPullItem(event), event.getUpdatedAt().atOffset(ZoneOffset.UTC), event.getEventId().toString()));
             case ANIMAL_IMAGE -> buildPullResponse(
                     entityType,
-                    animalImageRepository.listChangedSince(effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
+                    animalImageRepository.listChangedSinceForOwner(scopedGanaderoId, effectiveCursorUpdatedAt, effectiveCursorId, PULL_PAGE_SIZE + 1),
                     cursorUpdatedAt,
                     cursorId,
                     image -> new PullCursorItem(animalImageMapper.toPullItem(image), image.getUpdatedAt().atOffset(ZoneOffset.UTC), image.getImageId().toString()));
@@ -508,6 +512,7 @@ public class SyncService {
     private SyncOperationResult processOperation(SyncOperationRequest operation, UUID currentUserId, boolean conflictResolutionV2Enabled) {
         SyncOperationReceipt existingReceipt = syncOperationReceiptRepository.findById(operation.operationId());
         if (existingReceipt != null && !shouldReplayResolvedConflict(existingReceipt)) {
+            requireExistingReceiptAnimalAccess(existingReceipt, currentUserId);
             return toResult(existingReceipt, conflictResolutionV2Enabled);
         }
 
@@ -564,7 +569,7 @@ public class SyncService {
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case ANIMAL_IMAGE -> switch (operation.opType()) {
-                    case CREATE -> persistReceipt(operation, handleAnimalImageCreate(operation), currentUserId);
+                    case CREATE -> persistReceipt(operation, handleAnimalImageCreate(operation, currentUserId), currentUserId);
                     default -> persistReceipt(operation, validationError(operation, SYNC_HANDLER_NOT_IMPLEMENTED_YET, conflictResolutionV2Enabled), currentUserId);
                 };
                 case NOTIFICATION -> persistReceipt(operation, validationError(operation, OPERATION_NOT_ALLOWED_OFFLINE, conflictResolutionV2Enabled), currentUserId);
@@ -573,6 +578,52 @@ public class SyncService {
             return persistReceipt(operation, validationError(operation, exception.code(), conflictResolutionV2Enabled), currentUserId);
         } catch (IllegalArgumentException exception) {
             return persistReceipt(operation, validationError(operation, exception.getMessage(), conflictResolutionV2Enabled), currentUserId);
+        }
+    }
+
+    private boolean isAnimalLinkedEntity(SyncEntityType entityType) {
+        return switch (entityType) {
+            case ANIMAL, ANIMAL_EVENT_LOG, ANIMAL_EVENT, ANIMAL_HEALTH_EVENT, ANIMAL_REPRODUCTION_EVENT, ANIMAL_IMAGE -> true;
+            default -> false;
+        };
+    }
+
+    private void requireExistingReceiptAnimalAccess(SyncOperationReceipt receipt, UUID currentUserId) {
+        if (currentUserId == null) {
+            return;
+        }
+
+        SyncEntityType entityType;
+        try {
+            entityType = SyncEntityType.valueOf(receipt.getEntityType());
+        } catch (IllegalArgumentException exception) {
+            return;
+        }
+
+        switch (entityType) {
+            case ANIMAL -> {
+                UUID animalUuid = syncPayloadMapper.parseUuid(receipt.getEntityId());
+                if (animalUuid != null) {
+                    animalAccessService.requireAccessibleAnimal(animalUuid, currentUserId);
+                }
+            }
+            case ANIMAL_EVENT_LOG, ANIMAL_EVENT, ANIMAL_HEALTH_EVENT, ANIMAL_REPRODUCTION_EVENT -> {
+                UUID operationId = syncPayloadMapper.parseUuid(receipt.getEntityId());
+                AnimalEventLog event = operationId == null ? null : animalEventLogRepository.findByOperationId(operationId).orElse(null);
+                if (event != null) {
+                    animalAccessService.requireAccessibleAnimal(event.getAnimal(), currentUserId);
+                }
+            }
+            case ANIMAL_IMAGE -> {
+                UUID imageId = syncPayloadMapper.parseUuid(receipt.getEntityId());
+                AnimalImage image = imageId == null ? null : animalImageRepository.findByIdOptional(imageId).orElse(null);
+                if (image != null) {
+                    animalAccessService.requireAccessibleAnimal(image.getAnimal(), currentUserId);
+                }
+            }
+            default -> {
+                // Non-animal receipts are outside this access boundary.
+            }
         }
     }
 
@@ -615,6 +666,8 @@ public class SyncService {
             return validationError(operation, "Animal not found for sync update.", conflictResolutionV2Enabled);
         }
 
+        animalAccessService.requireAccessibleAnimal(animal, currentUserId);
+
         int currentVersion = animal.getVersion().intValue();
         if (!operation.baseVersion().equals(currentVersion)) {
             return versionConflict(operation, operation.entityId(), currentVersion, toPullItem(animal), conflictResolutionV2Enabled);
@@ -636,6 +689,7 @@ public class SyncService {
         UUID entityUuid = requireUuid(operation.entityId(), "Invalid animal uuid.");
         Animal existingAnimal = animalRepository.findByUuid(entityUuid).orElse(null);
         if (existingAnimal != null) {
+            animalAccessService.requireAccessibleAnimal(existingAnimal, currentUserId);
             return noConflict(operation, existingAnimal.getUuid().toString(), existingAnimal.getVersion().intValue());
         }
 
@@ -805,6 +859,7 @@ public class SyncService {
         UUID operationId = syncPayloadMapper.parseUuid(String.valueOf(canonical.get("operationId")));
         AnimalEventLog existing = operationId == null ? null : animalEventLogRepository.findByOperationId(operationId).orElse(null);
         if (existing != null) {
+            animalAccessService.requireAccessibleAnimal(existing.getAnimal(), currentUserId);
             return noConflict(operation, existing.getOperationId().toString(), 0);
         }
 
@@ -840,9 +895,9 @@ public class SyncService {
         return noConflict(operation, event.getOperationId().toString(), 0);
     }
 
-    private SyncOperationResult handleAnimalImageCreate(SyncOperationRequest operation) {
+    private SyncOperationResult handleAnimalImageCreate(SyncOperationRequest operation, UUID currentUserId) {
         AnimalImageRequest request = syncPayloadMapper.toAnimalImageRequest(operation.payload(), operation.clientCreatedAt());
-        AnimalImage image = animalImageService.create(request);
+        AnimalImage image = animalImageService.create(request, currentUserId);
         return noConflict(operation, image.getImageId().toString(), 0);
     }
 

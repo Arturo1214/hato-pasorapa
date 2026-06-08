@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { concatMap, finalize, map } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { auditTime, concatMap, finalize, map } from 'rxjs';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -13,9 +14,14 @@ import {
   type DataTableRow,
   type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
 import { mapVetVisitFormToCreateInput } from './data-access/vet-visit-form.mapper';
-import { VetVisitsService, type VetVisitFilter, type VetVisitItem } from './data-access/vet-visits.service';
+import {
+  VetVisitsService,
+  type VetVisitFilter,
+  type VetVisitItem,
+} from './data-access/vet-visits.service';
 import {
   VetVisitFormDialogComponent,
   type VetVisitDialogResult,
@@ -42,14 +48,22 @@ interface VetVisitRow extends DataTableRow, VetVisitItem {
   template: `
     <section class="admin-page">
       <div class="toolbar-actions" aria-label="Acciones de visitas veterinarias">
-        <button mat-flat-button color="primary" class="primary-action-button" type="button" (click)="openNewVisitDialog()">
+        <button
+          mat-flat-button
+          color="primary"
+          class="primary-action-button"
+          type="button"
+          (click)="openNewVisitDialog()"
+        >
           <mat-icon>add</mat-icon>
           <span>Nueva Visita</span>
         </button>
       </div>
 
       @if (feedbackMessage()) {
-        <mat-card appearance="outlined"><p>{{ feedbackMessage() }}</p></mat-card>
+        <mat-card appearance="outlined"
+          ><p>{{ feedbackMessage() }}</p></mat-card
+        >
       }
 
       <mat-card appearance="outlined" class="table-card">
@@ -68,12 +82,33 @@ interface VetVisitRow extends DataTableRow, VetVisitItem {
   `,
   styles: [
     `
-      .admin-page { display: grid; gap: 1rem; padding: 1rem; }
-      .toolbar-actions { display: flex; justify-content: flex-end; gap: 1rem; }
-      .primary-action-button { border-radius: 999px; }
-      .primary-action-button mat-icon { margin-inline-end: .25rem; }
-      .table-card { padding: .75rem; }
-      @media (max-width: 720px) { .toolbar-actions { justify-content: stretch; } .primary-action-button { width: 100%; } }
+      .admin-page {
+        display: grid;
+        gap: 1rem;
+        padding: 1rem;
+      }
+      .toolbar-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+      }
+      .primary-action-button {
+        border-radius: 999px;
+      }
+      .primary-action-button mat-icon {
+        margin-inline-end: 0.25rem;
+      }
+      .table-card {
+        padding: 0.75rem;
+      }
+      @media (max-width: 720px) {
+        .toolbar-actions {
+          justify-content: stretch;
+        }
+        .primary-action-button {
+          width: 100%;
+        }
+      }
     `,
   ],
 })
@@ -81,6 +116,8 @@ export class VetVisitsPageComponent {
   private readonly vetVisitsService = inject(VetVisitsService);
   private readonly healthEventsService = inject(AnimalsHealthEventsService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly entityChangeBus = inject(OfflineEntityChangeBus);
 
   readonly loading = signal(false);
   readonly submitting = signal(false);
@@ -88,6 +125,7 @@ export class VetVisitsPageComponent {
   readonly visitFilters = signal<Record<string, string>>({});
   readonly visits = signal<VetVisitItem[]>([]);
   readonly visitRows = signal<VetVisitRow[]>([]);
+  private readonly pendingVisitOverlays = signal<ReadonlyMap<string, VetVisitItem>>(new Map());
 
   readonly visitColumns: DataTableColumn[] = [
     { key: 'visitId', label: 'Visita', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
@@ -101,29 +139,64 @@ export class VetVisitsPageComponent {
         { label: 'Específica', value: 'Específica' },
       ],
     },
-    { key: 'veterinarianName', label: 'Veterinario', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'veterinarianName',
+      label: 'Veterinario',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+    },
     {
       key: 'statusLabel',
       label: 'Estado',
       sortable: true,
       filterType: DATA_TABLE_FILTER_TYPE.SELECT,
-      filterOptions: Object.entries(VISIT_STATUS_LABELS).map(([value, label]) => ({ value: label, label })),
+      filterOptions: Object.values(VISIT_STATUS_LABELS).map((label) => ({ value: label, label })),
     },
-    { key: 'occurredAt', label: 'Fecha', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE, formatter: formatDateTime },
-    { key: 'nextControlAt', label: 'Siguiente Control', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE, formatter: formatDateTime },
+    {
+      key: 'occurredAt',
+      label: 'Fecha',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.DATE,
+      formatter: formatDateTime,
+    },
+    {
+      key: 'nextControlAt',
+      label: 'Siguiente Control',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.DATE,
+      formatter: formatDateTime,
+    },
   ];
 
   readonly visitActions: DataTableAction[] = [
     { id: 'view', label: 'Ver', icon: 'visibility' },
-    { id: 'attend', label: 'Atender', icon: 'medical_services', visible: (row) => canAttend(row as VetVisitRow) },
-    { id: 'cancel', label: 'Cancelar', icon: 'cancel', color: 'warn', visible: (row) => canCancel(row as VetVisitRow) },
+    {
+      id: 'attend',
+      label: 'Atender',
+      icon: 'medical_services',
+      visible: (row) => canAttend(row as VetVisitRow),
+    },
+    {
+      id: 'cancel',
+      label: 'Cancelar',
+      icon: 'cancel',
+      color: 'warn',
+      visible: (row) => canCancel(row as VetVisitRow),
+    },
   ];
 
   constructor() {
     this.loadVisits();
+    this.entityChangeBus
+      .watch(['VET_VISIT', 'ANIMAL_EVENT_LOG', 'ANIMAL_HEALTH_EVENT'])
+      .pipe(auditTime(50), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadVisits(toBackendFilter(this.visitFilters())));
   }
 
-  loadVisits(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
+  loadVisits(
+    filter: VetVisitFilter = { page: 0, size: 20 },
+    recentlySavedVisit?: VetVisitItem | VetVisitItem[],
+  ) {
     this.reloadVisits$(filter, recentlySavedVisit).subscribe();
   }
 
@@ -222,16 +295,27 @@ export class VetVisitsPageComponent {
       .createEvent(mapDialogResultToCreateInput(result))
       .pipe(
         concatMap((feedback) => {
-          if (result.creationMode === 'attendedNow' && result.followUpChoice === 'schedule' && result.nextDueAt) {
+          if (
+            result.creationMode === 'attendedNow' &&
+            result.followUpChoice === 'schedule' &&
+            result.nextDueAt
+          ) {
             const followUpResult = buildFollowUpDialogResultFromCreate(result);
             return this.healthEventsService
               .createEvent(mapDialogResultToCreateInput(followUpResult))
-              .pipe(concatMap(() => this.reloadVisits$(currentFilter, recentlySavedVisits)), map(() => feedback));
+              .pipe(
+                concatMap(() => {
+                  this.rememberVisitOverlays(recentlySavedVisits);
+                  return this.reloadVisits$(currentFilter, recentlySavedVisits);
+                }),
+                map(() => feedback),
+              );
           }
 
+          this.rememberVisitOverlays(recentlySavedVisits);
           return this.reloadVisits$(currentFilter, recentlySavedVisits).pipe(map(() => feedback));
         }),
-        finalize(() => this.submitting.set(false))
+        finalize(() => this.submitting.set(false)),
       )
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
@@ -241,17 +325,24 @@ export class VetVisitsPageComponent {
   private cancelVisit(row: VetVisitRow, result: VetVisitCancelDialogResult) {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
-    const canceledVisit = toVetVisitItemFromRow(row, { status: 'CANCELED', cancelReason: result.cancelReason, chainStatus: null });
+    const canceledVisit = toVetVisitItemFromRow(row, {
+      status: 'CANCELED',
+      cancelReason: result.cancelReason,
+      chainStatus: 'CLOSED',
+    });
     this.healthEventsService
-      .createEvent(mapRowActionToCreateInput(row, {
-        action: 'cancel',
-        status: 'CANCELED',
-        cancelReason: result.cancelReason,
-        protocolStatus: 'CLOSED',
-      }))
+      .createEvent(
+        mapRowActionToCreateInput(row, {
+          action: 'cancel',
+          status: 'CANCELED',
+          cancelReason: result.cancelReason,
+          protocolStatus: 'CLOSED',
+        }),
+      )
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
+        this.rememberVisitOverlays(canceledVisit);
         this.loadVisits(toBackendFilter(this.visitFilters()), canceledVisit);
       });
   }
@@ -260,43 +351,78 @@ export class VetVisitsPageComponent {
     this.submitting.set(true);
     this.feedbackMessage.set(null);
     const attendedStatus = 'ATTENDED';
-    const attendedInput = mapDialogResultToCreateInput({ ...result, visitId: row.visitId, status: attendedStatus, parentVisitId: row.parentVisitId });
+    const attendedInput = mapDialogResultToCreateInput({
+      ...result,
+      visitId: row.visitId,
+      status: attendedStatus,
+      parentVisitId: row.parentVisitId,
+    });
 
     if (result.followUpChoice === 'schedule' && result.nextDueAt) {
       const followUpResult = buildFollowUpDialogResult(row, result);
+      const overlays = [buildAttendedVisitOverlay(row, result), toVetVisitItem(followUpResult)];
       this.healthEventsService
         .createEvent(attendedInput)
         .pipe(
-          concatMap(() => this.healthEventsService.createEvent(mapDialogResultToCreateInput(followUpResult))),
-          finalize(() => this.submitting.set(false))
+          concatMap(() =>
+            this.healthEventsService.createEvent(mapDialogResultToCreateInput(followUpResult)),
+          ),
+          finalize(() => this.submitting.set(false)),
         )
         .subscribe((feedback) => {
           this.feedbackMessage.set(feedback.message);
-          this.loadVisits(toBackendFilter(this.visitFilters()));
+          this.rememberVisitOverlays(overlays);
+          this.loadVisits(toBackendFilter(this.visitFilters()), overlays);
         });
       return;
     }
 
+    const attendedVisit = buildAttendedVisitOverlay(row, result);
     this.healthEventsService
       .createEvent(attendedInput)
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe((feedback) => {
         this.feedbackMessage.set(feedback.message);
-        this.loadVisits(toBackendFilter(this.visitFilters()));
+        this.rememberVisitOverlays(attendedVisit);
+        this.loadVisits(toBackendFilter(this.visitFilters()), attendedVisit);
       });
   }
 
-  private reloadVisits$(filter: VetVisitFilter = { page: 0, size: 20 }, recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
+  private reloadVisits$(
+    filter: VetVisitFilter = { page: 0, size: 20 },
+    recentlySavedVisit?: VetVisitItem | VetVisitItem[],
+  ) {
     this.loading.set(true);
     return this.vetVisitsService.listVetVisits(filter).pipe(
       map((items) => {
-        const visibleItems = mergeRecentlySavedVisit(items, recentlySavedVisit, filter);
+        const visibleItems = mergeRecentlySavedVisit(
+          items,
+          this.currentVisitOverlays(recentlySavedVisit),
+          filter,
+        );
         this.visits.set(visibleItems);
         this.visitRows.set(visibleItems.map(toVetVisitRow));
         return visibleItems;
       }),
-      finalize(() => this.loading.set(false))
+      finalize(() => this.loading.set(false)),
     );
+  }
+
+  private rememberVisitOverlays(visits: VetVisitItem | VetVisitItem[]) {
+    const next = new Map(this.pendingVisitOverlays());
+    const overlays = Array.isArray(visits) ? visits : [visits];
+    overlays.forEach((visit) => next.set(visit.visitId, visit));
+    this.pendingVisitOverlays.set(next);
+  }
+
+  private currentVisitOverlays(recentlySavedVisit?: VetVisitItem | VetVisitItem[]) {
+    const overlays = Array.from(this.pendingVisitOverlays().values());
+    const recent = Array.isArray(recentlySavedVisit)
+      ? recentlySavedVisit
+      : recentlySavedVisit
+        ? [recentlySavedVisit]
+        : [];
+    return [...new Map([...overlays, ...recent].map((visit) => [visit.visitId, visit])).values()];
   }
 }
 
@@ -308,6 +434,8 @@ const VISIT_MODE_LABELS: Record<VetVisitMode, string> = {
 const VISIT_STATUS_LABELS: Partial<Record<VetVisitStatus, string>> = {
   PENDING: 'Programada',
   ATTENDED: 'Atendida',
+  RESCHEDULED: 'Reprogramada',
+  FINALIZED: 'Finalizada',
   CANCELED: 'Cancelada',
 };
 
@@ -346,7 +474,12 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
     nextControlAt: result.nextDueAt,
     parentVisitId: result.parentVisitId,
     cancelReason: null,
-    chainStatus: result.status === 'ATTENDED' && result.followUpChoice === 'finalize' ? 'CLOSED' : result.status === 'ATTENDED' ? 'OPEN' : null,
+    chainStatus:
+      result.status === 'ATTENDED' && result.followUpChoice === 'finalize'
+        ? 'CLOSED'
+        : result.status === 'ATTENDED'
+          ? 'OPEN'
+          : null,
     animalUuid: result.animalUuid,
     targetAnimalCount: result.targetAnimalCount,
     atencionNotas: result.notes,
@@ -357,26 +490,58 @@ function toVetVisitItem(result: VetVisitDialogResult): VetVisitItem {
   };
 }
 
-function buildRecentlySavedVisitsForCreate(result: VetVisitDialogResult): VetVisitItem | VetVisitItem[] {
-  if (result.creationMode === 'attendedNow' && result.followUpChoice === 'schedule' && result.nextDueAt) {
+function buildRecentlySavedVisitsForCreate(
+  result: VetVisitDialogResult,
+): VetVisitItem | VetVisitItem[] {
+  if (
+    result.creationMode === 'attendedNow' &&
+    result.followUpChoice === 'schedule' &&
+    result.nextDueAt
+  ) {
     return [toVetVisitItem(result), toVetVisitItem(buildFollowUpDialogResultFromCreate(result))];
   }
   return toVetVisitItem(result);
 }
 
+function buildAttendedVisitOverlay(row: VetVisitRow, result: VetVisitDialogResult): VetVisitItem {
+  return toVetVisitItemFromRow(row, {
+    status: 'ATTENDED',
+    veterinarian: {
+      name: result.veterinarianName || row.veterinarian?.name || '—',
+      ...(result.veterinarianLicense
+        ? { license: result.veterinarianLicense }
+        : row.veterinarian?.license
+          ? { license: row.veterinarian.license }
+          : {}),
+    },
+    nextControlAt: result.followUpChoice === 'finalize' ? null : result.nextDueAt,
+    cancelReason: null,
+    chainStatus: result.followUpChoice === 'finalize' ? 'CLOSED' : 'OPEN',
+    atencionNotas: result.notes ?? row.atencionNotas,
+    findings: result.findings ?? row.findings,
+    costo: result.cost?.amount ?? row.costo,
+    costCurrency: result.cost?.currency ?? row.costCurrency,
+    treatmentPlan: result.treatmentPlan ?? row.treatmentPlan,
+  });
+}
+
 function mergeRecentlySavedVisit(
   items: VetVisitItem[],
   recentlySavedVisit: VetVisitItem | VetVisitItem[] | undefined,
-  filter: VetVisitFilter
+  filter: VetVisitFilter,
 ): VetVisitItem[] {
   const recentlySavedVisits = Array.isArray(recentlySavedVisit)
     ? recentlySavedVisit
-    : recentlySavedVisit ? [recentlySavedVisit] : [];
+    : recentlySavedVisit
+      ? [recentlySavedVisit]
+      : [];
   if (!recentlySavedVisits.length) {
     return items;
   }
 
-  const matchingSavedVisits = recentlySavedVisits.filter((item) => matchesVetVisitFilter(item, filter));
+  const matchingSavedVisits = recentlySavedVisits.filter((item) =>
+    matchesVetVisitFilter(item, filter),
+  );
   if (!matchingSavedVisits.length) {
     return items;
   }
@@ -419,11 +584,17 @@ function matchesVetVisitFilter(item: VetVisitItem, filter: VetVisitFilter) {
   );
 }
 
-function matchesNullableFilter<T extends string>(value: T | null, filterValue: T | '' | null | undefined) {
+function matchesNullableFilter<T extends string>(
+  value: T | null,
+  filterValue: T | '' | null | undefined,
+) {
   return !filterValue || value === filterValue;
 }
 
-function matchesVeterinarianFilter(item: VetVisitItem, veterinarianFilter: string | null | undefined) {
+function matchesVeterinarianFilter(
+  item: VetVisitItem,
+  veterinarianFilter: string | null | undefined,
+) {
   const normalizedFilter = veterinarianFilter?.trim().toLowerCase();
   if (!normalizedFilter) {
     return true;
@@ -442,11 +613,15 @@ function matchesOccurredAtRange(item: VetVisitItem, filter: VetVisitFilter) {
 }
 
 function modeFromLabel(value: string | undefined): VetVisitMode | undefined {
-  return Object.entries(VISIT_MODE_LABELS).find(([, label]) => label.toLowerCase() === value?.toLowerCase())?.[0] as VetVisitMode | undefined;
+  return Object.entries(VISIT_MODE_LABELS).find(
+    ([, label]) => label.toLowerCase() === value?.toLowerCase(),
+  )?.[0] as VetVisitMode | undefined;
 }
 
 function statusFromLabel(value: string | undefined): VetVisitStatus | undefined {
-  return Object.entries(VISIT_STATUS_LABELS).find(([, label]) => label.toLowerCase() === value?.toLowerCase())?.[0] as VetVisitStatus | undefined;
+  return Object.entries(VISIT_STATUS_LABELS).find(
+    ([, label]) => label.toLowerCase() === value?.toLowerCase(),
+  )?.[0] as VetVisitStatus | undefined;
 }
 
 function canAttend(row: VetVisitRow) {
@@ -461,7 +636,9 @@ function formatDateTime(value: unknown) {
   if (typeof value !== 'string' || !value.trim()) {
     return '—';
   }
-  return new Intl.DateTimeFormat('es-BO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+  return new Intl.DateTimeFormat('es-BO', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  );
 }
 
 function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
@@ -479,7 +656,11 @@ function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
       findings: result.findings ?? '',
       plan: result.treatmentPlan ?? '',
     },
-    protocolStatus: protocolStatusFromVisitStatus(result.status, result.nextDueAt, result.followUpChoice),
+    protocolStatus: protocolStatusFromVisitStatus(
+      result.status,
+      result.nextDueAt,
+      result.followUpChoice,
+    ),
     nextDueAt: result.nextDueAt,
     veterinarianName: result.veterinarianName,
     veterinarianLicense: result.veterinarianLicense,
@@ -491,7 +672,11 @@ function mapDialogResultToCreateInput(result: VetVisitDialogResult) {
   });
 }
 
-function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], nextDueAt: string | null, followUpChoice?: VetVisitDialogResult['followUpChoice']) {
+function protocolStatusFromVisitStatus(
+  status: VetVisitDialogResult['status'],
+  nextDueAt: string | null,
+  followUpChoice?: VetVisitDialogResult['followUpChoice'],
+) {
   if (followUpChoice === 'finalize') {
     return 'CLOSED';
   }
@@ -509,7 +694,7 @@ function protocolStatusFromVisitStatus(status: VetVisitDialogResult['status'], n
 
 function mapRowActionToCreateInput(
   row: VetVisitRow,
-  overrides: Partial<Parameters<typeof mapVetVisitFormToCreateInput>[0]>
+  overrides: Partial<Parameters<typeof mapVetVisitFormToCreateInput>[0]>,
 ) {
   return mapVetVisitFormToCreateInput({
     action: overrides.action,
@@ -525,7 +710,9 @@ function mapRowActionToCreateInput(
       findings: overrides.clinicalNote?.findings ?? '',
       plan: overrides.clinicalNote?.plan ?? row.treatmentPlan ?? '',
     },
-    protocolStatus: overrides.protocolStatus ?? protocolStatusFromVisitStatus(overrides.status ?? row.status, row.nextControlAt),
+    protocolStatus:
+      overrides.protocolStatus ??
+      protocolStatusFromVisitStatus(overrides.status ?? row.status, row.nextControlAt),
     nextDueAt: overrides.nextDueAt ?? row.nextControlAt,
     veterinarianName: row.veterinarian?.name ?? '',
     veterinarianLicense: row.veterinarian?.license ?? null,
@@ -543,23 +730,50 @@ function toVetVisitItemFromRow(row: VetVisitRow, overrides: Partial<VetVisitItem
     visitId: overrides.visitId ?? row.visitId,
     mode: overrides.mode ?? row.mode,
     status: overrides.status ?? row.status,
-    veterinarian: overrides.veterinarian ?? row.veterinarian,
+    veterinarian: hasOverride(overrides, 'veterinarian')
+      ? (overrides.veterinarian ?? null)
+      : row.veterinarian,
     occurredAt: overrides.occurredAt ?? row.occurredAt,
-    nextControlAt: overrides.nextControlAt ?? row.nextControlAt,
-    parentVisitId: overrides.parentVisitId ?? row.parentVisitId,
-    cancelReason: overrides.cancelReason ?? row.cancelReason,
-    chainStatus: overrides.chainStatus ?? row.chainStatus,
-    animalUuid: overrides.animalUuid ?? row.animalUuid,
-    targetAnimalCount: overrides.targetAnimalCount ?? row.targetAnimalCount,
-    atencionNotas: overrides.atencionNotas ?? row.atencionNotas,
-    findings: overrides.findings ?? row.findings,
-    costo: overrides.costo ?? row.costo,
-    costCurrency: overrides.costCurrency ?? row.costCurrency,
-    treatmentPlan: overrides.treatmentPlan ?? row.treatmentPlan,
+    nextControlAt: hasOverride(overrides, 'nextControlAt')
+      ? (overrides.nextControlAt ?? null)
+      : row.nextControlAt,
+    parentVisitId: hasOverride(overrides, 'parentVisitId')
+      ? (overrides.parentVisitId ?? null)
+      : row.parentVisitId,
+    cancelReason: hasOverride(overrides, 'cancelReason')
+      ? (overrides.cancelReason ?? null)
+      : row.cancelReason,
+    chainStatus: hasOverride(overrides, 'chainStatus')
+      ? (overrides.chainStatus ?? null)
+      : row.chainStatus,
+    animalUuid: hasOverride(overrides, 'animalUuid')
+      ? (overrides.animalUuid ?? null)
+      : row.animalUuid,
+    targetAnimalCount: hasOverride(overrides, 'targetAnimalCount')
+      ? (overrides.targetAnimalCount ?? null)
+      : row.targetAnimalCount,
+    atencionNotas: hasOverride(overrides, 'atencionNotas')
+      ? (overrides.atencionNotas ?? null)
+      : row.atencionNotas,
+    findings: hasOverride(overrides, 'findings') ? (overrides.findings ?? null) : row.findings,
+    costo: hasOverride(overrides, 'costo') ? (overrides.costo ?? null) : row.costo,
+    costCurrency: hasOverride(overrides, 'costCurrency')
+      ? (overrides.costCurrency ?? null)
+      : row.costCurrency,
+    treatmentPlan: hasOverride(overrides, 'treatmentPlan')
+      ? (overrides.treatmentPlan ?? null)
+      : row.treatmentPlan,
   };
 }
 
-function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialogResult): VetVisitDialogResult {
+function hasOverride(overrides: Partial<VetVisitItem>, key: keyof VetVisitItem) {
+  return Object.hasOwn(overrides, key);
+}
+
+function buildFollowUpDialogResult(
+  row: VetVisitRow,
+  attendResult: VetVisitDialogResult,
+): VetVisitDialogResult {
   return {
     mode: row.mode,
     creationMode: 'scheduled',
@@ -577,7 +791,9 @@ function buildFollowUpDialogResult(row: VetVisitRow, attendResult: VetVisitDialo
   };
 }
 
-function buildFollowUpDialogResultFromCreate(parentResult: VetVisitDialogResult): VetVisitDialogResult {
+function buildFollowUpDialogResultFromCreate(
+  parentResult: VetVisitDialogResult,
+): VetVisitDialogResult {
   return {
     mode: parentResult.mode,
     creationMode: 'scheduled',

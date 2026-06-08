@@ -35,17 +35,38 @@ public class AnimalRepository implements PanacheRepositoryBase<Animal, Long> {
     }
 
     public List<Animal> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorUuid, int limitPlusOne) {
-        if (cursorUpdatedAt == null) {
-            return find("from Animal order by updatedAt asc, uuid asc").page(0, limitPlusOne).list();
+        return listChangedSinceForOwner(null, cursorUpdatedAt, cursorUuid, limitPlusOne);
+    }
+
+    public List<Animal> listChangedSinceForOwner(UUID ownerGanaderoId, LocalDateTime cursorUpdatedAt, UUID cursorUuid, int limitPlusOne) {
+        StringBuilder query = new StringBuilder("from Animal");
+        List<Object> params = new ArrayList<>();
+        appendChangedSinceWhere(query, params, ownerGanaderoId, cursorUpdatedAt, cursorUuid);
+        query.append(" order by updatedAt asc, uuid asc");
+        return find(query.toString(), params.toArray()).page(0, limitPlusOne).list();
+    }
+
+    private void appendChangedSinceWhere(StringBuilder query, List<Object> params, UUID ownerGanaderoId, LocalDateTime cursorUpdatedAt, UUID cursorUuid) {
+        if (ownerGanaderoId == null && cursorUpdatedAt == null) {
+            return;
         }
 
-        UUID effectiveCursorUuid = cursorUuid == null ? new UUID(0L, 0L) : cursorUuid;
-        return find(
-                        "from Animal where updatedAt > ?1 or (updatedAt = ?1 and uuid > ?2) order by updatedAt asc, uuid asc",
-                        cursorUpdatedAt,
-                        effectiveCursorUuid)
-                .page(0, limitPlusOne)
-                .list();
+        query.append(" where ");
+        if (ownerGanaderoId != null) {
+            query.append("ownerGanadero.id = ?").append(params.size() + 1);
+            params.add(ownerGanaderoId);
+        }
+        if (cursorUpdatedAt != null) {
+            if (!params.isEmpty()) {
+                query.append(" and ");
+            }
+            UUID effectiveCursorUuid = cursorUuid == null ? new UUID(0L, 0L) : cursorUuid;
+            query.append("(updatedAt > ?").append(params.size() + 1)
+                    .append(" or (updatedAt = ?").append(params.size() + 1)
+                    .append(" and uuid > ?").append(params.size() + 2).append("))");
+            params.add(cursorUpdatedAt);
+            params.add(effectiveCursorUuid);
+        }
     }
 
     public long countByOwnerAndSexAndCategory(UUID ganaderoId, AnimalSex sex, AnimalCategory category) {

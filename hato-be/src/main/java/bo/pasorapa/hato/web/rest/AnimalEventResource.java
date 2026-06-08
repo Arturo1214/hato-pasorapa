@@ -65,7 +65,7 @@ public class AnimalEventResource {
             @QueryParam("eventType") AnimalEventType eventType,
             @QueryParam("occurredFrom") OffsetDateTime occurredFrom,
             @QueryParam("occurredTo") OffsetDateTime occurredTo) {
-        return new AnimalEventListResponse(animalEventService.list(animalUuid, eventType, occurredFrom, occurredTo));
+        return new AnimalEventListResponse(animalEventService.list(animalUuid, eventType, occurredFrom, occurredTo, currentUserId()));
     }
 
     private UUID currentUserId() {

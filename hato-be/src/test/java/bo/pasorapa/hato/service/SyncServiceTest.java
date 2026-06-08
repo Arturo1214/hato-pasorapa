@@ -120,6 +120,7 @@ class SyncServiceTest {
                     .setParameter(3, LocalDateTime.of(2020, 1, 1, 0, 0))
                     .setParameter(4, DEFAULT_OWNER_GANADERO_ID)
                     .executeUpdate();
+
         });
     }
 
@@ -166,6 +167,7 @@ class SyncServiceTest {
         UUID userId = UUID.fromString("22222222-2222-4222-8222-222222222222");
         UUID actorId = SyncHarnessFixtures.DEFAULT_ACTOR_USER_ID;
         fixtures.seedAnimal(animalUuid, "BO-MIXED-1", 0L, LocalDateTime.of(2026, 4, 28, 9, 0));
+        seedDefaultSyncActor();
         fixtures.seedUser(userId, "mixed-user", "mixed-user@hato.bo", Role.GANADERO, UserStatus.ACTIVE, 0L, LocalDateTime.of(2026, 4, 28, 9, 5));
 
         PushSyncRequest request = fixtures.pushRequest(
@@ -225,6 +227,7 @@ class SyncServiceTest {
         UUID targetOwnerId = UUID.fromString("2172cce9-9e65-4986-b4a6-bb5fc6c7f26f");
         seedGanadero(targetOwnerId, "NIT-TARGET", "Ganadero destino", 0L, LocalDateTime.of(2026, 4, 26, 9, 30));
         seedAnimal(animalUuid, "BO-1500", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        seedDefaultSyncActor();
 
         PushSyncRequest request = new PushSyncRequest(java.util.List.of(new SyncOperationRequest(
                 operationId,
@@ -265,6 +268,7 @@ class SyncServiceTest {
         UUID healthSyncOperationId = UUID.fromString("31323334-3536-4738-893a-3b3c3d3e3f10");
         UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
         seedAnimal(animalUuid, "BO-EVENT-LOG-IDEMP", 0L, LocalDateTime.of(2026, 5, 11, 10, 0));
+        seedDefaultSyncActor();
 
         PushSyncResponse response = syncService.push(new PushSyncRequest(List.of(
                 new SyncOperationRequest(
@@ -440,6 +444,7 @@ class SyncServiceTest {
     void shouldExposeV2PolicyDiffAndAllowedActionsForAnimalConflict() {
         UUID animalUuid = UUID.fromString("f7ad742e-f1ec-422e-99cd-f4dd164f5088");
         seedAnimal(animalUuid, "BO-4010", 3L, LocalDateTime.of(2026, 4, 28, 10, 0));
+        seedDefaultSyncActor();
 
         PushSyncResponse response = syncService.push(
                 new PushSyncRequest(List.of(new SyncOperationRequest(
@@ -468,6 +473,7 @@ class SyncServiceTest {
         UUID animalUuid = UUID.fromString("a63007e0-570d-4021-a493-25a6ca6c3128");
         UUID operationId = UUID.fromString("25a2c8a3-ae2d-46ea-8b1b-bfeff3204b3b");
         seedAnimal(animalUuid, "BO-4020", 4L, LocalDateTime.of(2026, 4, 28, 10, 0));
+        seedDefaultSyncActor();
 
         syncService.push(
                 new PushSyncRequest(List.of(new SyncOperationRequest(
@@ -500,6 +506,7 @@ class SyncServiceTest {
         UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
         UUID anotherUserId = UUID.fromString("ca25845f-69d4-4af0-9078-93040319401a");
         seedAnimal(animalUuid, "BO-OWN-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0));
+        seedDefaultSyncActor();
 
         syncService.push(
                 new PushSyncRequest(List.of(new SyncOperationRequest(
@@ -529,6 +536,7 @@ class SyncServiceTest {
         UUID operationId = UUID.fromString("66666666-6666-4666-8666-666666666666");
         UUID actorId = SyncHarnessFixtures.DEFAULT_ACTOR_USER_ID;
         fixtures.seedAnimal(animalUuid, "BO-CONFLICT-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0));
+        seedDefaultSyncActor();
         PushSyncRequest request = fixtures.pushRequest(fixtures.animalUpdate(operationId, animalUuid, "BO-CONFLICT-2", 2, "2026-04-28T10:05:00Z"));
 
         PushSyncResponse firstResponse = syncService.push(request, actorId, true);
@@ -668,6 +676,7 @@ class SyncServiceTest {
         UUID operationId = UUID.fromString("0630f95c-0bab-4ec7-b11d-49f6450f47d1");
         UUID actorId = UUID.fromString("ba25845f-69d4-4af0-9078-93040319401a");
         seedAnimal(animalUuid, "BO-HEALTH-1", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        seedDefaultSyncActor();
 
         PushSyncRequest request = new PushSyncRequest(java.util.List.of(new SyncOperationRequest(
                 operationId,
@@ -929,6 +938,169 @@ class SyncServiceTest {
     }
 
     @Test
+    void shouldScopeGanaderoAnimalLinkedPullsToOwnedRows() {
+        UUID ownerA = UUID.fromString("10000000-0000-4000-8000-000000000001");
+        UUID ownerB = UUID.fromString("10000000-0000-4000-8000-000000000002");
+        UUID userA = UUID.fromString("10000000-0000-4000-8000-000000000101");
+        UUID animalA = UUID.fromString("10000000-0000-4000-8000-000000000201");
+        UUID animalB = UUID.fromString("10000000-0000-4000-8000-000000000202");
+        UUID eventA = UUID.fromString("10000000-0000-4000-8000-000000000301");
+        UUID eventB = UUID.fromString("10000000-0000-4000-8000-000000000302");
+        UUID imageA = UUID.fromString("10000000-0000-4000-8000-000000000401");
+        UUID imageB = UUID.fromString("10000000-0000-4000-8000-000000000402");
+        seedGanaderoWithEmail(ownerA, "NIT-SCOPE-A", "Ganadero Scope A", "scope-a@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedGanaderoWithEmail(ownerB, "NIT-SCOPE-B", "Ganadero Scope B", "scope-b@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedUser(userA, "scope-a-user", "scope-a@hato.bo", Role.GANADERO, UserStatus.ACTIVE, 0L, LocalDateTime.of(2026, 4, 26, 9, 1));
+        seedAnimalForOwner(animalA, ownerA, "BO-SCOPE-A", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        seedAnimalForOwner(animalB, ownerB, "BO-SCOPE-B", 0L, LocalDateTime.of(2026, 4, 26, 10, 1));
+        seedAnimalEvent(animalA, eventA, AnimalEventType.OBSERVATION, LocalDateTime.of(2026, 4, 26, 10, 2));
+        seedAnimalEvent(animalB, eventB, AnimalEventType.OBSERVATION, LocalDateTime.of(2026, 4, 26, 10, 3));
+        seedAnimalImage(animalA, imageA, LocalDateTime.of(2026, 4, 26, 10, 4));
+        seedAnimalImage(animalB, imageB, LocalDateTime.of(2026, 4, 26, 10, 5));
+
+        PullSyncResponse animalPull = syncService.pull(SyncEntityType.ANIMAL, null, null, userA);
+        PullSyncResponse eventPull = syncService.pull(SyncEntityType.ANIMAL_EVENT_LOG, null, null, userA);
+        PullSyncResponse imagePull = syncService.pull(SyncEntityType.ANIMAL_IMAGE, null, null, userA);
+
+        assertEquals(List.of(animalA.toString()), animalPull.items().stream().map(item -> String.valueOf(item.get("uuid"))).toList());
+        assertEquals(List.of(eventA.toString()), eventPull.items().stream().map(item -> String.valueOf(item.get("operationId"))).toList());
+        assertEquals(List.of(imageA.toString()), imagePull.items().stream().map(item -> String.valueOf(item.get("id"))).toList());
+    }
+
+    @Test
+    void shouldRejectGanaderoAnimalCreateCollisionForOtherOwnerExistingUuid() {
+        UUID ownerA = UUID.fromString("21000000-0000-4000-8000-000000000001");
+        UUID ownerB = UUID.fromString("21000000-0000-4000-8000-000000000002");
+        UUID userA = UUID.fromString("21000000-0000-4000-8000-000000000101");
+        UUID animalB = UUID.fromString("21000000-0000-4000-8000-000000000202");
+        UUID operationId = UUID.fromString("21000000-0000-4000-8000-000000000301");
+        seedGanaderoWithEmail(ownerA, "NIT-CREATE-A", "Ganadero Create A", "create-a@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedGanaderoWithEmail(ownerB, "NIT-CREATE-B", "Ganadero Create B", "create-b@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedUser(userA, "create-a-user", "create-a@hato.bo", Role.GANADERO, UserStatus.ACTIVE, 0L, LocalDateTime.of(2026, 4, 26, 9, 1));
+        seedAnimalForOwner(animalB, ownerB, "BO-CREATE-B", 4L, LocalDateTime.of(2026, 4, 26, 10, 0));
+
+        PushSyncResponse response = syncService.push(new PushSyncRequest(List.of(new SyncOperationRequest(
+                operationId,
+                SyncEntityType.ANIMAL,
+                animalB.toString(),
+                SyncOperationType.CREATE,
+                Map.of(),
+                0,
+                OffsetDateTime.parse("2026-04-26T10:05:00Z"),
+                OffsetDateTime.parse("2026-04-26T10:05:00Z")))), userA);
+
+        assertEquals("validation_error", response.results().getFirst().classification());
+        assertEquals("ANIMAL_OWNER_FORBIDDEN", response.results().getFirst().conflict().reason());
+    }
+
+    @Test
+    void shouldRejectGanaderoSyncPushForOtherOwnerAnimalData() {
+        UUID ownerA = UUID.fromString("20000000-0000-4000-8000-000000000001");
+        UUID ownerB = UUID.fromString("20000000-0000-4000-8000-000000000002");
+        UUID userA = UUID.fromString("20000000-0000-4000-8000-000000000101");
+        UUID animalA = UUID.fromString("20000000-0000-4000-8000-000000000201");
+        UUID animalB = UUID.fromString("20000000-0000-4000-8000-000000000202");
+        UUID calfA = UUID.fromString("20000000-0000-4000-8000-000000000203");
+        seedGanaderoWithEmail(ownerA, "NIT-PUSH-A", "Ganadero Push A", "push-a@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedGanaderoWithEmail(ownerB, "NIT-PUSH-B", "Ganadero Push B", "push-b@hato.bo", 0L, LocalDateTime.of(2026, 4, 26, 9, 0));
+        seedUser(userA, "push-a-user", "push-a@hato.bo", Role.GANADERO, UserStatus.ACTIVE, 0L, LocalDateTime.of(2026, 4, 26, 9, 1));
+        seedAnimalForOwner(animalA, ownerA, "BO-PUSH-A", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        seedAnimalForOwner(calfA, ownerA, "BO-PUSH-CALF-A", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        seedAnimalForOwner(animalB, ownerB, "BO-PUSH-B", 0L, LocalDateTime.of(2026, 4, 26, 10, 0));
+        byte[] imageContent = "blocked-image".getBytes();
+
+        PushSyncResponse response = syncService.push(new PushSyncRequest(List.of(
+                new SyncOperationRequest(
+                        UUID.fromString("20000000-0000-4000-8000-000000000301"),
+                        SyncEntityType.ANIMAL,
+                        animalB.toString(),
+                        SyncOperationType.UPDATE,
+                        Map.of("tag", "BO-HACKED"),
+                        0,
+                        OffsetDateTime.parse("2026-04-26T10:05:00Z"),
+                        OffsetDateTime.parse("2026-04-26T10:05:00Z")),
+                new SyncOperationRequest(
+                        UUID.fromString("20000000-0000-4000-8000-000000000302"),
+                        SyncEntityType.ANIMAL_EVENT,
+                        "20000000-0000-4000-8000-000000000302",
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalB.toString(),
+                                "type", "OBSERVATION",
+                                "occurredAt", "2026-04-26T10:06:00Z",
+                                "notes", "No autorizado",
+                                "performedByUserId", userA.toString(),
+                                "sourceChannel", "OFFLINE",
+                                "operationId", "20000000-0000-4000-8000-000000000302",
+                                "metadata", Map.of("reasonCode", "NOTE")),
+                        0,
+                        OffsetDateTime.parse("2026-04-26T10:06:00Z"),
+                        OffsetDateTime.parse("2026-04-26T10:06:00Z")),
+                new SyncOperationRequest(
+                        UUID.fromString("20000000-0000-4000-8000-000000000303"),
+                        SyncEntityType.ANIMAL_HEALTH_EVENT,
+                        "20000000-0000-4000-8000-000000000303",
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalB.toString(),
+                                "healthEventType", "VACCINATION",
+                                "occurredAt", "2026-04-26T10:07:00Z",
+                                "notes", "No autorizado",
+                                "performedByUserId", userA.toString(),
+                                "sourceChannel", "OFFLINE",
+                                "operationId", "20000000-0000-4000-8000-000000000303",
+                                "metadata", Map.of("productName", "Vacuna")),
+                        0,
+                        OffsetDateTime.parse("2026-04-26T10:07:00Z"),
+                        OffsetDateTime.parse("2026-04-26T10:07:00Z")),
+                new SyncOperationRequest(
+                        UUID.fromString("20000000-0000-4000-8000-000000000304"),
+                        SyncEntityType.ANIMAL_IMAGE,
+                        "20000000-0000-4000-8000-000000000304",
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalB.toString(),
+                                "operationId", "20000000-0000-4000-8000-000000000304",
+                                "mimeType", "image/jpeg",
+                                "fileName", "blocked.jpg",
+                                "sizeBytes", imageContent.length,
+                                "checksumSha256", AnimalImageSecuritySupport.sha256Hex(imageContent),
+                                "base64Data", java.util.Base64.getEncoder().encodeToString(imageContent),
+                                "capturedAt", "2026-04-26T10:08:00Z",
+                                "sourceChannel", "OFFLINE"),
+                        0,
+                        OffsetDateTime.parse("2026-04-26T10:08:00Z"),
+                        OffsetDateTime.parse("2026-04-26T10:08:00Z")),
+                new SyncOperationRequest(
+                        UUID.fromString("20000000-0000-4000-8000-000000000305"),
+                        SyncEntityType.ANIMAL_REPRODUCTION_EVENT,
+                        "20000000-0000-4000-8000-000000000305",
+                        SyncOperationType.CREATE,
+                        Map.of(
+                                "animalUuid", animalA.toString(),
+                                "reproductionEventType", "BIRTH",
+                                "occurredAt", "2026-04-26T10:09:00Z",
+                                "notes", "Parto con padre ajeno",
+                                "performedByUserId", userA.toString(),
+                                "sourceChannel", "OFFLINE",
+                                "operationId", "20000000-0000-4000-8000-000000000305",
+                                "metadata", Map.of(
+                                        "birthDate", "2026-04-26T10:09:00Z",
+                                        "offspringCount", 1,
+                                        "motherAnimalUuid", animalA.toString(),
+                                        "fatherAnimalUuid", animalB.toString(),
+                                        "offspringAnimalUuids", List.of(calfA.toString()))),
+                        0,
+                        OffsetDateTime.parse("2026-04-26T10:09:00Z"),
+                        OffsetDateTime.parse("2026-04-26T10:09:00Z")))), userA);
+
+        assertEquals(List.of("validation_error", "validation_error", "validation_error", "validation_error", "validation_error"), response.results().stream().map(result -> result.classification()).toList());
+        assertEquals("BO-PUSH-B", QuarkusTransaction.requiringNew().call(() -> animalRepository.findByUuid(animalB).orElseThrow().getTag()));
+        assertEquals(0, animalEventLogRepository.count());
+        assertEquals(0, animalImageRepository.count());
+    }
+
+    @Test
     void shouldCreateAnimalImageOfflineIdempotentlyAndKeepOtherEntityTypesFlowingOnPartialAck() {
         UUID animalUuid = UUID.fromString("de9c5754-2518-49c4-b6a5-dd609bf2a7ca");
         UUID imageOperationId = UUID.fromString("1630f95c-0bab-4ec7-b11d-49f6450f47d1");
@@ -1156,11 +1328,16 @@ class SyncServiceTest {
     }
 
     private void seedGanadero(UUID id, String businessIdentifier, String name, Long version, LocalDateTime updatedAt) {
+        seedGanaderoWithEmail(id, businessIdentifier, name, null, version, updatedAt);
+    }
+
+    private void seedGanaderoWithEmail(UUID id, String businessIdentifier, String name, String email, Long version, LocalDateTime updatedAt) {
         QuarkusTransaction.requiringNew().run(() -> {
             Ganadero ganadero = new Ganadero();
             ganadero.setId(id);
             ganadero.setBusinessIdentifier(businessIdentifier);
             ganadero.setName(name);
+            ganadero.setEmail(email);
             ganadero.setActive(true);
             ganaderoRepository.persist(ganadero);
             ganaderoRepository.flush();
@@ -1174,13 +1351,67 @@ class SyncServiceTest {
         });
     }
 
+    private void seedDefaultSyncActor() {
+        seedUser(
+                SyncHarnessFixtures.DEFAULT_ACTOR_USER_ID,
+                "sync-default-admin",
+                "sync-default-admin@hato.bo",
+                Role.ADMIN,
+                UserStatus.ACTIVE,
+                0L,
+                LocalDateTime.of(2026, 1, 1, 0, 0));
+    }
+
+    private void seedAnimalForOwner(UUID uuid, UUID ownerId, String tag, long version, LocalDateTime updatedAt) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            Animal animal = new Animal();
+            animal.setCode("CODE-" + tag);
+            animal.setTag(tag);
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
+            animal.setArete(tag);
+            animal.setAreteNormalized(tag.trim().toLowerCase());
+            animal.setMarca("CODE-" + tag);
+            animal.setMarcaNormalized(("CODE-" + tag).toLowerCase());
+            animal.setUuid(uuid);
+            animal.setVersion(version);
+            animal.setCategory(AnimalCategory.VACA);
+            animal.setSex(AnimalSex.HEMBRA);
+            animal.setActive(true);
+            animal.setAdmissionDate(LocalDate.of(2024, 1, 10));
+            animal.setWeightKg(new BigDecimal("420.50"));
+            animal.setCreatedAt(updatedAt.minusDays(1));
+            animal.setUpdatedAt(updatedAt);
+            animalRepository.persist(animal);
+        });
+    }
+
+    private void seedAnimalImage(UUID animalUuid, UUID imageId, LocalDateTime capturedAt) {
+        QuarkusTransaction.requiringNew().run(() -> {
+            AnimalImage image = new AnimalImage();
+            image.setImageId(imageId);
+            image.setAnimal(animalRepository.findByUuid(animalUuid).orElseThrow());
+            image.setOperationId(imageId);
+            image.setFileName(imageId + ".jpg");
+            image.setMimeType("image/jpeg");
+            image.setSizeBytes(4);
+            image.setChecksumSha256("0".repeat(64));
+            image.setRelativePath("test/" + imageId + ".jpg");
+            image.setThumbnailRef("/api/animal-images/" + imageId + "/content");
+            image.setCapturedAt(capturedAt);
+            image.setSourceChannel("OFFLINE");
+            image.setCreatedAt(capturedAt);
+            image.setUpdatedAt(capturedAt);
+            animalImageRepository.persist(image);
+        });
+    }
+
     private void seedUser(UUID id, String username, String email, UserStatus status, Long version, LocalDateTime updatedAt) {
         seedUser(id, username, email, Role.GANADERO, status, version, updatedAt);
     }
 
     private void seedUser(UUID id, String username, String email, Role role, UserStatus status, Long version, LocalDateTime updatedAt) {
         QuarkusTransaction.requiringNew().run(() -> {
-            User user = new User();
+            User user = userRepository.findByIdOptional(id).orElseGet(User::new);
             user.setId(id);
             user.setUsername(username);
             user.setEmail(email);
@@ -1188,7 +1419,9 @@ class SyncServiceTest {
             user.setPasswordHash("hash");
             user.setRole(role);
             user.setStatus(status);
-            userRepository.persist(user);
+            if (!userRepository.isPersistent(user)) {
+                userRepository.persist(user);
+            }
             userRepository.flush();
             userRepository.getEntityManager()
                     .createNativeQuery("update users set version = ?1, created_at = ?2, updated_at = ?3 where id = ?4")

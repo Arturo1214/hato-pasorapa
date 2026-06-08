@@ -123,6 +123,29 @@ class AnimalReproductionEventResourceTest {
     }
 
     @Test
+    void shouldDenyGanaderoListingReproductionEventsForAnotherOwnerAnimal() {
+        UUID ownOwnerId = UUID.fromString("ae2cb895-826c-4983-b769-df6948df3701");
+        UUID otherOwnerId = UUID.fromString("ae2cb895-826c-4983-b769-df6948df3702");
+        UUID otherAnimalUuid = UUID.fromString("850009bb-f226-42e2-aaf3-c52edcfd16fd");
+        QuarkusTransaction.requiringNew().run(() -> {
+            ganaderoRepository.persist(buildGanadero(ownOwnerId, "NIT-REPRO-OWN", "Ganadero Repro Own", "ganadero-repro@hato.bo"));
+            ganaderoRepository.persist(buildGanadero(otherOwnerId, "NIT-REPRO-OTHER", "Ganadero Repro Other", "other-repro@hato.bo"));
+            userRepository.persist(buildUser("ganadero-repro", "ganadero-repro@hato.bo", "AnimalRepro9", Role.GANADERO));
+        });
+        seedAnimal(otherAnimalUuid, AnimalSex.HEMBRA, otherOwnerId);
+        seedEvent(otherAnimalUuid, AnimalReproductionEventType.SERVICE, "2026-04-26T09:00:00", "event-700", Map.of("serviceMethod", "NATURAL"));
+
+        String token = loginAs("ganadero-repro", "AnimalRepro9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/animals/{uuid}/reproduction-events", otherAnimalUuid)
+                .then()
+                .statusCode(403);
+    }
+
+    @Test
     void shouldCreateNaturalMountServiceEventForFemaleAnimal() {
         UUID animalUuid = UUID.fromString("850009bb-f226-42e2-aaf3-c52edcfd16fc");
         UUID sireUuid = UUID.fromString("23df2de0-1095-4480-9f57-c43fdd60abe2");
@@ -285,22 +308,31 @@ class AnimalReproductionEventResourceTest {
     }
 
     private User buildUser(String username, String email, String password) {
+        return buildUser(username, email, password, Role.ADMIN);
+    }
+
+    private User buildUser(String username, String email, String password, Role role) {
         User user = new User();
-        user.setId(USER_ID);
+        user.setId(role == Role.ADMIN ? USER_ID : UUID.nameUUIDFromBytes(username.getBytes()));
         user.setUsername(username);
         user.setEmail(email);
         user.setDisplayName(username);
         user.setPasswordHash(passwordHasher.hash(password));
-        user.setRole(Role.ADMIN);
+        user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
     }
 
     private Ganadero buildGanadero() {
+        return buildGanadero(OWNER_ID, "NIT-REPRO-OWNER", "Ganadero Repro", null);
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
-        ganadero.setId(OWNER_ID);
-        ganadero.setBusinessIdentifier("NIT-REPRO-OWNER");
-        ganadero.setName("Ganadero Repro");
+        ganadero.setId(id);
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
     }

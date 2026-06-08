@@ -11,6 +11,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.UUID;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 @Path("/api/animal-images/{id}/content")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -19,16 +20,22 @@ import java.util.UUID;
 public class AnimalImageContentResource {
 
     private final AnimalImageService animalImageService;
+    private final JsonWebToken jsonWebToken;
 
-    public AnimalImageContentResource(AnimalImageService animalImageService) {
+    public AnimalImageContentResource(AnimalImageService animalImageService, JsonWebToken jsonWebToken) {
         this.animalImageService = animalImageService;
+        this.jsonWebToken = jsonWebToken;
     }
 
     @GET
     public Response download(@PathParam("id") UUID imageId) {
-        AnimalImageContentResponse response = animalImageService.download(imageId);
+        AnimalImageContentResponse response = animalImageService.download(imageId, currentUserId());
         return Response.ok(response.content(), response.mimeType())
                 .header("Content-Disposition", "inline; filename=\"" + response.fileName() + "\"")
                 .build();
+    }
+
+    private UUID currentUserId() {
+        return UUID.fromString(jsonWebToken.getSubject());
     }
 }

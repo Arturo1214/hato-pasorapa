@@ -55,6 +55,7 @@ public class AnimalReproductionEventService {
     public AnimalReproductionEvent create(AnimalReproductionEventRequest request, UUID authenticatedUserId) {
         AnimalEventLog existingLog = animalEventLogRepository.findByOperationId(request.operationId()).orElse(null);
         if (existingLog != null) {
+            enforceAnimalOwnership(existingLog.getAnimal(), authenticatedUserId);
             return animalReproductionEventMapper.toAnimalReproductionEvent(existingLog);
         }
 
@@ -70,7 +71,7 @@ public class AnimalReproductionEventService {
         } else if (request.reproductionEventType() == AnimalReproductionEventType.PREGNANCY_DIAGNOSIS) {
             validatePregnancyDiagnosisEvent(animal, request.metadata());
         } else if (request.reproductionEventType() == AnimalReproductionEventType.BIRTH) {
-            projectBirth(request.metadata());
+            projectBirth(request.metadata(), resolveAllowedGanaderoId(authenticatedUserId));
         }
 
         AnimalEventLog eventLog = animalReproductionEventMapper.toAnimalEventLog(animal, request, effectivePerformedByUserId);
@@ -84,6 +85,18 @@ public class AnimalReproductionEventService {
             AnimalReproductionEventType reproductionEventType,
             OffsetDateTime occurredFrom,
             OffsetDateTime occurredTo) {
+        return list(animalUuid, reproductionEventType, occurredFrom, occurredTo, null);
+    }
+
+    public List<AnimalReproductionEventResponse> list(
+            UUID animalUuid,
+            AnimalReproductionEventType reproductionEventType,
+            OffsetDateTime occurredFrom,
+            OffsetDateTime occurredTo,
+            UUID currentUserId) {
+        Animal animal = animalRepository.findByUuid(animalUuid)
+                .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        enforceAnimalOwnership(animal, currentUserId);
         return animalEventLogRepository
                 .listReproductionHistory(
                         animalUuid,
@@ -146,21 +159,23 @@ public class AnimalReproductionEventService {
         throw new BusinessException("ROLE_NOT_ALLOWED", "El rol autenticado no puede registrar eventos reproductivos.", Response.Status.FORBIDDEN);
     }
 
-    private void projectBirth(Map<String, Object> metadata) {
+    private void projectBirth(Map<String, Object> metadata, UUID allowedGanaderoId) {
         AnimalReproductionEventMapper.BirthMetadata birthMetadata = animalReproductionEventMapper.readBirthMetadata(metadata);
 
-        animalRepository.findByUuid(birthMetadata.motherAnimalUuid())
+        Animal mother = animalRepository.findByUuid(birthMetadata.motherAnimalUuid())
                 .orElseThrow(() -> new BusinessException(
                         "ANIMAL_REPRODUCTION_EVENT_MOTHER_NOT_FOUND",
                         "No encontramos la madre informada para el parto.",
                         Response.Status.NOT_FOUND));
+        enforceBirthAnimalOwnership(mother, allowedGanaderoId);
 
         if (birthMetadata.fatherAnimalUuid() != null) {
-            animalRepository.findByUuid(birthMetadata.fatherAnimalUuid())
+            Animal father = animalRepository.findByUuid(birthMetadata.fatherAnimalUuid())
                     .orElseThrow(() -> new BusinessException(
                             "ANIMAL_REPRODUCTION_EVENT_FATHER_NOT_FOUND",
                             "No encontramos el padre informado para el parto.",
                             Response.Status.NOT_FOUND));
+            enforceBirthAnimalOwnership(father, allowedGanaderoId);
         }
 
         for (UUID offspringAnimalUuid : birthMetadata.offspringAnimalUuids()) {
@@ -169,12 +184,22 @@ public class AnimalReproductionEventService {
                             "ANIMAL_REPRODUCTION_EVENT_OFFSPRING_NOT_FOUND",
                             "No encontramos una de las crías informadas para el parto.",
                             Response.Status.NOT_FOUND));
+            enforceBirthAnimalOwnership(offspring, allowedGanaderoId);
             validateParentageProjection(offspring, birthMetadata);
             offspring.setMotherAnimalUuid(birthMetadata.motherAnimalUuid());
             if (birthMetadata.fatherAnimalUuid() != null) {
                 offspring.setFatherAnimalUuid(birthMetadata.fatherAnimalUuid());
             }
             offspring.setBirthDate(birthMetadata.birthDate());
+        }
+    }
+
+    private void enforceBirthAnimalOwnership(Animal animal, UUID allowedGanaderoId) {
+        if (allowedGanaderoId != null && !allowedGanaderoId.equals(animal.getOwnerGanadero().getId())) {
+            throw new BusinessException(
+                    "ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN",
+                    "El ganadero autenticado no puede registrar eventos reproductivos para animales de otro propietario.",
+                    Response.Status.FORBIDDEN);
         }
     }
 

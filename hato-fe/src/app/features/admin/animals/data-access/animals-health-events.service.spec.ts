@@ -1,15 +1,19 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, type HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { AuthService, type SessionUser } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { InMemoryOfflinePersistenceAdapter } from '../../../../core/offline/offline-store.migrations';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
+import { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
 import { AnimalsService, type AnimalItem } from './animals.service';
-import { AnimalsHealthEventsService, type AnimalHealthEventItem } from './animals-health-events.service';
+import {
+  AnimalsHealthEventsService,
+  type AnimalHealthEventItem,
+} from './animals-health-events.service';
 
 describe('AnimalsHealthEventsService', () => {
   const currentUser: SessionUser = {
@@ -74,7 +78,12 @@ describe('AnimalsHealthEventsService', () => {
     ...overrides,
   });
 
-  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get'>>; user?: SessionUser; animalsService?: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'> }) => {
+  const setup = (options: {
+    online: boolean;
+    http?: Partial<Pick<HttpClient, 'get'>>;
+    user?: SessionUser;
+    animalsService?: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
+  }) => {
     TestBed.configureTestingModule({
       providers: [
         AnimalsHealthEventsService,
@@ -92,7 +101,10 @@ describe('AnimalsHealthEventsService', () => {
         },
         {
           provide: AuthService,
-          useValue: { getAccessToken: () => 'token', currentUser: () => options.user ?? currentUser },
+          useValue: {
+            getAccessToken: () => 'token',
+            currentUser: () => options.user ?? currentUser,
+          },
         },
         {
           provide: OfflineStatusService,
@@ -100,15 +112,25 @@ describe('AnimalsHealthEventsService', () => {
         },
         {
           provide: AnimalsService,
-          useValue: options.animalsService ?? { listActiveAnimals: vi.fn(() => of([])), listAnimals: vi.fn(() => of([])) },
+          useValue: options.animalsService ?? {
+            listActiveAnimals: vi.fn(() => of([])),
+            listAnimals: vi.fn(() => of([])),
+          },
         },
       ],
     });
 
     const service = TestBed.inject(AnimalsHealthEventsService);
     const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
-    service.configureForTesting({ store, now: () => '2026-04-26T10:05:00.000Z', windowRef: window, animalsService: options.animalsService });
-    return { service, store };
+    const entityChangeBus = new OfflineEntityChangeBus();
+    service.configureForTesting({
+      store,
+      entityChangeBus,
+      now: () => '2026-04-26T10:05:00.000Z',
+      windowRef: window,
+      animalsService: options.animalsService,
+    });
+    return { service, store, entityChangeBus };
   };
 
   afterEach(() => {
@@ -119,8 +141,15 @@ describe('AnimalsHealthEventsService', () => {
   it('should request filtered health timeline online and cache the snapshot by operation id', async () => {
     const get = vi.fn(() =>
       of({
-        items: [createEvent(), createEvent({ id: 'health-event-2', operationId: 'health-event-2', healthEventType: 'DEWORMING' })],
-      })
+        items: [
+          createEvent(),
+          createEvent({
+            id: 'health-event-2',
+            operationId: 'health-event-2',
+            healthEventType: 'DEWORMING',
+          }),
+        ],
+      }),
     );
     const { service, store } = setup({ online: true, http: { get: get as never } });
 
@@ -130,19 +159,30 @@ describe('AnimalsHealthEventsService', () => {
           healthEventType: 'DEWORMING',
           occurredFrom: '2026-04-26T09:00:00.000Z',
           occurredTo: '2026-04-26T12:30:00.000Z',
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual([
-      expect.objectContaining({ id: 'health-event-2', healthEventType: 'DEWORMING', syncStatus: 'synced', syncMessage: null }),
+      expect.objectContaining({
+        id: 'health-event-2',
+        healthEventType: 'DEWORMING',
+        syncStatus: 'synced',
+        syncMessage: null,
+      }),
     ]);
 
-    const [requestedUrl, options] = get.mock.calls[0] as unknown as [string, { headers: HttpHeaders }];
+    const [requestedUrl, options] = get.mock.calls[0] as unknown as [
+      string,
+      { headers: HttpHeaders },
+    ];
     expect(requestedUrl).toBe(
-      '/api/animals/animal-uuid-1/health-events?healthEventType=DEWORMING&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z'
+      '/api/animals/animal-uuid-1/health-events?healthEventType=DEWORMING&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z',
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:health-event-2', payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'DEWORMING' }) }),
+      expect.objectContaining({
+        key: 'ANIMAL_EVENT_LOG:health-event-2',
+        payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'DEWORMING' }),
+      }),
     ]);
   });
 
@@ -188,22 +228,35 @@ describe('AnimalsHealthEventsService', () => {
       key: 'ANIMAL_HEALTH_EVENT:health-failed-1',
       entityType: 'ANIMAL_HEALTH_EVENT',
       entityId: 'health-failed-1',
-      payload: createEvent({ id: 'health-failed-1', operationId: 'health-failed-1' }) as unknown as Record<string, unknown>,
+      payload: createEvent({
+        id: 'health-failed-1',
+        operationId: 'health-failed-1',
+      }) as unknown as Record<string, unknown>,
       updatedAt: '2026-04-26T10:00:01.000Z',
     });
     const failed = await store.enqueueOperation({
       entityType: 'ANIMAL_HEALTH_EVENT',
       entityId: 'health-failed-1',
       opType: 'CREATE',
-      payload: createEvent({ id: 'health-failed-1', operationId: 'health-failed-1' }) as unknown as Record<string, unknown>,
+      payload: createEvent({
+        id: 'health-failed-1',
+        operationId: 'health-failed-1',
+      }) as unknown as Record<string, unknown>,
       clientCreatedAt: '2026-04-26T10:00:00.000Z',
       clientUpdatedAt: '2026-04-26T10:00:00.000Z',
       operationId: 'health-failed-1',
     });
-    await store.markFailed(failed.operationId, { code: 'HEALTH_SYNC_FAILED', message: 'Sanidad no sincronizada.' });
+    await store.markFailed(failed.operationId, {
+      code: 'HEALTH_SYNC_FAILED',
+      message: 'Sanidad no sincronizada.',
+    });
 
     await expect(firstValueFrom(service.listEvents('animal-uuid-1'))).resolves.toEqual([
-      expect.objectContaining({ id: 'health-failed-1', syncStatus: 'failed', syncMessage: 'Sanidad no sincronizada.' }),
+      expect.objectContaining({
+        id: 'health-failed-1',
+        syncStatus: 'failed',
+        syncMessage: 'Sanidad no sincronizada.',
+      }),
     ]);
   });
 
@@ -225,7 +278,7 @@ describe('AnimalsHealthEventsService', () => {
             nextDueAt: '2026-04-28T10:00:00.000Z',
           }),
         ],
-      })
+      }),
     );
     const { service } = setup({ online: true, http: { get: get as never } });
 
@@ -234,14 +287,20 @@ describe('AnimalsHealthEventsService', () => {
         service.listEvents('animal-uuid-1', {
           healthEventType: 'FIELD_VET_VISIT',
           visitId: 'VISIT-1',
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual([
-      expect.objectContaining({ healthEventType: 'FIELD_VET_VISIT', visitId: 'VISIT-1', nextDueAt: '2026-04-28T10:00:00.000Z' }),
+      expect.objectContaining({
+        healthEventType: 'FIELD_VET_VISIT',
+        visitId: 'VISIT-1',
+        nextDueAt: '2026-04-28T10:00:00.000Z',
+      }),
     ]);
 
     const [requestedUrl] = get.mock.calls[0] as unknown as [string];
-    expect(requestedUrl).toBe('/api/animals/animal-uuid-1/health-events?healthEventType=FIELD_VET_VISIT&visitId=VISIT-1');
+    expect(requestedUrl).toBe(
+      '/api/animals/animal-uuid-1/health-events?healthEventType=FIELD_VET_VISIT&visitId=VISIT-1',
+    );
   });
 
   it('should queue health events offline without dispatching manual sync', async () => {
@@ -258,8 +317,8 @@ describe('AnimalsHealthEventsService', () => {
           metadata: {
             diagnosisCode: 'RESP-01',
           },
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Evento sanitario encolado. Se enviará al reconectar.',
@@ -276,14 +335,98 @@ describe('AnimalsHealthEventsService', () => {
           healthEventType: 'DISEASE_REPORTED',
           sourceChannel: 'OFFLINE',
         }),
-      })
+      }),
     );
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'DISEASE_REPORTED', syncStatus: 'pending', syncMessage: 'Pendiente de sync.' }),
+        payload: expect.objectContaining({
+          eventCategory: 'HEALTH',
+          eventType: 'DISEASE_REPORTED',
+          syncStatus: 'pending',
+          syncMessage: 'Pendiente de sync.',
+        }),
       }),
     ]);
     expect(dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it('should emit ANIMAL_EVENT_LOG and VET_VISIT changes for offline field vet visit creation', async () => {
+    const { service, store, entityChangeBus } = setup({ online: false });
+    const changes: Array<unknown> = [];
+    entityChangeBus.changes$.subscribe((change) => changes.push(change));
+
+    await expect(
+      firstValueFrom(
+        service.createEvent({
+          animalUuid: 'animal-uuid-1',
+          healthEventType: 'FIELD_VET_VISIT',
+          occurredAt: '2026-05-11T09:00:00.000Z',
+          notes: 'Control en campo',
+          metadata: {
+            visit: { visitId: 'VISIT-OFFLINE-1', mode: 'SPECIFIC', status: 'PENDING' },
+            checklist: [],
+            clinicalNote: { reason: 'Control', findings: 'Ok', plan: 'Seguimiento' },
+            protocol: { status: 'STARTED' },
+          },
+        }),
+      ),
+    ).resolves.toEqual({
+      outcome: 'queued',
+      message: 'Evento sanitario encolado. Se enviará al reconectar.',
+    });
+
+    const [operation] = await store.listOutbox();
+    expect(changes).toEqual([
+      expect.objectContaining({
+        entity: 'ANIMAL_EVENT_LOG',
+        source: 'local-mutation',
+        operation: 'create',
+        ids: [operation.operationId],
+      }),
+      expect.objectContaining({
+        entity: 'VET_VISIT',
+        source: 'local-mutation',
+        operation: 'snapshot-upsert',
+        ids: ['VISIT-OFFLINE-1'],
+      }),
+    ]);
+  });
+
+  it('should emit online mutation changes for online field vet visit creation', async () => {
+    const { service, store, entityChangeBus } = setup({ online: true });
+    const changes: Array<unknown> = [];
+    entityChangeBus.changes$.subscribe((change) => changes.push(change));
+
+    await firstValueFrom(
+      service.createEvent({
+        animalUuid: 'animal-uuid-1',
+        healthEventType: 'FIELD_VET_VISIT',
+        occurredAt: '2026-05-11T09:00:00.000Z',
+        notes: 'Control en campo',
+        metadata: {
+          visit: { visitId: 'VISIT-ONLINE-1', mode: 'SPECIFIC', status: 'PENDING' },
+          checklist: [],
+          clinicalNote: { reason: 'Control', findings: 'Ok', plan: 'Seguimiento' },
+          protocol: { status: 'STARTED' },
+        },
+      }),
+    );
+
+    const [operation] = await store.listOutbox();
+    expect(changes).toEqual([
+      expect.objectContaining({
+        entity: 'ANIMAL_EVENT_LOG',
+        source: 'online-mutation',
+        operation: 'create',
+        ids: [operation.operationId],
+      }),
+      expect.objectContaining({
+        entity: 'VET_VISIT',
+        source: 'online-mutation',
+        operation: 'snapshot-upsert',
+        ids: ['VISIT-ONLINE-1'],
+      }),
+    ]);
   });
 
   it('should queue health events offline and trigger manual sync when online', async () => {
@@ -301,8 +444,8 @@ describe('AnimalsHealthEventsService', () => {
             treatmentCaseId: 'CASE-77',
             productName: 'Oxitetraciclina',
           },
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Evento sanitario encolado. Se disparó la sincronización automática.',
@@ -322,24 +465,41 @@ describe('AnimalsHealthEventsService', () => {
           performedByUserId: 'user-1',
           sourceChannel: 'ONLINE',
         }),
-      })
+      }),
     );
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
         key: `ANIMAL_EVENT_LOG:${outbox[0].operationId}`,
-        payload: expect.objectContaining({ eventCategory: 'HEALTH', eventType: 'TREATMENT_STARTED', healthEventType: 'TREATMENT_STARTED', syncStatus: 'pending' }),
+        payload: expect.objectContaining({
+          eventCategory: 'HEALTH',
+          eventType: 'TREATMENT_STARTED',
+          healthEventType: 'TREATMENT_STARTED',
+          syncStatus: 'pending',
+        }),
       }),
     ]);
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    );
   });
 
   it('should fan out global veterinary visits to all active animals of the authenticated ganadero', async () => {
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
     const animalsService = {
-      listActiveAnimals: vi.fn(() => of([
-        createAnimal({ uuid: 'animal-active-1', arete: 'BO-001', updatedAt: '2026-04-27T08:00:00.000Z' }),
-        createAnimal({ uuid: 'animal-active-2', arete: 'BO-002', updatedAt: '2026-04-27T09:00:00.000Z' }),
-      ])),
+      listActiveAnimals: vi.fn(() =>
+        of([
+          createAnimal({
+            uuid: 'animal-active-1',
+            arete: 'BO-001',
+            updatedAt: '2026-04-27T08:00:00.000Z',
+          }),
+          createAnimal({
+            uuid: 'animal-active-2',
+            arete: 'BO-002',
+            updatedAt: '2026-04-27T09:00:00.000Z',
+          }),
+        ]),
+      ),
       listAnimals: vi.fn(() => of([])),
     } satisfies Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
     const { service, store } = setup({ online: true, user: ganaderoUser, animalsService });
@@ -352,28 +512,47 @@ describe('AnimalsHealthEventsService', () => {
           occurredAt: '2026-05-11T09:00',
           notes: 'Campaña anual',
           metadata: {
-            visit: { visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', status: 'PENDING', veterinarian: { name: 'Dra. Luna' } },
+            visit: {
+              visitId: 'VISIT-GLOBAL-1',
+              mode: 'GLOBAL',
+              status: 'PENDING',
+              veterinarian: { name: 'Dra. Luna' },
+            },
             checklist: [],
-            clinicalNote: { reason: 'Control anual', findings: 'Sin hallazgos', plan: 'Seguimiento' },
+            clinicalNote: {
+              reason: 'Control anual',
+              findings: 'Sin hallazgos',
+              plan: 'Seguimiento',
+            },
             protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-18T09:00:00.000Z' },
           },
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
-      message: 'Campaña veterinaria encolada para 2 animales activos. Se disparó la sincronización automática.',
+      message:
+        'Campaña veterinaria encolada para 2 animales activos. Se disparó la sincronización automática.',
     });
 
     expect(animalsService.listActiveAnimals).toHaveBeenCalledWith('gan-1', 0, 1000);
     const outbox = await store.listOutbox();
     expect(outbox).toHaveLength(2);
-    expect(outbox.map((operation) => operation.payload['animalUuid']).sort()).toEqual(['animal-active-1', 'animal-active-2']);
-    expect(outbox.map((operation) => (operation.payload['metadata'] as Record<string, unknown>)['visit'])).toEqual([
+    expect(outbox.map((operation) => operation.payload['animalUuid']).sort()).toEqual([
+      'animal-active-1',
+      'animal-active-2',
+    ]);
+    expect(
+      outbox.map(
+        (operation) => (operation.payload['metadata'] as Record<string, unknown>)['visit'],
+      ),
+    ).toEqual([
       expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
       expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
     ]);
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toHaveLength(2);
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    );
   });
 
   it('should block global veterinary campaigns when the authenticated ganadero has no active animals', async () => {
@@ -392,14 +571,26 @@ describe('AnimalsHealthEventsService', () => {
           occurredAt: '2026-05-11T09:00',
           notes: 'Campaña anual',
           metadata: {
-            visit: { visitId: 'VISIT-GLOBAL-EMPTY', mode: 'GLOBAL', status: 'PENDING', veterinarian: { name: 'Dra. Luna' } },
+            visit: {
+              visitId: 'VISIT-GLOBAL-EMPTY',
+              mode: 'GLOBAL',
+              status: 'PENDING',
+              veterinarian: { name: 'Dra. Luna' },
+            },
             checklist: [],
-            clinicalNote: { reason: 'Control anual', findings: 'Sin hallazgos', plan: 'Seguimiento' },
+            clinicalNote: {
+              reason: 'Control anual',
+              findings: 'Sin hallazgos',
+              plan: 'Seguimiento',
+            },
             protocol: { status: 'FOLLOW_UP_REQUIRED', nextDueAt: '2026-05-18T09:00:00.000Z' },
           },
-        })
-      )
-    ).resolves.toEqual({ outcome: 'blocked', message: 'No hay animales activos para registrar la campaña veterinaria.' });
+        }),
+      ),
+    ).resolves.toEqual({
+      outcome: 'blocked',
+      message: 'No hay animales activos para registrar la campaña veterinaria.',
+    });
 
     expect(animalsService.listActiveAnimals).toHaveBeenCalledWith('gan-1', 0, 1000);
     await expect(store.listOutbox()).resolves.toEqual([]);

@@ -32,7 +32,10 @@ import {
   type SyncQueueStatus,
   SYNC_QUEUE_STATUSES,
 } from './offline-types';
-import { SYNC_OBSERVABILITY_RECENT_LIMIT, SYNC_OBSERVABILITY_STALE_DEFAULT_MS } from './sync-metrics.store';
+import {
+  SYNC_OBSERVABILITY_RECENT_LIMIT,
+  SYNC_OBSERVABILITY_STALE_DEFAULT_MS,
+} from './sync-metrics.store';
 
 const OUTBOX_STORE = 'outbox';
 const INBOX_STORE = 'inbox';
@@ -49,21 +52,29 @@ export interface OfflineStoreOptions {
 }
 
 export type SessionBoundaryCleanupPolicy = 'soft_retention' | 'shared_device_hard';
-export type SessionBoundaryReason = 'ttl_elapsed' | 'logout' | 'user_switch' | 'manual_lock' | 'migration_reauth_required';
+export type SessionBoundaryReason =
+  | 'ttl_elapsed'
+  | 'logout'
+  | 'user_switch'
+  | 'manual_lock'
+  | 'migration_reauth_required';
 
 export class OfflineStoreService {
   private cachedState?: PersistedOfflineState;
 
   constructor(
     private readonly adapter: OfflinePersistenceAdapter = new IndexedDbOfflinePersistenceAdapter(),
-    private readonly options: OfflineStoreOptions = {}
+    private readonly options: OfflineStoreOptions = {},
   ) {}
 
   async enqueueOperation(input: EnqueueOfflineOperationInput): Promise<OfflineOperationEnvelope> {
     const state = await this.getState();
     const operation: OfflineOperationEnvelope = {
       operationId:
-        input.operationId ?? this.options.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`,
+        input.operationId ??
+        this.options.generateId?.() ??
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now()}`,
       entityType: input.entityType,
       entityId: input.entityId,
       opType: input.opType,
@@ -119,7 +130,7 @@ export class OfflineStoreService {
   async reassignSnapshotEntityId(
     entityType: OfflineSnapshotRecord['entityType'],
     currentEntityId: string,
-    nextEntityId: string
+    nextEntityId: string,
   ) {
     const state = await this.getState();
     const currentKey = `${entityType}:${currentEntityId}`;
@@ -158,7 +169,11 @@ export class OfflineStoreService {
     };
   }
 
-  async markRetryScheduled(operationId: string, failure: OfflineFailureDescriptor, nextAttemptAt: string) {
+  async markRetryScheduled(
+    operationId: string,
+    failure: OfflineFailureDescriptor,
+    nextAttemptAt: string,
+  ) {
     const state = await this.getState();
     const operation = this.requireOperation(state, operationId);
     operation.status = 'retry_scheduled';
@@ -178,7 +193,11 @@ export class OfflineStoreService {
     await this.persistState(state);
   }
 
-  async markConflict(operationId: string, failure: OfflineFailureDescriptor, conflict: OfflineOperationEnvelope['conflict']) {
+  async markConflict(
+    operationId: string,
+    failure: OfflineFailureDescriptor,
+    conflict: OfflineOperationEnvelope['conflict'],
+  ) {
     const state = await this.getState();
     const operation = this.requireOperation(state, operationId);
     operation.status = 'conflict';
@@ -208,7 +227,9 @@ export class OfflineStoreService {
 
   async listConflictOperations() {
     const state = await this.getState();
-    return state.outbox.filter((operation) => normalizeOperationStatus(operation.status) === 'conflict').map((operation) => ({ ...operation }));
+    return state.outbox
+      .filter((operation) => normalizeOperationStatus(operation.status) === 'conflict')
+      .map((operation) => ({ ...operation }));
   }
 
   async saveConflictAudit(operationId: string, entry: ConflictAuditEntry) {
@@ -230,7 +251,7 @@ export class OfflineStoreService {
     entityType: OfflineSnapshotRecord['entityType'],
     serverState: Record<string, unknown>,
     fallbackEntityId: string,
-    serverVersion?: number
+    serverVersion?: number,
   ) {
     const entityId = String(serverState['uuid'] ?? serverState['id'] ?? fallbackEntityId);
     const key = `${entityType}:${entityId}`;
@@ -239,8 +260,13 @@ export class OfflineStoreService {
       entityType,
       entityId,
       payload: { ...serverState },
-      updatedAt: String(serverState['updatedAt'] ?? this.options.now?.() ?? new Date().toISOString()),
-      version: typeof serverState['version'] === 'number' ? (serverState['version'] as number) : serverVersion,
+      updatedAt: String(
+        serverState['updatedAt'] ?? this.options.now?.() ?? new Date().toISOString(),
+      ),
+      version:
+        typeof serverState['version'] === 'number'
+          ? (serverState['version'] as number)
+          : serverVersion,
     });
   }
 
@@ -277,58 +303,102 @@ export class OfflineStoreService {
 
   async saveSnapshot(snapshot: OfflineSnapshotRecord) {
     const state = await this.getState();
-    state.snapshots = [...state.snapshots.filter((current) => current.key !== snapshot.key), snapshot];
+    state.snapshots = [
+      ...state.snapshots.filter((current) => current.key !== snapshot.key),
+      snapshot,
+    ];
     await this.persistState(state);
   }
 
   async listSnapshots(entityType?: OfflineSnapshotRecord['entityType']) {
     const state = await this.getState();
-    return entityType ? state.snapshots.filter((snapshot) => snapshot.entityType === entityType) : [...state.snapshots];
+    return entityType
+      ? state.snapshots.filter((snapshot) => snapshot.entityType === entityType)
+      : [...state.snapshots];
   }
 
   async getSnapshot(entityType: OfflineSnapshotRecord['entityType'], entityId: string) {
     const state = await this.getState();
-    return state.snapshots.find((snapshot) => snapshot.entityType === entityType && snapshot.entityId === entityId) ?? null;
+    return (
+      state.snapshots.find(
+        (snapshot) => snapshot.entityType === entityType && snapshot.entityId === entityId,
+      ) ?? null
+    );
   }
 
   async listLots(): Promise<Array<OfflineSnapshotRecord & { payload: HerdLotSnapshotPayload }>> {
-    return (await this.listSnapshots('LOT')) as Array<OfflineSnapshotRecord & { payload: HerdLotSnapshotPayload }>;
+    return (await this.listSnapshots('LOT')) as Array<
+      OfflineSnapshotRecord & { payload: HerdLotSnapshotPayload }
+    >;
   }
 
-  async listLotAssignmentsForAnimal(animalUuid: string): Promise<Array<OfflineSnapshotRecord & { payload: HerdLotAssignmentSnapshotPayload }>> {
-    const snapshots = (await this.listSnapshots('LOT_ASSIGNMENT')) as Array<OfflineSnapshotRecord & {
-      payload: HerdLotAssignmentSnapshotPayload;
-    }>;
+  async listLotAssignmentsForAnimal(
+    animalUuid: string,
+  ): Promise<Array<OfflineSnapshotRecord & { payload: HerdLotAssignmentSnapshotPayload }>> {
+    const snapshots = (await this.listSnapshots('LOT_ASSIGNMENT')) as Array<
+      OfflineSnapshotRecord & {
+        payload: HerdLotAssignmentSnapshotPayload;
+      }
+    >;
     return snapshots.filter((snapshot) => snapshot.payload.animalUuid === animalUuid);
   }
 
-  async listProductivityLedger(): Promise<Array<OfflineSnapshotRecord & { payload: HerdProductivityLedgerSnapshotPayload }>> {
-    return (await this.listSnapshots('PRODUCTIVITY_LEDGER')) as Array<OfflineSnapshotRecord & {
-      payload: HerdProductivityLedgerSnapshotPayload;
-    }>;
+  async listProductivityLedger(): Promise<
+    Array<OfflineSnapshotRecord & { payload: HerdProductivityLedgerSnapshotPayload }>
+  > {
+    return (await this.listSnapshots('PRODUCTIVITY_LEDGER')) as Array<
+      OfflineSnapshotRecord & {
+        payload: HerdProductivityLedgerSnapshotPayload;
+      }
+    >;
   }
 
-  async listCostLedger(): Promise<Array<OfflineSnapshotRecord & { payload: HerdCostLedgerSnapshotPayload }>> {
-    return (await this.listSnapshots('COST_LEDGER')) as Array<OfflineSnapshotRecord & { payload: HerdCostLedgerSnapshotPayload }>;
+  async listCostLedger(): Promise<
+    Array<OfflineSnapshotRecord & { payload: HerdCostLedgerSnapshotPayload }>
+  > {
+    return (await this.listSnapshots('COST_LEDGER')) as Array<
+      OfflineSnapshotRecord & { payload: HerdCostLedgerSnapshotPayload }
+    >;
   }
 
-  async validateLotAssignmentNoOverlap(candidate: HerdLotAssignmentSnapshotPayload, excludedId?: string) {
-    const snapshots = (await this.listSnapshots('LOT_ASSIGNMENT')) as Array<OfflineSnapshotRecord & {
-      payload: HerdLotAssignmentSnapshotPayload;
-    }>;
+  async validateLotAssignmentNoOverlap(
+    candidate: HerdLotAssignmentSnapshotPayload,
+    excludedId?: string,
+  ) {
+    const snapshots = (await this.listSnapshots('LOT_ASSIGNMENT')) as Array<
+      OfflineSnapshotRecord & {
+        payload: HerdLotAssignmentSnapshotPayload;
+      }
+    >;
     return !snapshots
       .filter((snapshot) => snapshot.entityId !== excludedId)
       .filter((snapshot) => snapshot.payload.animalUuid === candidate.animalUuid)
-      .some((snapshot) => rangesOverlap(candidate.fromDate, candidate.toDate ?? null, snapshot.payload.fromDate, snapshot.payload.toDate ?? null));
+      .some((snapshot) =>
+        rangesOverlap(
+          candidate.fromDate,
+          candidate.toDate ?? null,
+          snapshot.payload.fromDate,
+          snapshot.payload.toDate ?? null,
+        ),
+      );
   }
 
-  async replaceCanonicalLedgerSnapshot(entityType: 'PRODUCTIVITY_LEDGER' | 'COST_LEDGER', snapshot: OfflineSnapshotRecord) {
+  async replaceCanonicalLedgerSnapshot(
+    entityType: 'PRODUCTIVITY_LEDGER' | 'COST_LEDGER',
+    snapshot: OfflineSnapshotRecord,
+  ) {
     const state = await this.getState();
     const identityKey = String(snapshot.payload['identityKey'] ?? '');
     state.snapshots = state.snapshots.filter(
-      (current) => current.entityType !== entityType || String(current.payload['identityKey'] ?? '') !== identityKey || current.key === snapshot.key
+      (current) =>
+        current.entityType !== entityType ||
+        String(current.payload['identityKey'] ?? '') !== identityKey ||
+        current.key === snapshot.key,
     );
-    state.snapshots = [...state.snapshots.filter((current) => current.key !== snapshot.key), snapshot];
+    state.snapshots = [
+      ...state.snapshots.filter((current) => current.key !== snapshot.key),
+      snapshot,
+    ];
     await this.persistState(state);
     return snapshot;
   }
@@ -350,7 +420,10 @@ export class OfflineStoreService {
           return true;
         }
 
-        return status === 'retry_scheduled' && (!operation.nextAttemptAt || operation.nextAttemptAt <= now);
+        return (
+          status === 'retry_scheduled' &&
+          (!operation.nextAttemptAt || operation.nextAttemptAt <= now)
+        );
       })
       .map((operation) => ({
         ...operation,
@@ -416,13 +489,17 @@ export class OfflineStoreService {
     }
 
     return [...grouped.values()]
-      .sort((left, right) => right.count - left.count || (right.lastOccurredAt ?? '').localeCompare(left.lastOccurredAt ?? ''))
+      .sort(
+        (left, right) =>
+          right.count - left.count ||
+          (right.lastOccurredAt ?? '').localeCompare(left.lastOccurredAt ?? ''),
+      )
       .slice(0, limit);
   }
 
   async listCheckpointHealth(
     now: string,
-    staleOverride?: Partial<Record<OfflineEntityType, number>>
+    staleOverride?: Partial<Record<OfflineEntityType, number>>,
   ): Promise<Record<OfflineEntityType, SyncEntityHealthSummary>> {
     const state = await this.getState();
     const thresholds = staleOverride ?? {};
@@ -451,9 +528,10 @@ export class OfflineStoreService {
   async applyPullResponse(
     entityType: OfflineSnapshotRecord['entityType'],
     items: Array<Record<string, unknown>>,
-    checkpoint: OfflineSyncCheckpoint
+    checkpoint: OfflineSyncCheckpoint,
   ) {
     const state = await this.getState();
+    const ids: string[] = [];
 
     items.forEach((item) => {
       const entityId = String(item['uuid'] ?? item['id'] ?? '');
@@ -461,26 +539,33 @@ export class OfflineStoreService {
         return;
       }
 
+      ids.push(entityId);
       const key = `${entityType}:${entityId}`;
       const payload = { ...item };
       const updatedAt = String(item['updatedAt'] ?? checkpoint.cursorUpdatedAt);
       const version = typeof item['version'] === 'number' ? item['version'] : undefined;
 
-      state.inbox = [...state.inbox.filter((current) => current.key !== key), {
-        key,
-        entityType,
-        entityId,
-        payload,
-        receivedAt: checkpoint.lastSuccessAt,
-      }];
-      state.snapshots = [...state.snapshots.filter((current) => current.key !== key), {
-        key,
-        entityType,
-        entityId,
-        payload,
-        updatedAt,
-        version,
-      }];
+      state.inbox = [
+        ...state.inbox.filter((current) => current.key !== key),
+        {
+          key,
+          entityType,
+          entityId,
+          payload,
+          receivedAt: checkpoint.lastSuccessAt,
+        },
+      ];
+      state.snapshots = [
+        ...state.snapshots.filter((current) => current.key !== key),
+        {
+          key,
+          entityType,
+          entityId,
+          payload,
+          updatedAt,
+          version,
+        },
+      ];
     });
 
     state.syncState.checkpoints[entityType] = normalizeCheckpointAliases(checkpoint);
@@ -488,6 +573,8 @@ export class OfflineStoreService {
       this.trimNotificationRetention(state);
     }
     await this.persistState(state);
+
+    return { entityType, ids: [...new Set(ids)], count: ids.length };
   }
 
   async getSchemaVersion() {
@@ -610,7 +697,9 @@ export class OfflineStoreService {
       },
       reporting: state.syncState.meta?.reporting,
       decisionSupport: state.syncState.meta?.decisionSupport,
-      notifications: state.syncState.meta?.notifications ?? { readState: createEmptyNotificationReadState() },
+      notifications: state.syncState.meta?.notifications ?? {
+        readState: createEmptyNotificationReadState(),
+      },
       conflictResolution: state.syncState.meta?.conflictResolution ?? { auditByOperationId: {} },
       sessionSecurity: state.syncState.meta?.sessionSecurity,
     };
@@ -628,7 +717,9 @@ export class OfflineStoreService {
     state.syncState.meta = {
       appliedMigrations: state.syncState.meta?.appliedMigrations ?? [],
       calendarAlerts: state.syncState.meta?.calendarAlerts,
-      notifications: state.syncState.meta?.notifications ?? { readState: createEmptyNotificationReadState() },
+      notifications: state.syncState.meta?.notifications ?? {
+        readState: createEmptyNotificationReadState(),
+      },
       decisionSupport: state.syncState.meta?.decisionSupport,
       conflictResolution: state.syncState.meta?.conflictResolution ?? { auditByOperationId: {} },
       sessionSecurity: state.syncState.meta?.sessionSecurity,
@@ -664,7 +755,9 @@ export class OfflineStoreService {
           stale: true,
         },
       },
-      notifications: state.syncState.meta?.notifications ?? { readState: createEmptyNotificationReadState() },
+      notifications: state.syncState.meta?.notifications ?? {
+        readState: createEmptyNotificationReadState(),
+      },
       conflictResolution: state.syncState.meta?.conflictResolution ?? { auditByOperationId: {} },
       sessionSecurity: state.syncState.meta?.sessionSecurity,
     };
@@ -672,7 +765,10 @@ export class OfflineStoreService {
     return state.syncState.meta.decisionSupport;
   }
 
-  async clearForSessionBoundary(policy: SessionBoundaryCleanupPolicy, reason: SessionBoundaryReason) {
+  async clearForSessionBoundary(
+    policy: SessionBoundaryCleanupPolicy,
+    reason: SessionBoundaryReason,
+  ) {
     const state = await this.getState();
     const retainedMeta = this.buildSessionBoundaryMeta(state, policy, reason);
 
@@ -703,7 +799,11 @@ export class OfflineStoreService {
     const existing = await this.adapter.load();
     const { state, appliedMigrations } = migrateOfflineState(existing);
 
-    if (!existing || appliedMigrations.length > 0 || state.schemaVersion !== CURRENT_OFFLINE_SCHEMA_VERSION) {
+    if (
+      !existing ||
+      appliedMigrations.length > 0 ||
+      state.schemaVersion !== CURRENT_OFFLINE_SCHEMA_VERSION
+    ) {
       await this.adapter.save(state);
     }
 
@@ -735,7 +835,7 @@ export class OfflineStoreService {
   private buildSessionBoundaryMeta(
     state: PersistedOfflineState,
     policy: SessionBoundaryCleanupPolicy,
-    reason: SessionBoundaryReason
+    reason: SessionBoundaryReason,
   ) {
     const currentMeta = this.ensureMetaState(state);
     const calendarPreferences = currentMeta.calendarAlerts?.preferences;
@@ -747,7 +847,7 @@ export class OfflineStoreService {
       calendarAlerts: createEmptyCalendarDerivedState(calendarPreferences),
       reporting: createEmptyAdminReportingDerivedState(
         reportingSelection?.selectedWindow,
-        reportingSelection?.selectedPreset
+        reportingSelection?.selectedPreset,
       ),
       notifications: {
         readState: createEmptyNotificationReadState(),
@@ -767,19 +867,32 @@ export class OfflineStoreService {
   private trimNotificationRetention(state: PersistedOfflineState) {
     const notificationSnapshots = state.snapshots
       .filter((snapshot) => snapshot.entityType === 'NOTIFICATION')
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.entityId.localeCompare(left.entityId));
+      .sort(
+        (left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) ||
+          right.entityId.localeCompare(left.entityId),
+      );
 
-    const retainedIds = new Set(notificationSnapshots.slice(0, NOTIFICATION_RETENTION_LIMIT).map((snapshot) => snapshot.entityId));
-    state.snapshots = state.snapshots.filter(
-      (snapshot) => snapshot.entityType !== 'NOTIFICATION' || retainedIds.has(snapshot.entityId)
+    const retainedIds = new Set(
+      notificationSnapshots
+        .slice(0, NOTIFICATION_RETENTION_LIMIT)
+        .map((snapshot) => snapshot.entityId),
     );
-    state.inbox = state.inbox.filter((entry) => entry.entityType !== 'NOTIFICATION' || retainedIds.has(entry.entityId));
+    state.snapshots = state.snapshots.filter(
+      (snapshot) => snapshot.entityType !== 'NOTIFICATION' || retainedIds.has(snapshot.entityId),
+    );
+    state.inbox = state.inbox.filter(
+      (entry) => entry.entityType !== 'NOTIFICATION' || retainedIds.has(entry.entityId),
+    );
 
-    const currentReadState = this.ensureMetaState(state).notifications?.readState ?? createEmptyNotificationReadState();
+    const currentReadState =
+      this.ensureMetaState(state).notifications?.readState ?? createEmptyNotificationReadState();
     this.ensureMetaState(state).notifications = {
       readState: {
         readAtById: Object.fromEntries(
-          Object.entries(currentReadState.readAtById).filter(([notificationId]) => retainedIds.has(notificationId))
+          Object.entries(currentReadState.readAtById).filter(([notificationId]) =>
+            retainedIds.has(notificationId),
+          ),
         ),
       },
     };
@@ -803,7 +916,10 @@ class IndexedDbOfflinePersistenceAdapter implements OfflinePersistenceAdapter {
     }
 
     const database = await openDatabase(globalThis.indexedDB);
-    const transaction = database.transaction([OUTBOX_STORE, INBOX_STORE, SNAPSHOTS_STORE, SYNC_STATE_STORE], 'readonly');
+    const transaction = database.transaction(
+      [OUTBOX_STORE, INBOX_STORE, SNAPSHOTS_STORE, SYNC_STATE_STORE],
+      'readonly',
+    );
 
     const [outbox, inbox, snapshots, syncStateRecords] = await Promise.all([
       requestToPromise(transaction.objectStore(OUTBOX_STORE).getAll()),
@@ -828,7 +944,7 @@ class IndexedDbOfflinePersistenceAdapter implements OfflinePersistenceAdapter {
       snapshots,
       syncState: {
         checkpoints: Object.fromEntries(
-          checkpointRecords.map((record) => [record.key.replace('checkpoint:', ''), record.value])
+          checkpointRecords.map((record) => [record.key.replace('checkpoint:', ''), record.value]),
         ),
         meta: metaRecord?.value?.meta,
       },
@@ -841,7 +957,10 @@ class IndexedDbOfflinePersistenceAdapter implements OfflinePersistenceAdapter {
     }
 
     const database = await openDatabase(globalThis.indexedDB);
-    const transaction = database.transaction([OUTBOX_STORE, INBOX_STORE, SNAPSHOTS_STORE, SYNC_STATE_STORE], 'readwrite');
+    const transaction = database.transaction(
+      [OUTBOX_STORE, INBOX_STORE, SNAPSHOTS_STORE, SYNC_STATE_STORE],
+      'readwrite',
+    );
 
     const outboxStore = transaction.objectStore(OUTBOX_STORE);
     const inboxStore = transaction.objectStore(INBOX_STORE);
@@ -858,7 +977,10 @@ class IndexedDbOfflinePersistenceAdapter implements OfflinePersistenceAdapter {
     state.outbox.forEach((operation) => outboxStore.put(operation));
     state.inbox.forEach((entry) => inboxStore.put(entry));
     state.snapshots.forEach((snapshot) => snapshotsStore.put(snapshot));
-    syncStateStore.put({ key: META_KEY, value: { schemaVersion: state.schemaVersion, meta: state.syncState.meta } });
+    syncStateStore.put({
+      key: META_KEY,
+      value: { schemaVersion: state.schemaVersion, meta: state.syncState.meta },
+    });
 
     Object.entries(state.syncState.checkpoints).forEach(([entityType, checkpoint]) => {
       if (checkpoint) {
@@ -914,7 +1036,10 @@ function transactionDone(transaction: IDBTransaction) {
 }
 
 function createQueueSummaryMap() {
-  return Object.fromEntries(SYNC_QUEUE_STATUSES.map((status) => [status, 0])) as Record<SyncQueueStatus, number>;
+  return Object.fromEntries(SYNC_QUEUE_STATUSES.map((status) => [status, 0])) as Record<
+    SyncQueueStatus,
+    number
+  >;
 }
 
 function maxIsoDate(left: string | null, right: string | null) {
@@ -943,7 +1068,12 @@ function normalizeCheckpointAliases(checkpoint: OfflineSyncCheckpoint): OfflineS
   };
 }
 
-function rangesOverlap(leftFrom: string, leftTo: string | null, rightFrom: string, rightTo: string | null) {
+function rangesOverlap(
+  leftFrom: string,
+  leftTo: string | null,
+  rightFrom: string,
+  rightTo: string | null,
+) {
   const effectiveLeftTo = leftTo ?? '9999-12-31';
   const effectiveRightTo = rightTo ?? '9999-12-31';
   return leftFrom <= effectiveRightTo && rightFrom <= effectiveLeftTo;

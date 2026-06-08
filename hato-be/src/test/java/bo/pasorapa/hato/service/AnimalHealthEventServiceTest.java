@@ -5,12 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
+import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventRequest;
 import bo.pasorapa.hato.service.dto.vetvisit.VetVisitFilterDto;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -49,6 +53,9 @@ class AnimalHealthEventServiceTest {
     GanaderoRepository ganaderoRepository;
 
     @Inject
+    UserRepository userRepository;
+
+    @Inject
     AnimalHealthEventMapper animalHealthEventMapper;
 
     @Inject
@@ -59,6 +66,9 @@ class AnimalHealthEventServiceTest {
         QuarkusTransaction.requiringNew().run(() -> {
             integrationDatabaseCleaner.clean();
             ganaderoRepository.persist(buildGanadero());
+            userRepository.persist(buildUser(USER_ID, "animal-health-user"));
+            userRepository.persist(buildUser(UUID.fromString("99999999-9999-4999-8999-999999999999"), "animal-health-derived"));
+            userRepository.persist(buildUser(UUID.fromString("dddddddd-1111-4111-8111-dddddddddddd"), "animal-health-mismatch"));
         });
     }
 
@@ -306,10 +316,57 @@ class AnimalHealthEventServiceTest {
         assertEquals(1, response.total());
         assertEquals("VISIT-GLOBAL-700", response.items().get(0).visitId());
         assertEquals("GLOBAL", response.items().get(0).mode());
-        assertEquals("PROGRAMADA", response.items().get(0).status());
+        assertEquals("PENDING", response.items().get(0).status());
         assertEquals("Dra. Camila", response.items().get(0).veterinarian().name());
         assertEquals(2, response.items().get(0).targetAnimalCount());
         assertEquals(null, response.items().get(0).animalUuid());
+    }
+
+    @Test
+    void shouldCanonicalizeLegacyVetVisitStatusesAndFilterAliases() {
+        UUID animalUuid = UUID.fromString("18e6c94d-4f97-47f1-9c27-db25b2d28cc4");
+        seedAnimal(animalUuid);
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-PENDING", "SPECIFIC", "PROGRAMADA", "Dra. Camila", 1, "2026-05-10T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-ATTENDED", "SPECIFIC", "ATENDIDA", "Dra. Camila", 1, "2026-05-11T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-CANCELED", "SPECIFIC", "CANCELADA", "Dra. Camila", 1, "2026-05-12T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-RESCHEDULED", "SPECIFIC", "REPROGRAMADA", "Dra. Camila", 1, "2026-05-13T08:00:00");
+        seedFieldVetEvent(animalUuid, "VISIT-LEGACY-FINALIZED", "SPECIFIC", "FINALIZADA", "Dra. Camila", 1, "2026-05-14T08:00:00");
+
+        VetVisitFilterDto filter = new VetVisitFilterDto();
+        filter.mode = "SPECIFIC";
+        filter.page = 0;
+        filter.size = 20;
+
+        filter.status = "SCHEDULED";
+        var pending = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+        assertEquals(1, pending.total());
+        assertEquals("PENDING", pending.items().get(0).status());
+
+        filter.status = "ATENDIDA";
+        var attended = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+        assertEquals(1, attended.total());
+        assertEquals("ATTENDED", attended.items().get(0).status());
+
+        filter.status = "CANCELLED";
+        var canceled = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+        assertEquals(1, canceled.total());
+        assertEquals("CANCELED", canceled.items().get(0).status());
+
+        filter.status = "REPROGRAMADA";
+        var rescheduled = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+        assertEquals(1, rescheduled.total());
+        assertEquals("RESCHEDULED", rescheduled.items().get(0).status());
+
+        filter.status = "FINALIZADA";
+        var finalized = animalHealthEventService.getGlobalVisitsByOwner(OWNER_ID, filter);
+        assertEquals(1, finalized.total());
+        assertEquals("FINALIZED", finalized.items().get(0).status());
+
+        var repositoryQuery = new AnimalEventLogRepository.VetVisitQuery(
+                null, null, "SPECIFIC", "PENDING", null, null, 100, 0);
+        var repositoryRows = animalEventLogRepository.findFieldVetVisitsByOwner(OWNER_ID, repositoryQuery);
+        assertEquals(1, repositoryRows.size());
+        assertEquals("PROGRAMADA", repositoryRows.get(0).getVisitStatus());
     }
 
     @Test
@@ -528,12 +585,12 @@ class AnimalHealthEventServiceTest {
         var parent = items.stream().filter(item -> "VISIT-PARENT-900".equals(item.visitId())).findFirst().orElseThrow();
         var child = items.stream().filter(item -> "VISIT-CHILD-901".equals(item.visitId())).findFirst().orElseThrow();
 
-        assertEquals("ATENDIDA", parent.status());
+        assertEquals("ATTENDED", parent.status());
         assertEquals(null, parent.parentVisitId());
         assertEquals(null, parent.cancelReason());
         assertEquals("ACTIVE", parent.chainStatus());
         assertEquals("VISIT-PARENT-900", child.parentVisitId());
-        assertEquals("CANCELADA", child.status());
+        assertEquals("CANCELED", child.status());
         assertEquals("Animal vendido", child.cancelReason());
         assertEquals("CLOSED", child.chainStatus());
     }
@@ -573,12 +630,12 @@ class AnimalHealthEventServiceTest {
 
         assertEquals(2, chain.size());
         assertEquals("VISIT-CHAIN-PARENT", chain.get(0).visitId());
-        assertEquals("ATENDIDA", chain.get(0).status());
+        assertEquals("ATTENDED", chain.get(0).status());
         assertEquals(List.of("Reposo"), chain.get(0).treatmentPlan());
         assertEquals(null, chain.get(0).parentVisitId());
         assertEquals("VISIT-CHAIN-CHILD", chain.get(1).visitId());
         assertEquals("VISIT-CHAIN-PARENT", chain.get(1).parentVisitId());
-        assertEquals("CANCELADA", chain.get(1).status());
+        assertEquals("CANCELED", chain.get(1).status());
         assertEquals("Animal movido a otro potrero", chain.get(1).cancelReason());
     }
 
@@ -878,5 +935,17 @@ class AnimalHealthEventServiceTest {
         ganadero.setName("Ganadero Salud");
         ganadero.setActive(true);
         return ganadero;
+    }
+
+    private User buildUser(UUID id, String username) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(username);
+        user.setEmail(username + "@hato.bo");
+        user.setDisplayName(username);
+        user.setPasswordHash("test-hash");
+        user.setRole(Role.ADMIN);
+        user.setStatus(UserStatus.ACTIVE);
+        return user;
     }
 }

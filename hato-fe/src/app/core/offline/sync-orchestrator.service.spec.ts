@@ -5,6 +5,7 @@ import { InMemoryOfflinePersistenceAdapter } from './offline-store.migrations';
 import { OfflineStoreService } from './offline-store.service';
 import { SyncMetricsStore } from './sync-metrics.store';
 import { AuthService } from '../auth/data-access/auth.service';
+import type { OfflineEntityChangeBus } from './offline-entity-change-bus.service';
 import {
   CALENDAR_ALERTS_REFRESH_EVENT,
   MANUAL_SYNC_EVENT,
@@ -189,6 +190,171 @@ describe('SyncOrchestratorService', () => {
     });
   });
 
+  it('should emit one coalesced pull entity change per touched operational entity', async () => {
+    const store = createStore();
+    const metrics = new SyncMetricsStore();
+    const entityChangeBus = { emitBatch: vi.fn() };
+    const pull = vi.fn<SyncApiClient['pull']>(async ({ entityType }) => ({
+      entityType,
+      items:
+        entityType === 'USER'
+          ? [{ id: 'user-1', updatedAt: '2026-04-26T10:02:00.000Z' }]
+          : [{ id: 'ganadero-1', updatedAt: '2026-04-26T10:02:00.000Z' }],
+      nextCursor: buildCheckpoint(
+        entityType,
+        `${entityType.toLowerCase()}-cursor`,
+        '2026-04-26T10:02:00.000Z',
+      ),
+      hasMore: false,
+    }));
+
+    const service = new SyncOrchestratorService({
+      store,
+      apiClient: { push: vi.fn(), pull },
+      metricsStore: metrics,
+      offlineStatus: { isOnline: () => true },
+      authSession: { getAccessToken: () => 'token' },
+      now: () => '2026-04-26T10:03:00.000Z',
+      random: () => 0,
+      windowRef: window,
+      supportedEntities: ['USER', 'GANADERO'],
+      entityChangeBus: entityChangeBus as unknown as OfflineEntityChangeBus,
+    });
+
+    await service.syncNow('manual');
+
+    expect(entityChangeBus.emitBatch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'USER',
+          source: 'pull',
+          operation: 'sync-batch',
+          ids: ['user-1'],
+          count: 1,
+        }),
+        expect.objectContaining({
+          entity: 'GANADERO',
+          source: 'pull',
+          operation: 'sync-batch',
+          ids: ['ganadero-1'],
+          count: 1,
+        }),
+      ]),
+    );
+  });
+
+  it('should skip pull entity changes when pull pages are empty', async () => {
+    const store = createStore();
+    const entityChangeBus = { emitBatch: vi.fn() };
+    const service = new SyncOrchestratorService({
+      store,
+      apiClient: {
+        push: vi.fn(),
+        pull: vi.fn<SyncApiClient['pull']>(async ({ entityType }) => ({
+          entityType,
+          items: [],
+          nextCursor: buildCheckpoint(
+            entityType,
+            `${entityType.toLowerCase()}-cursor`,
+            '2026-04-26T10:02:00.000Z',
+          ),
+          hasMore: false,
+        })),
+      },
+      metricsStore: new SyncMetricsStore(),
+      offlineStatus: { isOnline: () => true },
+      authSession: { getAccessToken: () => 'token' },
+      now: () => '2026-04-26T10:03:00.000Z',
+      random: () => 0,
+      windowRef: window,
+      supportedEntities: ['USER'],
+      entityChangeBus: entityChangeBus as unknown as OfflineEntityChangeBus,
+    });
+
+    await service.syncNow('manual');
+
+    expect(entityChangeBus.emitBatch).not.toHaveBeenCalled();
+  });
+
+  it('should emit push and reconcile entity changes for acknowledged creates with server ids', async () => {
+    const store = createStore();
+    const entityChangeBus = { emitBatch: vi.fn() };
+    await store.enqueueOperation({
+      entityType: 'GANADERO',
+      entityId: 'operation-ganadero-create-1',
+      opType: 'CREATE',
+      payload: { name: 'Estancia Norte' },
+      clientCreatedAt: '2026-04-26T10:00:00.000Z',
+      clientUpdatedAt: '2026-04-26T10:00:00.000Z',
+      operationId: 'operation-ganadero-create-1',
+    });
+    await store.saveSnapshot({
+      key: 'GANADERO:operation-ganadero-create-1',
+      entityType: 'GANADERO',
+      entityId: 'operation-ganadero-create-1',
+      payload: {
+        id: 'pending:operation-ganadero-create-1',
+        name: 'Estancia Norte',
+        updatedAt: '2026-04-26T10:00:00.000Z',
+      },
+      updatedAt: '2026-04-26T10:00:00.000Z',
+      version: 0,
+    });
+
+    const service = new SyncOrchestratorService({
+      store,
+      apiClient: {
+        push: vi.fn<SyncApiClient['push']>(async () => ({
+          results: [
+            {
+              operationId: 'operation-ganadero-create-1',
+              entityType: 'GANADERO',
+              entityId: 'ganadero-server-1',
+              classification: 'no_conflict',
+            },
+          ],
+        })),
+        pull: vi.fn<SyncApiClient['pull']>(async ({ entityType }) => ({
+          entityType,
+          items: [],
+          nextCursor: buildCheckpoint(
+            entityType,
+            `${entityType.toLowerCase()}-cursor`,
+            '2026-04-26T10:02:00.000Z',
+          ),
+          hasMore: false,
+        })),
+      },
+      metricsStore: new SyncMetricsStore(),
+      offlineStatus: { isOnline: () => true },
+      authSession: { getAccessToken: () => 'token' },
+      now: () => '2026-04-26T10:03:00.000Z',
+      random: () => 0,
+      windowRef: window,
+      supportedEntities: ['GANADERO'],
+      entityChangeBus: entityChangeBus as unknown as OfflineEntityChangeBus,
+    });
+
+    await service.syncNow('manual');
+
+    expect(entityChangeBus.emitBatch).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'GANADERO',
+          source: 'push',
+          operation: 'sync-batch',
+          ids: ['ganadero-server-1'],
+        }),
+        expect.objectContaining({
+          entity: 'GANADERO',
+          source: 'reconcile',
+          operation: 'snapshot-upsert',
+          ids: ['operation-ganadero-create-1', 'ganadero-server-1'],
+        }),
+      ]),
+    );
+  });
+
   it('should trigger one sync on startup and another on reconnect when connectivity returns', async () => {
     const store = createStore();
     const metrics = new SyncMetricsStore();
@@ -221,7 +387,7 @@ describe('SyncOrchestratorService', () => {
     const store = createStore();
     const metrics = new SyncMetricsStore();
     const { client, pull } = createClient();
-    let online = true;
+    const online = true;
     let accessToken: string | null = null;
 
     const service = new SyncOrchestratorService({
@@ -279,7 +445,7 @@ describe('SyncOrchestratorService', () => {
       expect(metrics.snapshot().lastMessage).toBe(
         status === 'expired'
           ? 'La sesión offline expiró. Iniciá sesión nuevamente antes de sincronizar.'
-          : 'Este dispositivo requiere reautenticación antes de sincronizar.'
+          : 'Este dispositivo requiere reautenticación antes de sincronizar.',
       );
     }
   });
@@ -290,7 +456,9 @@ describe('SyncOrchestratorService', () => {
     triggerManualSync({ dispatchEvent } as never);
 
     expect(dispatchEvent).toHaveBeenCalledTimes(1);
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    );
   });
 
   it('should emit calendar refresh only after a successful pull cycle', async () => {
@@ -300,18 +468,21 @@ describe('SyncOrchestratorService', () => {
     const service = new SyncOrchestratorService({
       store,
       apiClient: {
-        push: vi.fn(async () => ({ results: [] } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL',
-          items: [],
-          nextCursor: {
-            entityType: 'ANIMAL',
-            cursorUpdatedAt: '2026-04-26T10:03:00.000Z',
-            cursorId: 'cursor-1',
-            lastSuccessAt: '2026-04-26T10:03:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+        push: vi.fn(async () => ({ results: [] }) satisfies PushSyncResponse),
+        pull: vi.fn(
+          async () =>
+            ({
+              entityType: 'ANIMAL',
+              items: [],
+              nextCursor: {
+                entityType: 'ANIMAL',
+                cursorUpdatedAt: '2026-04-26T10:03:00.000Z',
+                cursorId: 'cursor-1',
+                lastSuccessAt: '2026-04-26T10:03:00.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -324,9 +495,15 @@ describe('SyncOrchestratorService', () => {
 
     await service.syncNow('manual');
 
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: CALENDAR_ALERTS_REFRESH_EVENT }));
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: NOTIFICATIONS_REFRESH_EVENT }));
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: REPORTING_REFRESH_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: CALENDAR_ALERTS_REFRESH_EVENT }),
+    );
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: NOTIFICATIONS_REFRESH_EVENT }),
+    );
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: REPORTING_REFRESH_EVENT }),
+    );
   });
 
   it('should preserve cached notification snapshots when a manual refresh is requested offline', async () => {
@@ -368,7 +545,9 @@ describe('SyncOrchestratorService', () => {
 
     expect(apiClient.push).not.toHaveBeenCalled();
     expect(apiClient.pull).not.toHaveBeenCalled();
-    expect((await store.listSnapshots('NOTIFICATION')).map((snapshot) => snapshot.entityId)).toEqual(['notification-a']);
+    expect(
+      (await store.listSnapshots('NOTIFICATION')).map((snapshot) => snapshot.entityId),
+    ).toEqual(['notification-a']);
   });
 
   it('should push and pull ANIMAL_REPRODUCTION_EVENT operations without duplicating replayed snapshots', async () => {
@@ -382,7 +561,11 @@ describe('SyncOrchestratorService', () => {
       payload: {
         animalUuid: 'animal-1',
         reproductionEventType: 'BIRTH',
-        metadata: { offspringCount: 1, motherAnimalUuid: 'animal-1', offspringAnimalUuids: ['calf-1'] },
+        metadata: {
+          offspringCount: 1,
+          motherAnimalUuid: 'animal-1',
+          offspringAnimalUuids: ['calf-1'],
+        },
       },
       baseVersion: 0,
       clientCreatedAt: '2026-04-26T10:00:00.000Z',
@@ -393,35 +576,41 @@ describe('SyncOrchestratorService', () => {
     const service = new SyncOrchestratorService({
       store,
       apiClient: {
-        push: vi.fn(async () => ({
-          results: [
-            {
-              operationId: 'repro-event-1',
+        push: vi.fn(
+          async () =>
+            ({
+              results: [
+                {
+                  operationId: 'repro-event-1',
+                  entityType: 'ANIMAL_REPRODUCTION_EVENT',
+                  entityId: 'repro-event-1',
+                  classification: 'no_conflict',
+                  serverVersion: 0,
+                },
+              ],
+            }) satisfies PushSyncResponse,
+        ),
+        pull: vi.fn(
+          async () =>
+            ({
               entityType: 'ANIMAL_REPRODUCTION_EVENT',
-              entityId: 'repro-event-1',
-              classification: 'no_conflict',
-              serverVersion: 0,
-            },
-          ],
-        } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL_REPRODUCTION_EVENT',
-          items: [
-            {
-              id: 'repro-event-1',
-              animalUuid: 'animal-1',
-              reproductionEventType: 'BIRTH',
-              updatedAt: '2026-04-26T10:02:00.000Z',
-            },
-          ],
-          nextCursor: {
-            entityType: 'ANIMAL_REPRODUCTION_EVENT',
-            cursorUpdatedAt: '2026-04-26T10:02:00.000Z',
-            cursorId: 'repro-event-1',
-            lastSuccessAt: '2026-04-26T10:03:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+              items: [
+                {
+                  id: 'repro-event-1',
+                  animalUuid: 'animal-1',
+                  reproductionEventType: 'BIRTH',
+                  updatedAt: '2026-04-26T10:02:00.000Z',
+                },
+              ],
+              nextCursor: {
+                entityType: 'ANIMAL_REPRODUCTION_EVENT',
+                cursorUpdatedAt: '2026-04-26T10:02:00.000Z',
+                cursorId: 'repro-event-1',
+                lastSuccessAt: '2026-04-26T10:03:00.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -517,7 +706,9 @@ describe('SyncOrchestratorService', () => {
     const pages = buildAnimalPullPages();
     let pullIndex = 0;
 
-    await store.saveCheckpoint(buildCheckpoint('ANIMAL', 'animal-baseline', '2026-04-28T09:59:00.000Z'));
+    await store.saveCheckpoint(
+      buildCheckpoint('ANIMAL', 'animal-baseline', '2026-04-28T09:59:00.000Z'),
+    );
 
     const service = new SyncOrchestratorService({
       store,
@@ -539,7 +730,11 @@ describe('SyncOrchestratorService', () => {
 
     await service.syncNow('manual');
 
-    expect(callSequence).toEqual(['pull:animal-baseline', 'pull:animal-page-1', 'pull:animal-page-2']);
+    expect(callSequence).toEqual([
+      'pull:animal-baseline',
+      'pull:animal-page-1',
+      'pull:animal-page-2',
+    ]);
     await expectSnapshotIds(store, 'ANIMAL', ['animal-page-1', 'animal-page-2', 'animal-page-3']);
     await expectCheckpointCursor(store, 'ANIMAL', {
       cursorId: 'animal-page-3',
@@ -562,8 +757,20 @@ describe('SyncOrchestratorService', () => {
     let nowValue = '2026-04-28T10:06:00.000Z';
 
     const operations = [
-      buildOperation({ entityType: 'USER', entityId: 'user-1', opType: 'STATUS_UPDATE', operationId: 'user-op-1', payload: { status: 'INACTIVE' } }),
-      buildOperation({ entityType: 'ANIMAL', entityId: 'animal-1', opType: 'UPDATE', operationId: 'animal-op-1', payload: { tag: 'BO-2200' } }),
+      buildOperation({
+        entityType: 'USER',
+        entityId: 'user-1',
+        opType: 'STATUS_UPDATE',
+        operationId: 'user-op-1',
+        payload: { status: 'INACTIVE' },
+      }),
+      buildOperation({
+        entityType: 'ANIMAL',
+        entityId: 'animal-1',
+        opType: 'UPDATE',
+        operationId: 'animal-op-1',
+        payload: { tag: 'BO-2200' },
+      }),
     ];
 
     for (const operation of operations) {
@@ -587,16 +794,30 @@ describe('SyncOrchestratorService', () => {
       if (entityType === 'USER') {
         return {
           entityType,
-          items: [{ id: 'user-1', status: 'INACTIVE', version: 2, updatedAt: '2026-04-28T10:06:00.000Z' }],
-          nextCursor: { entityType, cursorId: 'user-1', cursorUpdatedAt: '2026-04-28T10:06:00.000Z', lastSuccessAt: '2026-04-28T10:06:00.000Z' },
+          items: [
+            { id: 'user-1', status: 'INACTIVE', version: 2, updatedAt: '2026-04-28T10:06:00.000Z' },
+          ],
+          nextCursor: {
+            entityType,
+            cursorId: 'user-1',
+            cursorUpdatedAt: '2026-04-28T10:06:00.000Z',
+            lastSuccessAt: '2026-04-28T10:06:00.000Z',
+          },
           hasMore: false,
         } satisfies PullSyncResponse;
       }
 
       return {
         entityType,
-        items: [{ uuid: 'animal-1', tag: 'BO-2200', version: 3, updatedAt: '2026-04-28T10:06:30.000Z' }],
-        nextCursor: { entityType, cursorId: 'animal-1', cursorUpdatedAt: '2026-04-28T10:06:30.000Z', lastSuccessAt: '2026-04-28T10:06:30.000Z' },
+        items: [
+          { uuid: 'animal-1', tag: 'BO-2200', version: 3, updatedAt: '2026-04-28T10:06:30.000Z' },
+        ],
+        nextCursor: {
+          entityType,
+          cursorId: 'animal-1',
+          cursorUpdatedAt: '2026-04-28T10:06:30.000Z',
+          lastSuccessAt: '2026-04-28T10:06:30.000Z',
+        },
         hasMore: false,
       } satisfies PullSyncResponse;
     });
@@ -618,7 +839,9 @@ describe('SyncOrchestratorService', () => {
     await service.syncNow('manual');
 
     const outbox = await store.listOutbox();
-    expect(outbox.map((operation) => [operation.operationId, operation.status, operation.attempts])).toEqual([
+    expect(
+      outbox.map((operation) => [operation.operationId, operation.status, operation.attempts]),
+    ).toEqual([
       ['user-op-1', 'acked', 2],
       ['animal-op-1', 'acked', 2],
     ]);
@@ -836,7 +1059,7 @@ describe('SyncOrchestratorService', () => {
         id: 'ganadero-server-1',
         businessIdentifier: 'BO-100',
         name: 'Estancia Norte',
-      })
+      }),
     );
 
     expect(await store.getCheckpoint('USER')).toEqual({
@@ -888,7 +1111,9 @@ describe('SyncOrchestratorService', () => {
     const metrics = new SyncMetricsStore();
     let page = 0;
 
-    await store.saveCheckpoint(buildCheckpoint('ANIMAL', 'overflow-baseline', '2026-04-28T09:50:00.000Z'));
+    await store.saveCheckpoint(
+      buildCheckpoint('ANIMAL', 'overflow-baseline', '2026-04-28T09:50:00.000Z'),
+    );
 
     const pull = vi.fn<SyncApiClient['pull']>(async () => buildOverflowPullPage(++page));
     const service = new SyncOrchestratorService({
@@ -907,7 +1132,7 @@ describe('SyncOrchestratorService', () => {
     });
 
     await expect(service.syncNow('reconnect')).rejects.toThrow(
-      `Sync harness pagination overflow after ${SYNC_HARNESS_MAX_HAS_MORE_PAGES} pages for ANIMAL.`
+      `Sync harness pagination overflow after ${SYNC_HARNESS_MAX_HAS_MORE_PAGES} pages for ANIMAL.`,
     );
     expect(pull).toHaveBeenCalledTimes(SYNC_HARNESS_MAX_HAS_MORE_PAGES);
   });
@@ -928,18 +1153,21 @@ describe('SyncOrchestratorService', () => {
     const service = new SyncOrchestratorService({
       store,
       apiClient: {
-        push: vi.fn(async () => ({ results: [] } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL',
-          items: [],
-          nextCursor: {
-            entityType: 'ANIMAL',
-            cursorUpdatedAt: '2026-04-26T10:03:06.000Z',
-            cursorId: 'cursor-1',
-            lastSuccessAt: '2026-04-26T10:03:06.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+        push: vi.fn(async () => ({ results: [] }) satisfies PushSyncResponse),
+        pull: vi.fn(
+          async () =>
+            ({
+              entityType: 'ANIMAL',
+              items: [],
+              nextCursor: {
+                entityType: 'ANIMAL',
+                cursorUpdatedAt: '2026-04-26T10:03:06.000Z',
+                cursorId: 'cursor-1',
+                lastSuccessAt: '2026-04-26T10:03:06.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -985,19 +1213,22 @@ describe('SyncOrchestratorService', () => {
           () =>
             new Promise<PushSyncResponse>((resolve) => {
               resolvePush = resolve;
-            })
+            }),
         ),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL',
-          items: [],
-          nextCursor: {
-            entityType: 'ANIMAL',
-            cursorUpdatedAt: '2026-04-26T10:05:00.000Z',
-            cursorId: 'cursor-1',
-            lastSuccessAt: '2026-04-26T10:05:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+        pull: vi.fn(
+          async () =>
+            ({
+              entityType: 'ANIMAL',
+              items: [],
+              nextCursor: {
+                entityType: 'ANIMAL',
+                cursorUpdatedAt: '2026-04-26T10:05:00.000Z',
+                cursorId: 'cursor-1',
+                lastSuccessAt: '2026-04-26T10:05:00.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -1211,45 +1442,58 @@ describe('SyncOrchestratorService', () => {
     const service = new SyncOrchestratorService({
       store,
       apiClient: {
-        push: vi.fn(async () => ({
-          results: [
-            {
-              operationId: 'animal-conflict-op-1',
-              entityType: 'ANIMAL',
-              entityId: 'animal-conflict-1',
-              classification: 'validation_error',
-              conflict: {
-                entityId: 'animal-conflict-1',
-                clientVersion: 1,
-                serverVersion: 2,
-                serverStateVersion: 2,
-                reason: 'ANIMAL_OWNER_GANADERO_ID_REQUIRED',
-                resolutionHint: 'manual_resolution',
-                policyKey: 'offline-conflict-resolution/v2/ANIMAL/UPDATE',
-                allowedActions: ['accept_server', 'retry_local', 'discard_local'],
-                policy: {
+        push: vi.fn(
+          async () =>
+            ({
+              results: [
+                {
+                  operationId: 'animal-conflict-op-1',
                   entityType: 'ANIMAL',
-                  opType: 'UPDATE',
-                  allowedActions: ['accept_server', 'retry_local', 'discard_local'],
-                  policyKey: 'offline-conflict-resolution/v2/ANIMAL/UPDATE',
-                  policyVersion: 'v2',
+                  entityId: 'animal-conflict-1',
+                  classification: 'validation_error',
+                  conflict: {
+                    entityId: 'animal-conflict-1',
+                    clientVersion: 1,
+                    serverVersion: 2,
+                    serverStateVersion: 2,
+                    reason: 'ANIMAL_OWNER_GANADERO_ID_REQUIRED',
+                    resolutionHint: 'manual_resolution',
+                    policyKey: 'offline-conflict-resolution/v2/ANIMAL/UPDATE',
+                    allowedActions: ['accept_server', 'retry_local', 'discard_local'],
+                    policy: {
+                      entityType: 'ANIMAL',
+                      opType: 'UPDATE',
+                      allowedActions: ['accept_server', 'retry_local', 'discard_local'],
+                      policyKey: 'offline-conflict-resolution/v2/ANIMAL/UPDATE',
+                      policyVersion: 'v2',
+                    },
+                    diffFields: [
+                      {
+                        path: 'tag',
+                        localValue: 'BO-9002',
+                        serverValue: 'BO-9001',
+                        severity: 'medium',
+                      },
+                    ],
+                  },
                 },
-                diffFields: [{ path: 'tag', localValue: 'BO-9002', serverValue: 'BO-9001', severity: 'medium' }],
+              ],
+            }) satisfies PushSyncResponse,
+        ),
+        pull: vi.fn(
+          async () =>
+            ({
+              entityType: 'ANIMAL',
+              items: [],
+              nextCursor: {
+                entityType: 'ANIMAL',
+                cursorUpdatedAt: '2026-04-28T10:01:00.000Z',
+                cursorId: 'animal-cursor',
+                lastSuccessAt: '2026-04-28T10:01:00.000Z',
               },
-            },
-          ],
-        } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL',
-          items: [],
-          nextCursor: {
-            entityType: 'ANIMAL',
-            cursorUpdatedAt: '2026-04-28T10:01:00.000Z',
-            cursorId: 'animal-cursor',
-            lastSuccessAt: '2026-04-28T10:01:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -1264,9 +1508,13 @@ describe('SyncOrchestratorService', () => {
 
     const operation = await store.getOperation('animal-conflict-op-1');
     expect(operation?.status).toBe('conflict');
-    expect(operation?.conflict?.policy?.policyKey).toBe('offline-conflict-resolution/v2/ANIMAL/UPDATE');
+    expect(operation?.conflict?.policy?.policyKey).toBe(
+      'offline-conflict-resolution/v2/ANIMAL/UPDATE',
+    );
     expect(operation?.conflict?.diffFields).toHaveLength(1);
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'sync-conflicts:refresh' }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'sync-conflicts:refresh' }),
+    );
   });
 
   it('should keep the canonical animal uuid snapshot key untouched when an ANIMAL CREATE is acknowledged with the same entityId', async () => {
@@ -1305,36 +1553,42 @@ describe('SyncOrchestratorService', () => {
     const service = new SyncOrchestratorService({
       store,
       apiClient: {
-        push: vi.fn(async () => ({
-          results: [
-            {
-              operationId: 'animal-create-op-1',
+        push: vi.fn(
+          async () =>
+            ({
+              results: [
+                {
+                  operationId: 'animal-create-op-1',
+                  entityType: 'ANIMAL',
+                  entityId: 'animal-uuid-create-1',
+                  classification: 'no_conflict',
+                  serverVersion: 0,
+                },
+              ],
+            }) satisfies PushSyncResponse,
+        ),
+        pull: vi.fn(
+          async () =>
+            ({
               entityType: 'ANIMAL',
-              entityId: 'animal-uuid-create-1',
-              classification: 'no_conflict',
-              serverVersion: 0,
-            },
-          ],
-        } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL',
-          items: [
-            {
-              uuid: 'animal-uuid-create-1',
-              ownerGanaderoId: 'ganadero-uuid-1',
-              arete: 'AR-900',
-              version: 0,
-              updatedAt: '2026-04-26T10:16:00.000Z',
-            },
-          ],
-          nextCursor: {
-            entityType: 'ANIMAL',
-            cursorUpdatedAt: '2026-04-26T10:16:00.000Z',
-            cursorId: 'animal-uuid-create-1',
-            lastSuccessAt: '2026-04-26T10:17:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+              items: [
+                {
+                  uuid: 'animal-uuid-create-1',
+                  ownerGanaderoId: 'ganadero-uuid-1',
+                  arete: 'AR-900',
+                  version: 0,
+                  updatedAt: '2026-04-26T10:16:00.000Z',
+                },
+              ],
+              nextCursor: {
+                entityType: 'ANIMAL',
+                cursorUpdatedAt: '2026-04-26T10:16:00.000Z',
+                cursorId: 'animal-uuid-create-1',
+                lastSuccessAt: '2026-04-26T10:17:00.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },
@@ -1390,28 +1644,38 @@ describe('SyncOrchestratorService', () => {
       store,
       imageBinaryStore: imageBinaryStore as never,
       apiClient: {
-        push: vi.fn(async () => ({
-          results: [
-            {
-              operationId: 'image-conflict-op-1',
+        push: vi.fn(
+          async () =>
+            ({
+              results: [
+                {
+                  operationId: 'image-conflict-op-1',
+                  entityType: 'ANIMAL_IMAGE',
+                  entityId: 'image-conflict-1',
+                  classification: 'version_conflict',
+                  conflict: {
+                    reason: 'Imagen duplicada',
+                    resolutionHint: 'manual_resolution',
+                    serverVersion: 2,
+                  },
+                },
+              ],
+            }) satisfies PushSyncResponse,
+        ),
+        pull: vi.fn(
+          async () =>
+            ({
               entityType: 'ANIMAL_IMAGE',
-              entityId: 'image-conflict-1',
-              classification: 'version_conflict',
-              conflict: { reason: 'Imagen duplicada', resolutionHint: 'manual_resolution', serverVersion: 2 },
-            },
-          ],
-        } satisfies PushSyncResponse)),
-        pull: vi.fn(async () => ({
-          entityType: 'ANIMAL_IMAGE',
-          items: [],
-          nextCursor: {
-            entityType: 'ANIMAL_IMAGE',
-            cursorUpdatedAt: '2026-04-29T10:01:00.000Z',
-            cursorId: 'image-cursor',
-            lastSuccessAt: '2026-04-29T10:01:00.000Z',
-          },
-          hasMore: false,
-        } satisfies PullSyncResponse)),
+              items: [],
+              nextCursor: {
+                entityType: 'ANIMAL_IMAGE',
+                cursorUpdatedAt: '2026-04-29T10:01:00.000Z',
+                cursorId: 'image-cursor',
+                lastSuccessAt: '2026-04-29T10:01:00.000Z',
+              },
+              hasMore: false,
+            }) satisfies PullSyncResponse,
+        ),
       },
       metricsStore: metrics,
       offlineStatus: { isOnline: () => true },

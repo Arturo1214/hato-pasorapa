@@ -6,9 +6,13 @@ import { ApplicationConfigService } from '../config/application-config.service';
 import { OfflineStatusService } from './offline-status.service';
 import {
   DEFAULT_OFFLINE_IMAGE_BINARY_STORE,
-  OfflineImageBinaryStoreService,
+  type OfflineImageBinaryStoreService,
 } from './offline-image-binary-store.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from './offline-store.service';
+import {
+  OfflineEntityChangeBus,
+  type OfflineEntityChange,
+} from './offline-entity-change-bus.service';
+import { DEFAULT_OFFLINE_STORE_SERVICE, type OfflineStoreService } from './offline-store.service';
 import {
   type AnimalImageOfflineCreatePayload,
   type ConflictAuditEntry,
@@ -33,23 +37,33 @@ export const NOTIFICATIONS_REFRESH_EVENT = 'notifications:refresh';
 export const REPORTING_REFRESH_EVENT = 'reporting:refresh';
 export const SYNC_CONFLICTS_REFRESH_EVENT = 'sync-conflicts:refresh';
 
-export function triggerManualSync(windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window) {
+export function triggerManualSync(
+  windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window,
+) {
   windowRef?.dispatchEvent(new CustomEvent(MANUAL_SYNC_EVENT));
 }
 
-export function triggerCalendarAlertsRefresh(windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window) {
+export function triggerCalendarAlertsRefresh(
+  windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window,
+) {
   windowRef?.dispatchEvent(new CustomEvent(CALENDAR_ALERTS_REFRESH_EVENT));
 }
 
-export function triggerNotificationsRefresh(windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window) {
+export function triggerNotificationsRefresh(
+  windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window,
+) {
   windowRef?.dispatchEvent(new CustomEvent(NOTIFICATIONS_REFRESH_EVENT));
 }
 
-export function triggerReportingRefresh(windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window) {
+export function triggerReportingRefresh(
+  windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window,
+) {
   windowRef?.dispatchEvent(new CustomEvent(REPORTING_REFRESH_EVENT));
 }
 
-export function triggerSyncConflictsRefresh(windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window) {
+export function triggerSyncConflictsRefresh(
+  windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window,
+) {
   windowRef?.dispatchEvent(new CustomEvent(SYNC_CONFLICTS_REFRESH_EVENT));
 }
 
@@ -87,7 +101,10 @@ export interface PullSyncResponse {
 
 export interface SyncApiClient {
   push(request: { operations: OfflineOperationEnvelope[] }): Promise<PushSyncResponse>;
-  pull(request: { entityType: OfflineEntityType; cursor: OfflineSyncCheckpoint | null }): Promise<PullSyncResponse>;
+  pull(request: {
+    entityType: OfflineEntityType;
+    cursor: OfflineSyncCheckpoint | null;
+  }): Promise<PullSyncResponse>;
 }
 
 export interface OnlineStatusReader {
@@ -104,6 +121,7 @@ export interface SyncOrchestratorDependencies {
   imageBinaryStore: OfflineImageBinaryStoreService;
   apiClient: SyncApiClient;
   metricsStore: SyncMetricsStore;
+  entityChangeBus: OfflineEntityChangeBus;
   offlineStatus: OnlineStatusReader;
   authSession: AuthSessionReader;
   retryPolicy: RetryPolicy;
@@ -118,6 +136,7 @@ export class SyncOrchestratorService {
   private readonly apiClient: SyncApiClient;
   private readonly imageBinaryStore: OfflineImageBinaryStoreService;
   private readonly metricsStore: SyncMetricsStore;
+  private readonly entityChangeBus: OfflineEntityChangeBus;
   private readonly offlineStatus: OnlineStatusReader;
   private readonly authSession: AuthSessionReader;
   private readonly retryPolicy: RetryPolicy;
@@ -133,8 +152,10 @@ export class SyncOrchestratorService {
     this.imageBinaryStore = dependencies.imageBinaryStore ?? DEFAULT_OFFLINE_IMAGE_BINARY_STORE;
     this.apiClient = dependencies.apiClient ?? inject(SyncApiService);
     this.metricsStore = dependencies.metricsStore ?? inject(SyncMetricsStore);
+    this.entityChangeBus = dependencies.entityChangeBus ?? injectOrCreateOfflineEntityChangeBus();
     this.offlineStatus =
-      dependencies.offlineStatus ?? ({ isOnline: () => inject(OfflineStatusService).isOnline() } satisfies OnlineStatusReader);
+      dependencies.offlineStatus ??
+      ({ isOnline: () => inject(OfflineStatusService).isOnline() } satisfies OnlineStatusReader);
     this.authSession =
       dependencies.authSession ??
       ({
@@ -169,7 +190,12 @@ export class SyncOrchestratorService {
     const cycleStartedAt = this.now();
     const sessionStatus = this.authSession.getOfflineSessionStatus?.(cycleStartedAt) ?? 'active';
 
-    if (this.syncing || !this.offlineStatus.isOnline() || !this.authSession.getAccessToken() || sessionStatus !== 'active') {
+    if (
+      this.syncing ||
+      !this.offlineStatus.isOnline() ||
+      !this.authSession.getAccessToken() ||
+      sessionStatus !== 'active'
+    ) {
       if (sessionStatus !== 'active') {
         this.metricsStore.patch({
           lastMessage: describeBlockedSession(sessionStatus),
@@ -188,6 +214,7 @@ export class SyncOrchestratorService {
     let pushDurationMs: number | null = null;
     let pullDurationMs: number | null = null;
     let runtimeContext: SyncCycleRuntimeContext = createRuntimeContext(_trigger, []);
+    const entityChanges: Array<Omit<OfflineEntityChange, 'occurredAt'>> = [];
     this.metricsStore.patch({ syncing: true });
     await this.publishRuntimeSnapshot(_trigger, runtimeContext, {
       startedAt: cycleStartedAt,
@@ -222,14 +249,36 @@ export class SyncOrchestratorService {
         });
 
         try {
-          const hydratedOperations = await Promise.all(eligibleOperations.map((operation) => this.hydratePushOperation(operation)));
+          const hydratedOperations = await Promise.all(
+            eligibleOperations.map((operation) => this.hydratePushOperation(operation)),
+          );
           const pushResponse = await this.apiClient.push({ operations: hydratedOperations });
           pushDurationMs = diffMs(pushStartedAt, this.now());
 
           for (const result of pushResponse.results) {
             if (result.classification === 'no_conflict') {
               success += 1;
-              await this.reconcileAcknowledgedCreateSnapshot(result.operationId, result.entityType, result.entityId, hydratedOperations);
+              entityChanges.push({
+                entity: result.entityType,
+                source: 'push',
+                operation: 'sync-batch',
+                ids: result.entityId ? [result.entityId] : undefined,
+                count: 1,
+              });
+              const reconciliationIds = await this.reconcileAcknowledgedCreateSnapshot(
+                result.operationId,
+                result.entityType,
+                result.entityId,
+                hydratedOperations,
+              );
+              if (reconciliationIds) {
+                entityChanges.push({
+                  entity: result.entityType,
+                  source: 'reconcile',
+                  operation: 'snapshot-upsert',
+                  ids: reconciliationIds,
+                });
+              }
               if (result.entityType === 'ANIMAL_IMAGE') {
                 // Image binaries are purged only after server ack. Conflict/failed paths keep the blob so media badges
                 // can still surface local-only/conflict state and future retry/resolution has the original payload.
@@ -240,17 +289,22 @@ export class SyncOrchestratorService {
             }
 
             failed += 1;
-            const requiresManualResolution = result.classification === 'version_conflict' || result.conflict?.resolutionHint === 'manual_resolution';
+            const requiresManualResolution =
+              result.classification === 'version_conflict' ||
+              result.conflict?.resolutionHint === 'manual_resolution';
             if (requiresManualResolution) {
-              lastMessage = result.conflict?.reason ?? 'La versión remota cambió y requiere refresh manual.';
+              lastMessage =
+                result.conflict?.reason ?? 'La versión remota cambió y requiere refresh manual.';
               manualRefreshRequired = result.conflict?.resolutionHint === 'manual_refresh';
               await this.store.markConflict(
                 result.operationId,
                 {
                   code: 'VERSION_CONFLICT',
-                  message: result.conflict?.reason ?? 'La versión remota cambió y requiere refresh manual.',
+                  message:
+                    result.conflict?.reason ??
+                    'La versión remota cambió y requiere refresh manual.',
                 },
-                this.mapConflict(result.conflict)
+                this.mapConflict(result.conflict),
               );
               await this.store.saveConflictAudit(result.operationId, {
                 eventType: 'DETECTED',
@@ -261,16 +315,18 @@ export class SyncOrchestratorService {
               continue;
             }
 
-            lastMessage = result.conflict?.reason ?? 'La operación offline fue rechazada por validación.';
+            lastMessage =
+              result.conflict?.reason ?? 'La operación offline fue rechazada por validación.';
             await this.store.markFailed(result.operationId, {
               code: 'VALIDATION_ERROR',
-              message: result.conflict?.reason ?? 'La operación offline fue rechazada por validación.',
+              message:
+                result.conflict?.reason ?? 'La operación offline fue rechazada por validación.',
             });
           }
         } catch {
           failed += eligibleOperations.length;
           const inFlightOperations = (await this.store.listOutbox()).filter((operation) =>
-            eligibleOperations.some((eligible) => eligible.operationId === operation.operationId)
+            eligibleOperations.some((eligible) => eligible.operationId === operation.operationId),
           );
 
           for (const operation of inFlightOperations) {
@@ -282,7 +338,7 @@ export class SyncOrchestratorService {
                   code: 'TRANSIENT_SYNC_ERROR',
                   message: 'La sincronización falló temporalmente. Se reintentará automáticamente.',
                 },
-                retryDecision.nextAttemptAt
+                retryDecision.nextAttemptAt,
               );
               continue;
             }
@@ -329,7 +385,20 @@ export class SyncOrchestratorService {
             ...runtimeContext,
             hasMoreObserved: runtimeContext.hasMoreObserved || response.hasMore,
           };
-          await this.store.applyPullResponse(entityType, response.items, response.nextCursor);
+          const pullChanges = await this.store.applyPullResponse(
+            entityType,
+            response.items,
+            response.nextCursor,
+          );
+          if (pullChanges.count > 0) {
+            entityChanges.push({
+              entity: entityType,
+              source: 'pull',
+              operation: 'sync-batch',
+              ids: pullChanges.ids,
+              count: pullChanges.count,
+            });
+          }
 
           if (!response.hasMore) {
             break;
@@ -346,6 +415,10 @@ export class SyncOrchestratorService {
       }
       pullDurationMs = diffMs(pullStartedAt, this.now());
 
+      if (entityChanges.length > 0) {
+        this.entityChangeBus.emitBatch(entityChanges);
+      }
+
       triggerCalendarAlertsRefresh(this.windowRef);
       triggerNotificationsRefresh(this.windowRef);
       triggerReportingRefresh(this.windowRef);
@@ -361,7 +434,9 @@ export class SyncOrchestratorService {
         lastSyncAt: finishedAt,
         lastMessage:
           lastMessage ??
-          (success > 0 || pending > 0 ? 'Sincronización central completada.' : this.metricsStore.snapshot().lastMessage),
+          (success > 0 || pending > 0
+            ? 'Sincronización central completada.'
+            : this.metricsStore.snapshot().lastMessage),
         manualRefreshRequired,
         selectedWindow: this.metricsStore.snapshot().selectedWindow,
         dictionary: this.metricsStore.snapshot().dictionary,
@@ -391,9 +466,11 @@ export class SyncOrchestratorService {
       totalDurationMs: number | null;
       pushDurationMs: number | null;
       pullDurationMs: number | null;
-    }
+    },
   ) {
-    this.metricsStore.updateRuntime(await this.buildRuntimeSnapshot(trigger, runtimeContext, cycle));
+    this.metricsStore.updateRuntime(
+      await this.buildRuntimeSnapshot(trigger, runtimeContext, cycle),
+    );
   }
 
   private async buildRuntimeSnapshot(
@@ -405,11 +482,13 @@ export class SyncOrchestratorService {
       totalDurationMs: number | null;
       pushDurationMs: number | null;
       pullDurationMs: number | null;
-    }
+    },
   ): Promise<SyncRuntimeSnapshotV2> {
     const queue = await this.store.summarizeOutboxByStatusAndEntity();
     const errors = await this.store.summarizeErrors();
-    const entityHealth = await this.withAllEntityHealth(await this.store.listCheckpointHealth(this.now()));
+    const entityHealth = await this.withAllEntityHealth(
+      await this.store.listCheckpointHealth(this.now()),
+    );
 
     return {
       cycle: {
@@ -435,8 +514,12 @@ export class SyncOrchestratorService {
     };
   }
 
-  private async withAllEntityHealth(partial: Awaited<ReturnType<OfflineStoreService['listCheckpointHealth']>>) {
-    const result = { ...partial } as Awaited<ReturnType<OfflineStoreService['listCheckpointHealth']>>;
+  private async withAllEntityHealth(
+    partial: Awaited<ReturnType<OfflineStoreService['listCheckpointHealth']>>,
+  ) {
+    const result = { ...partial } as Awaited<
+      ReturnType<OfflineStoreService['listCheckpointHealth']>
+    >;
 
     for (const entityType of this.supportedEntities) {
       result[entityType] ??= {
@@ -447,7 +530,8 @@ export class SyncOrchestratorService {
       };
 
       if (result[entityType].stalenessMs != null) {
-        result[entityType].stale = result[entityType].stalenessMs > SYNC_OBSERVABILITY_STALE_DEFAULT_MS;
+        result[entityType].stale =
+          result[entityType].stalenessMs > SYNC_OBSERVABILITY_STALE_DEFAULT_MS;
       }
     }
 
@@ -458,21 +542,33 @@ export class SyncOrchestratorService {
     operationId: string,
     entityType: OfflineEntityType,
     serverEntityId: string | undefined,
-    eligibleOperations: OfflineOperationEnvelope[]
+    eligibleOperations: OfflineOperationEnvelope[],
   ) {
     if (!serverEntityId) {
-      return;
+      return null;
     }
 
     const operation = eligibleOperations.find((current) => current.operationId === operationId);
-    if (!operation || operation.opType !== 'CREATE' || !operation.entityId || operation.entityId === serverEntityId) {
-      return;
+    if (
+      !operation ||
+      operation.opType !== 'CREATE' ||
+      !operation.entityId ||
+      operation.entityId === serverEntityId
+    ) {
+      return null;
     }
 
-    await this.store.reassignSnapshotEntityId(entityType, operation.entityId, serverEntityId);
+    const reassignedSnapshot = await this.store.reassignSnapshotEntityId(
+      entityType,
+      operation.entityId,
+      serverEntityId,
+    );
+    return reassignedSnapshot ? [operation.entityId, serverEntityId] : null;
   }
 
-  private async hydratePushOperation(operation: OfflineOperationEnvelope): Promise<OfflineOperationEnvelope> {
+  private async hydratePushOperation(
+    operation: OfflineOperationEnvelope,
+  ): Promise<OfflineOperationEnvelope> {
     if (operation.entityType !== 'ANIMAL_IMAGE') {
       return operation;
     }
@@ -508,6 +604,14 @@ export class SyncOrchestratorService {
   }
 }
 
+function injectOrCreateOfflineEntityChangeBus() {
+  try {
+    return inject(OfflineEntityChangeBus);
+  } catch {
+    return new OfflineEntityChangeBus();
+  }
+}
+
 interface SyncCycleRuntimeContext {
   attempt: number;
   reconnectCount: number;
@@ -525,7 +629,7 @@ export class SyncApiService implements SyncApiClient {
     return firstValueFrom(
       this.http.post<PushSyncResponse>(`${this.appConfig.config().apiBaseUrl}/sync/push`, request, {
         headers: this.buildHeaders(),
-      })
+      }),
     );
   }
 
@@ -537,9 +641,12 @@ export class SyncApiService implements SyncApiClient {
     }
 
     return firstValueFrom(
-      this.http.get<PullSyncResponse>(`${this.appConfig.config().apiBaseUrl}/sync/pull?${params.toString()}`, {
-        headers: this.buildHeaders(),
-      })
+      this.http.get<PullSyncResponse>(
+        `${this.appConfig.config().apiBaseUrl}/sync/pull?${params.toString()}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
   }
 
@@ -566,7 +673,10 @@ function describeBlockedSession(status: Exclude<OfflineSessionStatus, 'active'>)
     : 'Este dispositivo requiere reautenticación antes de sincronizar.';
 }
 
-function createRuntimeContext(trigger: SyncTrigger, eligibleOperations: OfflineOperationEnvelope[]): SyncCycleRuntimeContext {
+function createRuntimeContext(
+  trigger: SyncTrigger,
+  eligibleOperations: OfflineOperationEnvelope[],
+): SyncCycleRuntimeContext {
   return {
     attempt: Math.max(1, ...eligibleOperations.map((operation) => operation.attempts + 1)),
     reconnectCount: trigger === 'reconnect' ? 1 : 0,

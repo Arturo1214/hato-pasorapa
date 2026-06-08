@@ -1,0 +1,82 @@
+# OpenSpec / SDD project configuration for Pasorapa Hato.
+# Auto-created by /sdd-init for project: code
+project:
+  name: code
+  root: .
+  type: monorepo
+  description: Pasorapa Hato monorepo with Angular frontend and Quarkus backend.
+
+artifact_store:
+  preferred_mode: engram
+  fallback_mode: openspec
+  note: "This file stores safe derived project context only; SDD phase artifacts may live in Engram when available."
+
+sdd:
+  strict_tdd: true
+  review_budget_lines: 400
+  execution_mode_default: interactive
+  delivery_strategy_default: ask-on-risk
+  phase_rules:
+    proposal: "Define change scope before implementation."
+    specs: "Write observable behavior and acceptance criteria before design/tasks."
+    design: "Document architecture and tradeoffs for non-trivial changes."
+    tasks: "Break work into reviewable units; forecast 400-line review-budget risk."
+    apply: "Follow strict TDD where supported; write/adjust focused tests before implementation."
+    verify: "Run targeted tests and validate implementation against specs/tasks."
+
+stack:
+  frontend:
+    path: hato-fe
+    framework: Angular
+    framework_version: "21.2.x"
+    language: TypeScript 5.9.x
+    ui: Angular Material/CDK
+    styling: SCSS
+    state: "Signals for local/simple state; RxJS for async orchestration"
+    pwa: true
+    service_worker_config: hato-fe/ngsw-config.json
+    test_runner: "Vitest via Angular CLI @angular/build:unit-test"
+    commands:
+      dev: "cd hato-fe && npm start"
+      build: "cd hato-fe && npm run build"
+      test: "cd hato-fe && npm test"
+      test_direct: "cd hato-fe && npx ng test"
+    test_patterns:
+      - "hato-fe/src/**/*.spec.ts"
+  backend:
+    path: hato-be
+    framework: Quarkus
+    framework_version: "3.34.x"
+    language: Java 21
+    build_tool: Maven Wrapper
+    persistence: "Panache ORM, Liquibase, PostgreSQL"
+    auth: SmallRye JWT
+    test_runner: "JUnit 5 via Maven Surefire; REST tests with RestAssured"
+    commands:
+      dev: "cd hato-be && ./mvnw quarkus:dev"
+      compile: "cd hato-be && ./mvnw -DskipTests compile"
+      test: "cd hato-be && ./mvnw test"
+    test_patterns:
+      - "hato-be/src/test/java/**/*.java"
+
+conventions:
+  global:
+    - "Small, verified changes; inspect local docs/config before editing."
+    - "Frontend/backend project AGENTS.md files override root guidance inside each project."
+  frontend:
+    - "Use standalone Angular components and feature-oriented architecture under hato-fe/src/app/."
+    - "Prefer signals for local/simple state and typed RxJS for async flows."
+    - "Keep business logic out of presentation templates/components."
+    - "Create/update colocated *.spec.ts tests for behavior changes."
+    - "Operational admin/ganadero list pages should use thin wrappers, real data, top-right CTA, MatDialog for create/edit where comparable, and shared app-data-table for tabular data."
+  backend:
+    - "Keep REST -> Service -> Repository/Domain layering."
+    - "Use DTOs at external boundaries; do not expose entities directly from REST resources."
+    - "Validate inbound DTOs with Jakarta Validation."
+
+skills:
+  registry: .atl/skill-registry.md
+  loaded_for_init:
+    - skills/angular-hato/SKILL.md
+    - skills/hato-admin-ux/SKILL.md
+    - hato-fe/AGENTS.md

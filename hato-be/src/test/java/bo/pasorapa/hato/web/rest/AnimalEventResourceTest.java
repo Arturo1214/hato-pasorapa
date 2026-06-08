@@ -94,6 +94,29 @@ class AnimalEventResourceTest {
     }
 
     @Test
+    void shouldDenyGanaderoListingEventsForAnotherOwnerAnimal() {
+        UUID ownOwnerId = UUID.fromString("e469411a-c4cb-4718-b60b-b5c157af5293");
+        UUID otherOwnerId = UUID.fromString("e469411a-c4cb-4718-b60b-b5c157af5294");
+        UUID otherAnimalUuid = UUID.fromString("a08cd51e-bf3b-4629-b679-d0f5ac608774");
+        QuarkusTransaction.requiringNew().run(() -> {
+            ganaderoRepository.persist(buildGanadero(ownOwnerId, "NIT-ANIMAL-OWN", "Ganadero Own", "ganadero-event@hato.bo"));
+            ganaderoRepository.persist(buildGanadero(otherOwnerId, "NIT-ANIMAL-OTHER", "Ganadero Other", "other-event@hato.bo"));
+            userRepository.persist(buildUser("ganadero-event", "ganadero-event@hato.bo", "AnimalEvent9", Role.GANADERO));
+        });
+        seedAnimal(otherAnimalUuid, otherOwnerId);
+        seedEvent(otherAnimalUuid, AnimalEventType.OBSERVATION, "2026-04-26T10:00:00", UUID.fromString("00000000-0000-0000-0000-000000000210"));
+
+        String token = loginAs("ganadero-event", "AnimalEvent9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/animals/{uuid}/events", otherAnimalUuid)
+                .then()
+                .statusCode(403);
+    }
+
+    @Test
     void shouldCreateCastrationEventAndProjectBueyCategory() {
         UUID animalUuid = UUID.fromString("d5c7e7ef-57ee-41c1-bfdf-2d6f1c8b77f4");
         seedAnimal(animalUuid);
@@ -147,27 +170,40 @@ class AnimalEventResourceTest {
     }
 
     private User buildUser(String username, String email, String password) {
+        return buildUser(username, email, password, Role.ADMIN);
+    }
+
+    private User buildUser(String username, String email, String password, Role role) {
         User user = new User();
-        user.setId(USER_ID);
+        user.setId(role == Role.ADMIN ? USER_ID : UUID.nameUUIDFromBytes(username.getBytes()));
         user.setUsername(username);
         user.setEmail(email);
         user.setDisplayName(username);
         user.setPasswordHash(passwordHasher.hash(password));
-        user.setRole(Role.ADMIN);
+        user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
     }
 
     private Ganadero buildGanadero(UUID id, String businessIdentifier, String name) {
+        return buildGanadero(id, businessIdentifier, name, null);
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
         ganadero.setId(id);
         ganadero.setBusinessIdentifier(businessIdentifier);
         ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
     }
 
     private void seedAnimal(UUID animalUuid) {
+        seedAnimal(animalUuid, OWNER_ID);
+    }
+
+    private void seedAnimal(UUID animalUuid, UUID ownerId) {
         QuarkusTransaction.requiringNew().run(() -> {
             Animal animal = new Animal();
             animal.setUuid(animalUuid);
@@ -177,7 +213,7 @@ class AnimalEventResourceTest {
             animal.setAreteNormalized(animal.getArete().toLowerCase());
             animal.setMarca("Marca Norte");
             animal.setMarcaNormalized("marca norte");
-            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
             animal.setCategory(AnimalCategory.VACA);
             animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);

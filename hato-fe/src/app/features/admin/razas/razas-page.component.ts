@@ -1,12 +1,17 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
-import { finalize } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { auditTime, finalize } from 'rxjs';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
+import {
+  ConfirmationDialogComponent,
+  CONFIRMATION_DIALOG_TONE,
+} from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -15,7 +20,11 @@ import {
   type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
 import { RazasService, type RazaItem } from './data-access/razas.service';
-import { RAZA_DIALOG_MODE, RazaFormDialogComponent, type RazaDialogResult } from './raza-form-dialog.component';
+import {
+  RAZA_DIALOG_MODE,
+  RazaFormDialogComponent,
+  type RazaDialogResult,
+} from './raza-form-dialog.component';
 
 @Component({
   selector: 'app-razas-page',
@@ -30,18 +39,28 @@ import { RAZA_DIALOG_MODE, RazaFormDialogComponent, type RazaDialogResult } from
       </mat-card>
 
       <div class="toolbar-actions">
-        <button mat-flat-button color="primary" type="button" [disabled]="sensitiveActionsOnlineOnly()" (click)="openCreateDialog()">
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          [disabled]="sensitiveActionsOnlineOnly()"
+          (click)="openCreateDialog()"
+        >
           <mat-icon>add</mat-icon>
           Nueva raza
         </button>
       </div>
 
       @if (feedbackMessage()) {
-        <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="status" aria-live="polite"
+          ><p>{{ feedbackMessage() }}</p></mat-card
+        >
       }
 
       @if (errorMessage()) {
-        <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="alert" aria-live="assertive"
+          ><p>{{ errorMessage() }}</p></mat-card
+        >
       }
 
       <mat-card appearance="outlined" class="table-card">
@@ -93,6 +112,9 @@ export class RazasPageComponent {
   private readonly razasService = inject(RazasService);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly entityChangeBus = inject(OfflineEntityChangeBus);
+  private readonly recentlySavedRazas = signal<ReadonlyMap<string, RazaItem>>(new Map());
 
   readonly razas = signal<RazaItem[]>([]);
   readonly errorMessage = signal<string | null>(null);
@@ -103,8 +125,19 @@ export class RazasPageComponent {
   readonly filters = signal<Record<string, string>>({});
   readonly columns: DataTableColumn[] = [
     { key: 'nombre', label: 'Nombre', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
-    { key: 'descripcion', label: 'Descripción', filterType: DATA_TABLE_FILTER_TYPE.TEXT, formatter: (value) => String(value ?? '—') },
-    { key: 'origen', label: 'Origen', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT, formatter: (value) => String(value ?? '—') },
+    {
+      key: 'descripcion',
+      label: 'Descripción',
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (value) => String(value ?? '—'),
+    },
+    {
+      key: 'origen',
+      label: 'Origen',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+      formatter: (value) => String(value ?? '—'),
+    },
     {
       key: 'activo',
       label: 'Estado',
@@ -116,8 +149,18 @@ export class RazasPageComponent {
       ],
       formatter: (value) => (value ? 'Activa' : 'Inactiva'),
     },
-    { key: 'sortOrder', label: 'Orden', sortable: true, formatter: (value) => String(value ?? '—') },
-    { key: 'updatedAt', label: 'Actualizada', sortable: true, formatter: (value) => this.formatDate(value) },
+    {
+      key: 'sortOrder',
+      label: 'Orden',
+      sortable: true,
+      formatter: (value) => String(value ?? '—'),
+    },
+    {
+      key: 'updatedAt',
+      label: 'Actualizada',
+      sortable: true,
+      formatter: (value) => this.formatDate(value),
+    },
   ];
   readonly actions: DataTableAction[] = [
     { id: 'edit', label: 'Editar', icon: 'edit' },
@@ -131,6 +174,10 @@ export class RazasPageComponent {
 
   constructor() {
     this.loadRazas();
+    this.entityChangeBus
+      .watch(['RAZA'])
+      .pipe(auditTime(50), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadRazas());
   }
 
   openCreateDialog() {
@@ -150,7 +197,7 @@ export class RazasPageComponent {
         this.feedbackMessage.set(null);
         const { activo: _activo, ...payload } = result;
         this.razasService.create(payload).subscribe({
-          next: (response) => this.handleMutationFeedback(response.message),
+          next: (response) => this.handleMutationFeedback(response),
           error: () => this.errorMessage.set('No pudimos crear la raza.'),
         });
       });
@@ -185,7 +232,7 @@ export class RazasPageComponent {
         this.errorMessage.set(null);
         this.feedbackMessage.set(null);
         this.razasService.update(raza.uuid, result).subscribe({
-          next: (response) => this.handleMutationFeedback(response.message),
+          next: (response) => this.handleMutationFeedback(response),
           error: () => this.errorMessage.set('No pudimos actualizar la raza.'),
         });
       });
@@ -215,14 +262,18 @@ export class RazasPageComponent {
         this.errorMessage.set(null);
         this.feedbackMessage.set(null);
         this.razasService.setActive(raza.uuid, nextActive).subscribe({
-          next: (response) => this.handleMutationFeedback(response.message),
+          next: (response) => this.handleMutationFeedback(response),
           error: () => this.errorMessage.set('No pudimos actualizar el estado de la raza.'),
         });
       });
   }
 
-  private handleMutationFeedback(message: string) {
-    this.feedbackMessage.set(message);
+  private handleMutationFeedback(response: { message: string; raza?: RazaItem }) {
+    this.feedbackMessage.set(response.message);
+    if (response.raza) {
+      this.rememberRaza(response.raza);
+      this.upsertRaza(response.raza);
+    }
     this.loadRazas();
   }
 
@@ -233,7 +284,11 @@ export class RazasPageComponent {
       .listAll()
       .pipe(finalize(() => this.loading.set(false)))
       .subscribe({
-        next: (razas) => this.razas.set(razas),
+        next: (razas) => {
+          const merged = mergeRazasWithRecent(razas, this.recentlySavedRazas());
+          this.recentlySavedRazas.set(merged.recent);
+          this.razas.set(merged.items);
+        },
         error: () => {
           this.razas.set([]);
           this.errorMessage.set('No pudimos cargar las razas.');
@@ -241,7 +296,56 @@ export class RazasPageComponent {
       });
   }
 
+  private rememberRaza(raza: RazaItem) {
+    this.recentlySavedRazas.update((current) => new Map(current).set(raza.uuid, raza));
+  }
+
+  private upsertRaza(raza: RazaItem) {
+    this.razas.update((razas) => upsertRazaByUuid(razas, raza));
+  }
+
   private formatDate(value: unknown) {
     return typeof value === 'string' && value.length ? value.slice(0, 10) : '—';
   }
+}
+
+function upsertRazaByUuid(razas: readonly RazaItem[], raza: RazaItem): RazaItem[] {
+  const index = razas.findIndex((current) => current.uuid === raza.uuid);
+  if (index < 0) {
+    return [raza, ...razas];
+  }
+
+  return razas.map((current, currentIndex) =>
+    currentIndex === index ? { ...current, ...raza } : current,
+  );
+}
+
+function mergeRazasWithRecent(
+  razas: readonly RazaItem[],
+  recentlySaved: ReadonlyMap<string, RazaItem>,
+): { items: RazaItem[]; recent: ReadonlyMap<string, RazaItem> } {
+  let items = [...razas];
+  const nextRecent = new Map<string, RazaItem>();
+
+  for (const recent of recentlySaved.values()) {
+    const current = items.find((raza) => raza.uuid === recent.uuid);
+    if (!current) {
+      items = [recent, ...items];
+      nextRecent.set(recent.uuid, recent);
+      continue;
+    }
+
+    if (isSameOrNewer(current.updatedAt, recent.updatedAt)) {
+      continue;
+    }
+
+    items = upsertRazaByUuid(items, recent);
+    nextRecent.set(recent.uuid, recent);
+  }
+
+  return { items, recent: nextRecent };
+}
+
+function isSameOrNewer(candidateUpdatedAt: string, baselineUpdatedAt: string) {
+  return candidateUpdatedAt.localeCompare(baselineUpdatedAt) >= 0;
 }

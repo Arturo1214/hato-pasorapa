@@ -1,11 +1,17 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { auditTime } from 'rxjs';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
+import {
+  ConfirmationDialogComponent,
+  CONFIRMATION_DIALOG_TONE,
+} from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -14,17 +20,15 @@ import {
   type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
 import { AdminUsersService, type ManagedUser } from './data-access/admin-users.service';
-import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from './user-form-dialog.component';
+import {
+  USER_DIALOG_MODE,
+  UserFormDialogComponent,
+  type UserDialogResult,
+} from './user-form-dialog.component';
 
 @Component({
   selector: 'app-admin-users-page',
-  imports: [
-    CommonModule,
-    MatButtonModule,
-    MatCardModule,
-    MatIconModule,
-    DataTableComponent,
-  ],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule, DataTableComponent],
   template: `
     <section class="admin-page">
       <mat-card appearance="outlined" class="status-card">
@@ -37,18 +41,28 @@ import { USER_DIALOG_MODE, UserFormDialogComponent, type UserDialogResult } from
       </mat-card>
 
       <div class="toolbar-actions">
-        <button mat-flat-button color="primary" type="button" [disabled]="sensitiveActionsOnlineOnly()" (click)="openCreateDialog()">
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          [disabled]="sensitiveActionsOnlineOnly()"
+          (click)="openCreateDialog()"
+        >
           <mat-icon>person_add</mat-icon>
           Crear usuario
         </button>
       </div>
 
       @if (feedbackMessage()) {
-        <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="status" aria-live="polite"
+          ><p>{{ feedbackMessage() }}</p></mat-card
+        >
       }
 
       @if (errorMessage()) {
-        <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="alert" aria-live="assertive"
+          ><p>{{ errorMessage() }}</p></mat-card
+        >
       }
 
       <mat-card appearance="outlined" class="table-card">
@@ -100,6 +114,8 @@ export class AdminUsersPageComponent {
   private readonly adminUsersService = inject(AdminUsersService);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly entityChangeBus = inject(OfflineEntityChangeBus);
 
   readonly users = signal<ManagedUser[]>([]);
   readonly errorMessage = signal<string | null>(null);
@@ -131,7 +147,8 @@ export class AdminUsersPageComponent {
         { label: 'Inactivo', value: 'INACTIVE' },
         { label: 'Bloqueado', value: 'BLOCKED' },
       ],
-      formatter: (value) => (value === 'ACTIVE' ? 'Activo' : value === 'INACTIVE' ? 'Inactivo' : 'Bloqueado'),
+      formatter: (value) =>
+        value === 'ACTIVE' ? 'Activo' : value === 'INACTIVE' ? 'Inactivo' : 'Bloqueado',
     },
   ];
   readonly actions: DataTableAction[] = [
@@ -142,6 +159,10 @@ export class AdminUsersPageComponent {
 
   constructor() {
     this.loadUsers();
+    this.entityChangeBus
+      .watch(['USER'])
+      .pipe(auditTime(50), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadUsers());
   }
 
   openCreateDialog() {
@@ -160,16 +181,18 @@ export class AdminUsersPageComponent {
         }
 
         this.feedbackMessage.set(null);
-        this.adminUsersService.createUser({ ...result, password: result.password ?? '' }).subscribe({
-          next: (response) => {
-            this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
-            if (response.outcome !== 'blocked') {
-              this.feedbackMessage.set(response.message);
-              this.loadUsers();
-            }
-          },
-          error: () => this.errorMessage.set('No pudimos guardar el usuario.'),
-        });
+        this.adminUsersService
+          .createUser({ ...result, password: result.password ?? '' })
+          .subscribe({
+            next: (response) => {
+              this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
+              if (response.outcome !== 'blocked') {
+                this.feedbackMessage.set(response.message);
+                this.loadUsers();
+              }
+            },
+            error: () => this.errorMessage.set('No pudimos guardar el usuario.'),
+          });
       });
   }
 

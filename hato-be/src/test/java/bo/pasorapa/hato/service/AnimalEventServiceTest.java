@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import bo.pasorapa.hato.domain.Animal;
 import bo.pasorapa.hato.service.model.AnimalEvent;
 import bo.pasorapa.hato.domain.Ganadero;
+import bo.pasorapa.hato.domain.Role;
+import bo.pasorapa.hato.domain.User;
+import bo.pasorapa.hato.domain.UserStatus;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalEventType;
@@ -14,6 +17,7 @@ import bo.pasorapa.hato.domain.enumeration.AnimalSex;
 import bo.pasorapa.hato.repository.AnimalEventLogRepository;
 import bo.pasorapa.hato.repository.AnimalRepository;
 import bo.pasorapa.hato.repository.GanaderoRepository;
+import bo.pasorapa.hato.repository.UserRepository;
 import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 import bo.pasorapa.hato.service.dto.animalevent.AnimalEventRequest;
 import bo.pasorapa.hato.service.error.BusinessException;
@@ -49,6 +53,9 @@ class AnimalEventServiceTest {
     GanaderoRepository ganaderoRepository;
 
     @Inject
+    UserRepository userRepository;
+
+    @Inject
     IntegrationDatabaseCleaner integrationDatabaseCleaner;
 
     @BeforeEach
@@ -57,6 +64,9 @@ class AnimalEventServiceTest {
             integrationDatabaseCleaner.clean();
             ganaderoRepository.persist(buildGanadero(OWNER_A, "NIT-A", "Owner A"));
             ganaderoRepository.persist(buildGanadero(OWNER_B, "NIT-B", "Owner B"));
+            userRepository.persist(buildUser(USER_ID, "animal-event-user"));
+            userRepository.persist(buildUser(UUID.fromString("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"), "animal-event-derived"));
+            userRepository.persist(buildUser(UUID.fromString("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"), "animal-event-mismatch"));
         });
     }
 
@@ -312,5 +322,17 @@ class AnimalEventServiceTest {
         ganadero.setName(name);
         ganadero.setActive(true);
         return ganadero;
+    }
+
+    private User buildUser(UUID id, String username) {
+        User user = new User();
+        user.setId(id);
+        user.setUsername(username);
+        user.setEmail(username + "@hato.bo");
+        user.setDisplayName(username);
+        user.setPasswordHash("test-hash");
+        user.setRole(Role.ADMIN);
+        user.setStatus(UserStatus.ACTIVE);
+        return user;
     }
 }

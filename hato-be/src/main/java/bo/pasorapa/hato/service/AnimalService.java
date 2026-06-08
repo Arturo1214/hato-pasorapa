@@ -243,15 +243,15 @@ public class AnimalService {
 
     @Transactional
     public AnimalEvent applyCastration(AnimalEventRequest request, UUID authenticatedUserId) {
-        AnimalEvent existing = animalEventLogRepository.findByOperationId(request.operationId())
-                .map(animalEventMapper::toAnimalEvent)
-                .orElse(null);
-        if (existing != null) {
-            return existing;
+        AnimalEventLog existingLog = animalEventLogRepository.findByOperationId(request.operationId()).orElse(null);
+        if (existingLog != null) {
+            enforceAnimalOwnershipForCurrentUser(existingLog.getAnimal(), authenticatedUserId);
+            return animalEventMapper.toAnimalEvent(existingLog);
         }
 
         Animal animal = animalRepository.findByUuid(request.animalUuid())
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        enforceAnimalOwnershipForCurrentUser(animal, authenticatedUserId);
 
         UUID effectivePerformedByUserId = resolvePerformedByUserId(request, authenticatedUserId);
         AnimalEvent event = animalEventMapper.toEntity(animal, request, effectivePerformedByUserId);

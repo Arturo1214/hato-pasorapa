@@ -1,11 +1,17 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { auditTime } from 'rxjs';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
-import { ConfirmationDialogComponent, CONFIRMATION_DIALOG_TONE } from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
+import {
+  ConfirmationDialogComponent,
+  CONFIRMATION_DIALOG_TONE,
+} from '../../../shared/ui/confirmation-dialog/confirmation-dialog.component';
 import {
   DataTableComponent,
   DATA_TABLE_FILTER_TYPE,
@@ -13,18 +19,16 @@ import {
   type DataTableColumn,
   type DataTableRowActionEvent,
 } from '../../../shared/ui/data-table/data-table.component';
-import { GANADERO_DIALOG_MODE, GanaderoFormDialogComponent, type GanaderoDialogResult } from './ganadero-form-dialog.component';
+import {
+  GANADERO_DIALOG_MODE,
+  GanaderoFormDialogComponent,
+  type GanaderoDialogResult,
+} from './ganadero-form-dialog.component';
 import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.service';
 
 @Component({
   selector: 'app-ganaderos-page',
-  imports: [
-    CommonModule,
-    MatButtonModule,
-    MatCardModule,
-    MatIconModule,
-    DataTableComponent,
-  ],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatIconModule, DataTableComponent],
   template: `
     <section class="admin-page">
       <mat-card appearance="outlined" class="status-card">
@@ -44,11 +48,15 @@ import { GanaderosService, type GanaderoItem } from './data-access/ganaderos.ser
       </div>
 
       @if (feedbackMessage()) {
-        <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="status" aria-live="polite"
+          ><p>{{ feedbackMessage() }}</p></mat-card
+        >
       }
 
       @if (errorMessage()) {
-        <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="alert" aria-live="assertive"
+          ><p>{{ errorMessage() }}</p></mat-card
+        >
       }
 
       <mat-card appearance="outlined" class="table-card">
@@ -100,6 +108,8 @@ export class GanaderosPageComponent {
   private readonly ganaderosService = inject(GanaderosService);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly entityChangeBus = inject(OfflineEntityChangeBus);
 
   readonly ganaderos = signal<GanaderoItem[]>([]);
   readonly errorMessage = signal<string | null>(null);
@@ -109,7 +119,12 @@ export class GanaderosPageComponent {
   readonly sensitiveActionsOnlineOnly = computed(() => this.offlineMessage() !== null);
   readonly filters = signal<Record<string, string>>({});
   readonly columns: DataTableColumn[] = [
-    { key: 'businessIdentifier', label: 'Identificador', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
+    {
+      key: 'businessIdentifier',
+      label: 'Identificador',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.TEXT,
+    },
     { key: 'name', label: 'Nombre', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
     { key: 'email', label: 'Correo', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.TEXT },
     {
@@ -132,6 +147,10 @@ export class GanaderosPageComponent {
 
   constructor() {
     this.loadGanaderos();
+    this.entityChangeBus
+      .watch(['GANADERO'])
+      .pipe(auditTime(50), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.loadGanaderos());
   }
 
   openCreateDialog() {

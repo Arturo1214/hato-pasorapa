@@ -581,16 +581,17 @@ class SyncResourceTest {
         UUID animalUuid = UUID.fromString("98989898-9898-4989-8989-989898989898");
         String operationId = "97979797-9797-4979-8979-979797979797";
 
+        UUID ownerGanaderoId = UUID.fromString("4bf99828-9a6d-491d-9aa6-69100a8e718a");
         QuarkusTransaction.requiringNew().run(() -> {
-            animalRepository.persist(buildAnimal(animalUuid, "BO-GAN-1", 4L, LocalDateTime.of(2026, 4, 28, 10, 0)));
             userRepository.persist(buildUser("ganadero-conflict", "ganadero-conflict@hato.bo", Role.GANADERO, "Ganadero9"));
             ganaderoRepository.persist(buildGanadero(
-                    UUID.fromString("4bf99828-9a6d-491d-9aa6-69100a8e718a"),
+                    ownerGanaderoId,
                     "NIT-GANADERO-CONFLICT",
                     "Ganadero Conflict",
                     "ganadero-conflict@hato.bo",
                     true,
                     LocalDateTime.of(2026, 4, 28, 10, 0)));
+            animalRepository.persist(buildAnimal(animalUuid, "BO-GAN-1", ownerGanaderoId, 4L, LocalDateTime.of(2026, 4, 28, 10, 0)));
         });
 
         String ganaderoToken = loginAs("ganadero-conflict", "Ganadero9");
@@ -1351,11 +1352,15 @@ class SyncResourceTest {
     }
 
     private Animal buildAnimal(UUID uuid, String tag, Long version, LocalDateTime updatedAt) {
+        return buildAnimal(uuid, tag, DEFAULT_OWNER_GANADERO_ID, version, updatedAt);
+    }
+
+    private Animal buildAnimal(UUID uuid, String tag, UUID ownerGanaderoId, Long version, LocalDateTime updatedAt) {
         Animal animal = new Animal();
         animal.setUuid(uuid);
         animal.setCode("CODE-" + tag);
         animal.setTag(tag);
-        animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(DEFAULT_OWNER_GANADERO_ID).orElseThrow());
+        animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerGanaderoId).orElseThrow());
         animal.setArete(tag);
         animal.setAreteNormalized(tag.trim().toLowerCase());
         animal.setMarca("CODE-" + tag);

@@ -7,9 +7,14 @@ import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { AdminUsersPageComponent } from './admin-users-page.component';
-import { AdminUsersService, type AdminUsersSyncState, type ManagedUser } from './data-access/admin-users.service';
+import {
+  AdminUsersService,
+  type AdminUsersSyncState,
+  type ManagedUser,
+} from './data-access/admin-users.service';
 
 describe('AdminUsersPageComponent', () => {
   let overlayContainer: OverlayContainer;
@@ -17,9 +22,15 @@ describe('AdminUsersPageComponent', () => {
   const createServiceMock = () => ({
     listUsers: vi.fn(() => of([] as ManagedUser[])),
     createUser: vi.fn(() => of({ outcome: 'synced', message: 'Usuario guardado correctamente.' })),
-    updateUser: vi.fn(() => of({ outcome: 'synced', message: 'Usuario actualizado correctamente.' })),
-    updateStatus: vi.fn(() => of({ outcome: 'synced', message: 'Usuario dado de baja correctamente.' })),
-    resetPassword: vi.fn(() => of({ outcome: 'synced', message: 'Contraseña reseteada correctamente.' })),
+    updateUser: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Usuario actualizado correctamente.' }),
+    ),
+    updateStatus: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Usuario dado de baja correctamente.' }),
+    ),
+    resetPassword: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Contraseña reseteada correctamente.' }),
+    ),
     syncState: signal<AdminUsersSyncState>({
       pending: 0,
       syncing: false,
@@ -31,7 +42,7 @@ describe('AdminUsersPageComponent', () => {
 
   const configure = async (
     serviceMock: ReturnType<typeof createServiceMock>,
-    offline: { message?: string | null } = {}
+    offline: { message?: string | null } = {},
   ) => {
     await TestBed.configureTestingModule({
       imports: [AdminUsersPageComponent],
@@ -54,9 +65,10 @@ describe('AdminUsersPageComponent', () => {
     }).compileComponents();
 
     overlayContainer = TestBed.inject(OverlayContainer);
+    const entityChangeBus = TestBed.inject(OfflineEntityChangeBus);
     const fixture = TestBed.createComponent(AdminUsersPageComponent);
     fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance };
+    return { fixture, component: fixture.componentInstance, entityChangeBus };
   };
 
   it('should show an empty state when there are no managed users yet', async () => {
@@ -86,7 +98,9 @@ describe('AdminUsersPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).not.toContain('Estado de sync');
     expect(fixture.nativeElement.textContent).not.toContain('Última sync');
-    expect(fixture.nativeElement.textContent).not.toContain('Necesitás refrescar manualmente la lista para resolver el conflicto remoto.');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'Necesitás refrescar manualmente la lista para resolver el conflicto remoto.',
+    );
   });
 
   it('should show queued feedback when a user status change stays offline first', async () => {
@@ -106,23 +120,66 @@ describe('AdminUsersPageComponent', () => {
     serviceMock.listUsers = vi
       .fn()
       .mockReturnValueOnce(of([activeUser] as ManagedUser[]))
-      .mockReturnValueOnce(of([{ ...activeUser, status: 'INACTIVE', updatedAt: '2026-04-26T10:05:00.000Z' }] as ManagedUser[]));
-    serviceMock.updateStatus = vi.fn(() => of({ outcome: 'queued', message: 'Cambio de estado encolado. Se enviará al reconectar.' }));
+      .mockReturnValueOnce(
+        of([
+          { ...activeUser, status: 'INACTIVE', updatedAt: '2026-04-26T10:05:00.000Z' },
+        ] as ManagedUser[]),
+      );
+    serviceMock.updateStatus = vi.fn(() =>
+      of({ outcome: 'queued', message: 'Cambio de estado encolado. Se enviará al reconectar.' }),
+    );
     const { fixture, component } = await configure(serviceMock);
 
     component.handleRowAction({ actionId: 'toggle-status', row: activeUser });
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const confirmButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Deshabilitar')
-    ) as HTMLButtonElement;
+    const confirmButton = Array.from(
+      overlayContainer.getContainerElement().querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Deshabilitar')) as HTMLButtonElement;
     confirmButton.click();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Cambio de estado encolado. Se enviará al reconectar.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Cambio de estado encolado. Se enviará al reconectar.',
+    );
     expect(serviceMock.listUsers).toHaveBeenCalledTimes(2);
+  });
+
+  it('should reload when a USER entity change is published', async () => {
+    vi.useFakeTimers();
+    const serviceMock = createServiceMock();
+    serviceMock.listUsers.mockReturnValueOnce(of([] as ManagedUser[])).mockReturnValueOnce(
+      of([
+        {
+          id: 'user-1',
+          username: 'gestion-admin',
+          email: 'gestion-admin@hato.bo',
+          displayName: 'Gestión Admin',
+          role: 'ADMIN' as const,
+          status: 'ACTIVE' as const,
+          version: 1,
+          createdAt: '2026-04-26T10:00:00.000Z',
+          updatedAt: '2026-04-26T10:00:00.000Z',
+          lastSyncedAt: null,
+        },
+      ] as ManagedUser[]),
+    );
+    const { fixture, entityChangeBus } = await configure(serviceMock);
+
+    entityChangeBus.emit({
+      entity: 'USER',
+      source: 'pull',
+      operation: 'sync-batch',
+      ids: ['user-1'],
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    fixture.detectChanges();
+
+    expect(serviceMock.listUsers).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('gestion-admin');
+    vi.useRealTimers();
   });
 
   it('should filter the table by role when the parent updates the active filters', async () => {
@@ -153,7 +210,7 @@ describe('AdminUsersPageComponent', () => {
           updatedAt: '2026-04-26T10:00:00.000Z',
           lastSyncedAt: null,
         },
-      ])
+      ]),
     );
     const { fixture, component } = await configure(serviceMock);
 
@@ -167,9 +224,9 @@ describe('AdminUsersPageComponent', () => {
   it('should open the create modal from the toolbar action', async () => {
     const { fixture } = await configure(createServiceMock());
 
-    const createButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find((button) =>
-      button.textContent?.includes('Crear usuario')
-    ) as HTMLButtonElement;
+    const createButton = (
+      Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]
+    ).find((button) => button.textContent?.includes('Crear usuario')) as HTMLButtonElement;
     createButton.click();
     fixture.detectChanges();
 
@@ -197,9 +254,9 @@ describe('AdminUsersPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const confirmButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Deshabilitar')
-    ) as HTMLButtonElement;
+    const confirmButton = Array.from(
+      overlayContainer.getContainerElement().querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Deshabilitar')) as HTMLButtonElement;
     confirmButton.click();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -225,14 +282,17 @@ describe('AdminUsersPageComponent', () => {
   it('should disable sensitive submit buttons while offline and explain they remain online only', async () => {
     const serviceMock = createServiceMock();
     const { fixture } = await configure(serviceMock, {
-      message: 'Modo sin conexión. La shell instalada sigue disponible mientras recuperamos la conectividad.',
+      message:
+        'Modo sin conexión. La shell instalada sigue disponible mientras recuperamos la conectividad.',
     });
 
-    const createButton = (Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]).find((button) =>
-      button.textContent?.includes('Crear usuario')
-    ) as HTMLButtonElement;
+    const createButton = (
+      Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[]
+    ).find((button) => button.textContent?.includes('Crear usuario')) as HTMLButtonElement;
 
     expect(createButton.disabled).toBe(true);
-    expect(fixture.nativeElement.textContent).toContain('Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.',
+    );
   });
 });

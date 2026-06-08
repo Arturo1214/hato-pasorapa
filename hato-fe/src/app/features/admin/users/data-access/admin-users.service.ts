@@ -1,12 +1,20 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { computed, inject, Injectable } from '@angular/core';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
-import { AuthService, type Role, type UserStatus } from '../../../../core/auth/data-access/auth.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
+import {
+  AuthService,
+  type Role,
+  type UserStatus,
+} from '../../../../core/auth/data-access/auth.service';
+import { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
-import { type Observable, firstValueFrom, from, map } from 'rxjs';
+import { type Observable, firstValueFrom, from, map, mergeMap } from 'rxjs';
 
 export interface ManagedUser {
   id: string;
@@ -60,6 +68,7 @@ export interface AdminUsersServiceDependencies {
   offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
   store: OfflineStoreService;
   metricsStore: SyncMetricsStore;
+  entityChangeBus: OfflineEntityChangeBus;
   now: () => string;
   windowRef: Pick<Window, 'dispatchEvent'>;
 }
@@ -72,6 +81,8 @@ export class AdminUsersService {
   private offlineStatus: OfflineStatusService = inject(OfflineStatusService);
   private store: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
   private metricsStore: SyncMetricsStore = inject(SyncMetricsStore);
+  private entityChangeBus: OfflineEntityChangeBus = inject(OfflineEntityChangeBus);
+  private readonly recentlyMutatedUserIds = new Set<string>();
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
   readonly syncState = computed<AdminUsersSyncState>(() => ({
@@ -93,6 +104,7 @@ export class AdminUsersService {
     }
     this.store = dependencies.store ?? this.store;
     this.metricsStore = dependencies.metricsStore ?? this.metricsStore;
+    this.entityChangeBus = dependencies.entityChangeBus ?? this.entityChangeBus;
     this.now = dependencies.now ?? this.now;
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
@@ -106,8 +118,9 @@ export class AdminUsersService {
       return from(
         Promise.resolve({
           outcome: 'blocked',
-          message: 'La creación de usuarios requiere conexión para no persistir credenciales sensibles offline.',
-        } satisfies AdminMutationFeedback)
+          message:
+            'La creación de usuarios requiere conexión para no persistir credenciales sensibles offline.',
+        } satisfies AdminMutationFeedback),
       );
     }
 
@@ -116,13 +129,15 @@ export class AdminUsersService {
         headers: this.buildMutationHeaders(),
       })
       .pipe(
-        map((user) => {
-          void this.saveUserSnapshot(user);
+        mergeMap(async (user) => {
+          await this.saveUserSnapshot(user);
+          this.recentlyMutatedUserIds.add(user.id);
+          this.emitUserChange(user.id, 'online-mutation', 'snapshot-upsert');
           return {
             outcome: 'synced',
             message: 'Usuario guardado correctamente.',
           } satisfies AdminMutationFeedback;
-        })
+        }),
       );
   }
 
@@ -132,7 +147,7 @@ export class AdminUsersService {
         Promise.resolve({
           outcome: 'blocked',
           message: 'La edición de usuarios requiere conexión para mantener el padrón consistente.',
-        } satisfies AdminMutationFeedback)
+        } satisfies AdminMutationFeedback),
       );
     }
 
@@ -141,13 +156,15 @@ export class AdminUsersService {
         headers: this.buildMutationHeaders(),
       })
       .pipe(
-        map((user) => {
-          void this.saveUserSnapshot(user);
+        mergeMap(async (user) => {
+          await this.saveUserSnapshot(user);
+          this.recentlyMutatedUserIds.add(user.id);
+          this.emitUserChange(user.id, 'online-mutation', 'snapshot-upsert');
           return {
             outcome: 'synced',
             message: 'Usuario actualizado correctamente.',
           } satisfies AdminMutationFeedback;
-        })
+        }),
       );
   }
 
@@ -160,13 +177,18 @@ export class AdminUsersService {
       return from(
         Promise.resolve({
           outcome: 'blocked',
-          message: 'El reseteo de contraseñas requiere conexión para no persistir credenciales sensibles offline.',
-        } satisfies AdminMutationFeedback)
+          message:
+            'El reseteo de contraseñas requiere conexión para no persistir credenciales sensibles offline.',
+        } satisfies AdminMutationFeedback),
       );
     }
 
     return this.http
-      .put(`${this.appConfig.config().apiBaseUrl}/admin/users/${userId}/password`, { password }, { headers: this.buildMutationHeaders() })
+      .put(
+        `${this.appConfig.config().apiBaseUrl}/admin/users/${userId}/password`,
+        { password },
+        { headers: this.buildMutationHeaders() },
+      )
       .pipe(
         map(() => {
           this.metricsStore.patch({
@@ -178,7 +200,7 @@ export class AdminUsersService {
             outcome: 'synced',
             message: 'Contraseña reseteada correctamente.',
           } satisfies AdminMutationFeedback;
-        })
+        }),
       );
   }
 
@@ -192,14 +214,18 @@ export class AdminUsersService {
 
     const params = status ? `?status=${status}` : '';
     const response = await firstValueFrom(
-      this.http.get<ManagedUsersResponse>(`${this.appConfig.config().apiBaseUrl}/admin/users${params}`, {
-        headers: this.buildHeaders(),
-      })
+      this.http.get<ManagedUsersResponse>(
+        `${this.appConfig.config().apiBaseUrl}/admin/users${params}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
 
-    await Promise.all(response.users.map((user) => this.saveUserSnapshot(user)));
+    const users = await this.mergeRecentlyMutatedSnapshots(response.users, status);
+    await Promise.all(users.map((user) => this.saveUserSnapshot(user)));
     await this.refreshPendingState();
-    return response.users;
+    return users;
   }
 
   private async enqueueStatusUpdate(userId: string, status: UserStatus) {
@@ -212,8 +238,14 @@ export class AdminUsersService {
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
-    await this.applyOptimisticStatus(userId, status, now);
-    await this.refreshPendingState({ lastMessage: 'Cambio de estado encolado. Se enviará al reconectar.' });
+    const statusSnapshotSaved = await this.applyOptimisticStatus(userId, status, now);
+    if (statusSnapshotSaved) {
+      this.recentlyMutatedUserIds.add(userId);
+      this.emitUserChange(userId, 'local-mutation', 'status-update');
+    }
+    await this.refreshPendingState({
+      lastMessage: 'Cambio de estado encolado. Se enviará al reconectar.',
+    });
 
     if (this.offlineStatus.isOnline()) {
       triggerManualSync(this.windowRef);
@@ -235,12 +267,48 @@ export class AdminUsersService {
     return status ? users.filter((user) => user.status === status) : users;
   }
 
+  private async mergeRecentlyMutatedSnapshots(users: ManagedUser[], status?: UserStatus) {
+    if (!this.recentlyMutatedUserIds.size) {
+      return filterUsersByStatus(users, status);
+    }
+
+    const merged = [...users];
+    const snapshots = await this.store.listSnapshots('USER');
+
+    for (const userId of [...this.recentlyMutatedUserIds]) {
+      const localUser = snapshots.find((snapshot) => snapshot.entityId === userId)?.payload as
+        | ManagedUser
+        | undefined;
+      if (!localUser) {
+        this.recentlyMutatedUserIds.delete(userId);
+        continue;
+      }
+
+      const serverIndex = merged.findIndex((user) => user.id === userId);
+      if (serverIndex < 0) {
+        merged.unshift(localUser);
+        continue;
+      }
+
+      if (isLocalNewer(localUser.updatedAt, merged[serverIndex].updatedAt)) {
+        merged[serverIndex] = localUser;
+        continue;
+      }
+
+      this.recentlyMutatedUserIds.delete(userId);
+    }
+
+    return filterUsersByStatus(merged, status);
+  }
+
   private async hasPendingUserOperations() {
     const outbox = await this.store.listOutbox();
     return outbox.some(
       (operation) =>
         operation.entityType === 'USER' &&
-        (operation.status === 'pending' || operation.status === 'retry_scheduled' || operation.status === 'in_flight')
+        (operation.status === 'pending' ||
+          operation.status === 'retry_scheduled' ||
+          operation.status === 'in_flight'),
     );
   }
 
@@ -248,7 +316,7 @@ export class AdminUsersService {
     const snapshots = await this.store.listSnapshots('USER');
     const existing = snapshots.find((snapshot) => snapshot.entityId === userId);
     if (!existing) {
-      return;
+      return false;
     }
 
     const user = existing.payload as unknown as ManagedUser;
@@ -257,6 +325,7 @@ export class AdminUsersService {
       status,
       updatedAt: now,
     });
+    return true;
   }
 
   private async saveUserSnapshot(user: ManagedUser) {
@@ -267,6 +336,19 @@ export class AdminUsersService {
       payload: { ...user },
       updatedAt: user.updatedAt,
       version: user.version,
+    });
+  }
+
+  private emitUserChange(
+    userId: string,
+    source: 'local-mutation' | 'online-mutation',
+    operation: 'snapshot-upsert' | 'status-update',
+  ) {
+    this.entityChangeBus.emit({
+      entity: 'USER',
+      source,
+      operation,
+      ids: [userId],
     });
   }
 
@@ -284,8 +366,14 @@ export class AdminUsersService {
 
   private buildHeaders() {
     const token = this.authService.getAccessToken();
-    return token
-      ? new HttpHeaders({ Authorization: `Bearer ${token}` })
-      : new HttpHeaders();
+    return token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : new HttpHeaders();
   }
+}
+
+function filterUsersByStatus(users: ManagedUser[], status?: UserStatus) {
+  return status ? users.filter((user) => user.status === status) : users;
+}
+
+function isLocalNewer(localUpdatedAt: string, serverUpdatedAt: string) {
+  return localUpdatedAt.localeCompare(serverUpdatedAt) > 0;
 }

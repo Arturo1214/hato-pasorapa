@@ -6,19 +6,32 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, throwError } from 'rxjs';
+import { OfflineEntityChangeBus } from '../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import { GanaderosPageComponent } from './ganaderos-page.component';
-import { GanaderosService, type GanaderoItem, type GanaderosSyncState } from './data-access/ganaderos.service';
+import {
+  GanaderosService,
+  type GanaderoItem,
+  type GanaderosSyncState,
+} from './data-access/ganaderos.service';
 
 describe('GanaderosPageComponent', () => {
   let overlayContainer: OverlayContainer;
 
   const createServiceMock = () => ({
     listGanaderos: vi.fn(() => of([] as GanaderoItem[])),
-    createGanadero: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero registrado correctamente.' })),
-    updateGanadero: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero actualizado correctamente.' })),
-    resetPassword: vi.fn(() => of({ outcome: 'synced', message: 'Contraseña temporal reseteada correctamente.' })),
-    updateStatus: vi.fn(() => of({ outcome: 'synced', message: 'Ganadero dado de baja correctamente.' })),
+    createGanadero: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Ganadero registrado correctamente.' }),
+    ),
+    updateGanadero: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Ganadero actualizado correctamente.' }),
+    ),
+    resetPassword: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Contraseña temporal reseteada correctamente.' }),
+    ),
+    updateStatus: vi.fn(() =>
+      of({ outcome: 'synced', message: 'Ganadero dado de baja correctamente.' }),
+    ),
     syncState: signal<GanaderosSyncState>({
       pending: 0,
       syncing: false,
@@ -50,9 +63,10 @@ describe('GanaderosPageComponent', () => {
     }).compileComponents();
 
     overlayContainer = TestBed.inject(OverlayContainer);
+    const entityChangeBus = TestBed.inject(OfflineEntityChangeBus);
     const fixture = TestBed.createComponent(GanaderosPageComponent);
     fixture.detectChanges();
-    return { fixture, component: fixture.componentInstance };
+    return { fixture, component: fixture.componentInstance, entityChangeBus };
   };
 
   it('should show an empty state when there are no ganaderos registered', async () => {
@@ -82,7 +96,9 @@ describe('GanaderosPageComponent', () => {
 
     expect(fixture.nativeElement.textContent).not.toContain('Estado de sync');
     expect(fixture.nativeElement.textContent).not.toContain('Última sync');
-    expect(fixture.nativeElement.textContent).not.toContain('Necesitás refrescar manualmente la lista para resolver el conflicto remoto.');
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'Necesitás refrescar manualmente la lista para resolver el conflicto remoto.',
+    );
   });
 
   it('should render the ganaderos table with the expected business columns', async () => {
@@ -101,13 +117,48 @@ describe('GanaderosPageComponent', () => {
           updatedAt: '2026-04-26T10:06:00.000Z',
           lastSyncedAt: null,
         },
-      ] as GanaderoItem[])
+      ] as GanaderoItem[]),
     );
     const { fixture } = await configure(serviceMock);
 
     expect(fixture.nativeElement.textContent).toContain('Identificador');
     expect(fixture.nativeElement.textContent).toContain('Correo');
     expect(fixture.nativeElement.textContent).toContain('Estancia Norte');
+  });
+
+  it('should reload when a GANADERO entity change is published', async () => {
+    vi.useFakeTimers();
+    const serviceMock = createServiceMock();
+    serviceMock.listGanaderos.mockReturnValueOnce(of([] as GanaderoItem[])).mockReturnValueOnce(
+      of([
+        {
+          id: 'ganadero-1',
+          businessIdentifier: 'BO-100',
+          name: 'Estancia Norte',
+          email: 'norte@hato.bo',
+          contactInfo: '',
+          active: true,
+          version: 1,
+          createdAt: '2026-04-26T10:00:00.000Z',
+          updatedAt: '2026-04-26T10:00:00.000Z',
+          lastSyncedAt: null,
+        },
+      ] as GanaderoItem[]),
+    );
+    const { fixture, entityChangeBus } = await configure(serviceMock);
+
+    entityChangeBus.emit({
+      entity: 'GANADERO',
+      source: 'pull',
+      operation: 'sync-batch',
+      ids: ['ganadero-1'],
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    fixture.detectChanges();
+
+    expect(serviceMock.listGanaderos).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('Estancia Norte');
+    vi.useRealTimers();
   });
 
   it('should filter the table by business identifier when filters change', async () => {
@@ -138,7 +189,7 @@ describe('GanaderosPageComponent', () => {
           updatedAt: '2026-04-26T10:00:00.000Z',
           lastSyncedAt: null,
         },
-      ] as GanaderoItem[])
+      ] as GanaderoItem[]),
     );
     const { fixture, component } = await configure(serviceMock);
 
@@ -194,9 +245,9 @@ describe('GanaderosPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const confirmButton = Array.from(overlayContainer.getContainerElement().querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Confirmar baja')
-    ) as HTMLButtonElement;
+    const confirmButton = Array.from(
+      overlayContainer.getContainerElement().querySelectorAll('button'),
+    ).find((button) => button.textContent?.includes('Confirmar baja')) as HTMLButtonElement;
     confirmButton.click();
     await fixture.whenStable();
     fixture.detectChanges();

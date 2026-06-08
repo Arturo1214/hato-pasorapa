@@ -67,6 +67,35 @@ class AnimalImageResourceTest {
     }
 
     @Test
+    void shouldDenyGanaderoListingAndDownloadingImagesForAnotherOwnerAnimal() {
+        UUID ownOwnerId = UUID.fromString("ae2cb895-826c-4983-b769-df6948df379f");
+        UUID otherOwnerId = UUID.fromString("ae2cb895-826c-4983-b769-df6948df3700");
+        UUID otherAnimalUuid = UUID.fromString("850009bb-f226-42e2-aaf3-c52edcfd16fd");
+        QuarkusTransaction.requiringNew().run(() -> {
+            ganaderoRepository.persist(buildGanadero(ownOwnerId, "NIT-IMAGE-OWN", "Ganadero Image Own", "ganadero-image@hato.bo"));
+            ganaderoRepository.persist(buildGanadero(otherOwnerId, "NIT-IMAGE-OTHER", "Ganadero Image Other", "other-image@hato.bo"));
+            userRepository.persist(buildUser("ganadero-image", "ganadero-image@hato.bo", "AnimalImage9", Role.GANADERO));
+        });
+        seedAnimal(otherAnimalUuid, otherOwnerId);
+        var otherImage = createImage(otherAnimalUuid, UUID.fromString("00000000-0000-0000-0000-000000000300"), "2026-04-26T09:00:00Z", "otro");
+        String token = loginAs("ganadero-image", "AnimalImage9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/animals/{uuid}/images", otherAnimalUuid)
+                .then()
+                .statusCode(403);
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/animal-images/{id}/content", otherImage.getImageId())
+                .then()
+                .statusCode(403);
+    }
+
+    @Test
     void shouldListAnimalImagesInStableOrderAndDownloadAuthenticatedContent() {
         UUID animalUuid = UUID.fromString("850009bb-f226-42e2-aaf3-c52edcfd16fc");
         seedAnimal(animalUuid);
@@ -127,27 +156,40 @@ class AnimalImageResourceTest {
     }
 
     private User buildUser(String username, String email, String password) {
+        return buildUser(username, email, password, Role.ADMIN);
+    }
+
+    private User buildUser(String username, String email, String password, Role role) {
         User user = new User();
-        user.setId(USER_ID);
+        user.setId(role == Role.ADMIN ? USER_ID : UUID.nameUUIDFromBytes(username.getBytes()));
         user.setUsername(username);
         user.setEmail(email);
         user.setDisplayName(username);
         user.setPasswordHash(passwordHasher.hash(password));
-        user.setRole(Role.ADMIN);
+        user.setRole(role);
         user.setStatus(UserStatus.ACTIVE);
         return user;
     }
 
     private Ganadero buildGanadero() {
+        return buildGanadero(OWNER_ID, "NIT-IMAGE-OWNER", "Ganadero Image", null);
+    }
+
+    private Ganadero buildGanadero(UUID id, String businessIdentifier, String name, String email) {
         Ganadero ganadero = new Ganadero();
-        ganadero.setId(OWNER_ID);
-        ganadero.setBusinessIdentifier("NIT-IMAGE-OWNER");
-        ganadero.setName("Ganadero Image");
+        ganadero.setId(id);
+        ganadero.setBusinessIdentifier(businessIdentifier);
+        ganadero.setName(name);
+        ganadero.setEmail(email);
         ganadero.setActive(true);
         return ganadero;
     }
 
     private void seedAnimal(UUID animalUuid) {
+        seedAnimal(animalUuid, OWNER_ID);
+    }
+
+    private void seedAnimal(UUID animalUuid, UUID ownerId) {
         QuarkusTransaction.requiringNew().run(() -> {
             Animal animal = new Animal();
             animal.setUuid(animalUuid);
@@ -157,7 +199,7 @@ class AnimalImageResourceTest {
             animal.setAreteNormalized(animal.getArete().toLowerCase());
             animal.setMarca("Marca Norte");
             animal.setMarcaNormalized("marca norte");
-            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(OWNER_ID).orElseThrow());
+            animal.setOwnerGanadero(ganaderoRepository.findByIdOptional(ownerId).orElseThrow());
             animal.setCategory(AnimalCategory.VACA);
             animal.setSex(AnimalSex.HEMBRA);
             animal.setActive(true);

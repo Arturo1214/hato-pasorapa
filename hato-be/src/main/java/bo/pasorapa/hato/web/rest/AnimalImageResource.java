@@ -10,6 +10,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import java.util.UUID;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 
 @Path("/api/animals/{uuid}/images")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -18,13 +19,19 @@ import java.util.UUID;
 public class AnimalImageResource {
 
     private final AnimalImageService animalImageService;
+    private final JsonWebToken jsonWebToken;
 
-    public AnimalImageResource(AnimalImageService animalImageService) {
+    public AnimalImageResource(AnimalImageService animalImageService, JsonWebToken jsonWebToken) {
         this.animalImageService = animalImageService;
+        this.jsonWebToken = jsonWebToken;
     }
 
     @GET
     public AnimalImageListResponse list(@PathParam("uuid") UUID animalUuid) {
-        return new AnimalImageListResponse(animalImageService.list(animalUuid));
+        return new AnimalImageListResponse(animalImageService.list(animalUuid, currentUserId()));
+    }
+
+    private UUID currentUserId() {
+        return UUID.fromString(jsonWebToken.getSubject());
     }
 }

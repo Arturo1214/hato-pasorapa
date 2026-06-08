@@ -207,30 +207,49 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
     }
 
     public List<AnimalEventLog> listChangedSince(AnimalEventCategory category, LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
-        if (cursorUpdatedAt == null) {
-            return find("from AnimalEventLog where eventCategory = ?1 order by updatedAt asc, eventId asc", category).page(0, limitPlusOne).list();
-        }
-        UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
-        return find(
-                        "from AnimalEventLog where eventCategory = ?1 and (updatedAt > ?2 or (updatedAt = ?2 and eventId > ?3)) order by updatedAt asc, eventId asc",
-                        category,
-                        cursorUpdatedAt,
-                        effectiveCursorId)
-                .page(0, limitPlusOne)
-                .list();
+        return listChangedSinceForOwner(category, null, cursorUpdatedAt, cursorId, limitPlusOne);
+    }
+
+    public List<AnimalEventLog> listChangedSinceForOwner(AnimalEventCategory category, UUID ownerGanaderoId, LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
+        StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal");
+        List<Object> params = new ArrayList<>();
+        appendChangedSinceWhere(query, params, category, ownerGanaderoId, cursorUpdatedAt, cursorId);
+        query.append(" order by log.updatedAt asc, log.eventId asc");
+        return find(query.toString(), params.toArray()).page(0, limitPlusOne).list();
     }
 
     public List<AnimalEventLog> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
-        if (cursorUpdatedAt == null) {
-            return find("from AnimalEventLog order by updatedAt asc, eventId asc").page(0, limitPlusOne).list();
+        return listChangedSinceForOwner(null, null, cursorUpdatedAt, cursorId, limitPlusOne);
+    }
+
+    private void appendChangedSinceWhere(StringBuilder query, List<Object> params, AnimalEventCategory category, UUID ownerGanaderoId, LocalDateTime cursorUpdatedAt, UUID cursorId) {
+        if (category == null && ownerGanaderoId == null && cursorUpdatedAt == null) {
+            return;
         }
-        UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
-        return find(
-                        "from AnimalEventLog where updatedAt > ?1 or (updatedAt = ?1 and eventId > ?2) order by updatedAt asc, eventId asc",
-                        cursorUpdatedAt,
-                        effectiveCursorId)
-                .page(0, limitPlusOne)
-                .list();
+
+        query.append(" where ");
+        if (category != null) {
+            query.append("log.eventCategory = ?").append(params.size() + 1);
+            params.add(category);
+        }
+        if (ownerGanaderoId != null) {
+            if (!params.isEmpty()) {
+                query.append(" and ");
+            }
+            query.append("animal.ownerGanadero.id = ?").append(params.size() + 1);
+            params.add(ownerGanaderoId);
+        }
+        if (cursorUpdatedAt != null) {
+            if (!params.isEmpty()) {
+                query.append(" and ");
+            }
+            UUID effectiveCursorId = cursorId == null ? new UUID(0L, 0L) : cursorId;
+            query.append("(log.updatedAt > ?").append(params.size() + 1)
+                    .append(" or (log.updatedAt = ?").append(params.size() + 1)
+                    .append(" and log.eventId > ?").append(params.size() + 2).append("))");
+            params.add(cursorUpdatedAt);
+            params.add(effectiveCursorId);
+        }
     }
 
     public List<AnimalEventLog> findByVisitIdRoot(String visitId) {
@@ -265,8 +284,8 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
             params.add(animalUuid);
         }
         if (estado != null && !estado.isBlank()) {
-            query.append(" and lower(log.visitStatus) = ?").append(params.size() + 1);
-            params.add(estado.trim().toLowerCase());
+            query.append(" and lower(log.visitStatus) in ?").append(params.size() + 1);
+            params.add(visitStatusAliases(estado));
         }
         if (modo != null && !modo.isBlank()) {
             query.append(" and lower(log.metadataJson) like ?").append(params.size() + 1);
@@ -309,8 +328,8 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
             params.add("%\"mode\":\"" + filter.mode().trim().toLowerCase() + "\"%");
         }
         if (filter.status() != null && !filter.status().isBlank()) {
-            query.append(" and lower(log.visitStatus) = ?").append(params.size() + 1);
-            params.add(filter.status().trim().toLowerCase());
+            query.append(" and lower(log.visitStatus) in ?").append(params.size() + 1);
+            params.add(visitStatusAliases(filter.status()));
         }
         if (filter.occurredFrom() != null) {
             query.append(" and log.occurredAt >= ?").append(params.size() + 1);
@@ -348,11 +367,37 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
     }
 
     private int lifecycleRank(AnimalEventLog log) {
-        String status = log.getVisitStatus();
-        if ("CANCELADA".equalsIgnoreCase(status) || "CANCELED".equalsIgnoreCase(status)) return 40;
-        if ("ATENDIDA".equalsIgnoreCase(status) || "ATTENDED".equalsIgnoreCase(status) || "CLOSED".equalsIgnoreCase(log.getProtocolStatus())) return 30;
-        if ("REPROGRAMADA".equalsIgnoreCase(status) || "RESCHEDULED".equalsIgnoreCase(status)) return 20;
+        String status = canonicalVisitStatus(log.getVisitStatus());
+        if ("canceled".equals(status)) return 40;
+        if ("attended".equals(status) || "finalized".equals(status) || "CLOSED".equalsIgnoreCase(log.getProtocolStatus())) return 30;
+        if ("rescheduled".equals(status)) return 20;
         return 10;
+    }
+
+    private List<String> visitStatusAliases(String status) {
+        return switch (canonicalVisitStatus(status)) {
+            case "pending" -> List.of("pending", "programada", "scheduled");
+            case "attended" -> List.of("attended", "atendida");
+            case "canceled" -> List.of("canceled", "cancelada", "cancelled");
+            case "rescheduled" -> List.of("rescheduled", "reprogramada");
+            case "finalized" -> List.of("finalized", "finalizada");
+            default -> List.of(status.trim().toLowerCase());
+        };
+    }
+
+    private String canonicalVisitStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return "";
+        }
+
+        return switch (status.trim().toLowerCase()) {
+            case "programada", "scheduled", "pending" -> "pending";
+            case "atendida", "attended" -> "attended";
+            case "cancelada", "cancelled", "canceled" -> "canceled";
+            case "reprogramada", "rescheduled" -> "rescheduled";
+            case "finalizada", "finalized" -> "finalized";
+            default -> status.trim().toLowerCase();
+        };
     }
 
     public record VetVisitQueryResult(List<AnimalEventLog> items, long total) {}

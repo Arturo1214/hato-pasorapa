@@ -3,25 +3,31 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom, from, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
-import {
-  type AnimalHealthEventOfflineCreatePayload,
-  type AnimalHealthEventOfflineMetadata,
-  type AnimalHealthEventSnapshotPayload,
-  type AnimalEventLogSnapshotPayload,
-  type AnimalOfflineUiStatus,
+import type {
+  AnimalHealthEventOfflineCreatePayload,
+  AnimalHealthEventOfflineMetadata,
+  AnimalHealthEventSnapshotPayload,
+  AnimalEventLogSnapshotPayload,
+  AnimalOfflineUiStatus,
 } from '../../../../core/offline/offline-types';
+import { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { AnimalsService } from './animals.service';
 import {
-  compareAnimalHealthEventTimeline,
   decorateAnimalHealthTimeline,
   matchesAnimalHealthEventFilters,
   normalizeAnimalHealthEventItem,
 } from './animal-health-events-timeline.adapter';
-import { animalEventLogToHealthEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
+import {
+  animalEventLogToHealthEventItem,
+  filterAnimalEventLogsByCategory,
+} from './animal-timeline.adapter';
 
 export interface AnimalHealthEventItem {
   id: string;
@@ -87,33 +93,42 @@ export class AnimalsHealthEventsService {
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
   private store: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
   private metricsStore = inject(SyncMetricsStore);
-  private animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'> = inject(AnimalsService);
+  private entityChangeBus: OfflineEntityChangeBus = inject(OfflineEntityChangeBus);
+  private animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'> =
+    inject(AnimalsService);
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
 
-  configureForTesting(dependencies: Partial<{
-    http: Pick<HttpClient, 'get'>;
-    appConfig: Pick<ApplicationConfigService, 'config'>;
-    authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
-    offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
-    store: OfflineStoreService;
-    metricsStore: SyncMetricsStore;
-    animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
-    now: () => string;
-    windowRef: Pick<Window, 'dispatchEvent'>;
-  }>) {
+  configureForTesting(
+    dependencies: Partial<{
+      http: Pick<HttpClient, 'get'>;
+      appConfig: Pick<ApplicationConfigService, 'config'>;
+      authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
+      offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
+      store: OfflineStoreService;
+      metricsStore: SyncMetricsStore;
+      entityChangeBus: OfflineEntityChangeBus;
+      animalsService: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
+      now: () => string;
+      windowRef: Pick<Window, 'dispatchEvent'>;
+    }>,
+  ) {
     this.http = dependencies.http ?? this.http;
     this.appConfig = dependencies.appConfig ?? this.appConfig;
     this.authService = dependencies.authService ?? this.authService;
     this.offlineStatus = dependencies.offlineStatus ?? this.offlineStatus;
     this.store = dependencies.store ?? this.store;
     this.metricsStore = dependencies.metricsStore ?? this.metricsStore;
+    this.entityChangeBus = dependencies.entityChangeBus ?? this.entityChangeBus;
     this.animalsService = dependencies.animalsService ?? this.animalsService;
     this.now = dependencies.now ?? this.now;
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
 
-  listEvents(animalUuid: string, filters: AnimalHealthEventListFilters = {}): Observable<AnimalHealthEventItem[]> {
+  listEvents(
+    animalUuid: string,
+    filters: AnimalHealthEventListFilters = {},
+  ): Observable<AnimalHealthEventItem[]> {
     return from(this.listEventsInternal(animalUuid, filters) as Promise<AnimalHealthEventItem[]>);
   }
 
@@ -131,8 +146,8 @@ export class AnimalsHealthEventsService {
     const response = await firstValueFrom(
       this.http.get<AnimalHealthEventListResponse>(
         `${this.appConfig.config().apiBaseUrl}/animals/${animalUuid}/health-events${buildHealthEventsQuery(filters)}`,
-        { headers: this.buildHeaders() }
-      )
+        { headers: this.buildHeaders() },
+      ),
     );
 
     const items = (response.items ?? [])
@@ -145,7 +160,10 @@ export class AnimalsHealthEventsService {
   private async createEventInternal(input: AnimalHealthEventCreateInput) {
     const currentUser = this.authService.currentUser();
     if (!currentUser) {
-      return { outcome: 'blocked', message: 'Necesitás sesión activa para registrar eventos sanitarios.' } satisfies AnimalHealthEventMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Necesitás sesión activa para registrar eventos sanitarios.',
+      } satisfies AnimalHealthEventMutationFeedback;
     }
 
     const now = this.now();
@@ -178,6 +196,7 @@ export class AnimalsHealthEventsService {
     });
 
     await this.saveEventSnapshot(createOptimisticHealthEventSnapshot(payload, now));
+    this.emitHealthEventChanges(operationId, input.metadata, sourceChannel);
     await this.refreshPendingState();
 
     if (this.offlineStatus.isOnline()) {
@@ -200,7 +219,10 @@ export class AnimalsHealthEventsService {
     const outbox = await this.store.listOutbox();
 
     const items = [
-      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'HEALTH').map(animalEventLogToHealthEventItem),
+      ...filterAnimalEventLogsByCategory(
+        unifiedSnapshots.map((snapshot) => snapshot.payload),
+        'HEALTH',
+      ).map(animalEventLogToHealthEventItem),
       ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalHealthEventItem),
     ]
       .filter((item) => item.animalUuid === animalUuid)
@@ -214,10 +236,11 @@ export class AnimalsHealthEventsService {
     return outbox.some(
       (operation) =>
         (operation.entityType === 'ANIMAL_HEALTH_EVENT' ||
-          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'HEALTH')) &&
+          (operation.entityType === 'ANIMAL_EVENT_LOG' &&
+            operation.payload['eventCategory'] === 'HEALTH')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
-        operation.status !== 'failed'
+        operation.status !== 'failed',
     );
   }
 
@@ -240,14 +263,52 @@ export class AnimalsHealthEventsService {
     this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
   }
 
-  private async createGlobalVetVisitFanOut(input: AnimalHealthEventCreateInput, currentUser: NonNullable<ReturnType<AuthService['currentUser']>>, now: string) {
+  private emitHealthEventChanges(
+    operationIds: string | string[],
+    metadata: AnimalHealthEventOfflineMetadata,
+    sourceChannel: 'ONLINE' | 'OFFLINE',
+  ) {
+    const source: 'online-mutation' | 'local-mutation' =
+      sourceChannel === 'ONLINE' ? 'online-mutation' : 'local-mutation';
+    const visitId = readVisitIdFromMetadata(metadata);
+    const ids = Array.isArray(operationIds) ? operationIds : [operationIds];
+    this.entityChangeBus.emitBatch([
+      {
+        entity: 'ANIMAL_EVENT_LOG',
+        source,
+        operation: 'create',
+        ids,
+        count: ids.length,
+      },
+      ...(visitId
+        ? [
+            {
+              entity: 'VET_VISIT' as const,
+              source,
+              operation: 'snapshot-upsert' as const,
+              ids: [visitId],
+            },
+          ]
+        : []),
+    ]);
+  }
+
+  private async createGlobalVetVisitFanOut(
+    input: AnimalHealthEventCreateInput,
+    currentUser: NonNullable<ReturnType<AuthService['currentUser']>>,
+    now: string,
+  ) {
     const activeAnimals = await this.listFanOutAnimals(currentUser);
     if (!activeAnimals.length) {
-      return { outcome: 'blocked', message: 'No hay animales activos para registrar la campaña veterinaria.' } satisfies AnimalHealthEventMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'No hay animales activos para registrar la campaña veterinaria.',
+      } satisfies AnimalHealthEventMutationFeedback;
     }
 
     const sourceChannel = this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE';
     const metadata = withTargetAnimalCount(input.metadata, activeAnimals.length);
+    const operationIds: string[] = [];
     for (const animal of activeAnimals) {
       const operationId = globalThis.crypto.randomUUID();
       const payload: AnimalHealthEventOfflineCreatePayload = {
@@ -272,7 +333,9 @@ export class AnimalsHealthEventsService {
         operationId,
       });
       await this.saveEventSnapshot(createOptimisticHealthEventSnapshot(payload, now));
+      operationIds.push(operationId);
     }
+    this.emitHealthEventChanges(operationIds, metadata, sourceChannel);
     await this.refreshPendingState();
 
     if (this.offlineStatus.isOnline()) {
@@ -289,18 +352,34 @@ export class AnimalsHealthEventsService {
     } satisfies AnimalHealthEventMutationFeedback;
   }
 
-  private async listFanOutAnimals(currentUser: NonNullable<ReturnType<AuthService['currentUser']>>) {
+  private async listFanOutAnimals(
+    currentUser: NonNullable<ReturnType<AuthService['currentUser']>>,
+  ) {
     if (currentUser.role === 'GANADERO') {
-      return firstValueFrom(this.animalsService.listActiveAnimals(currentUser.ganaderoId ?? '__NO_AUTHENTICATED_GANADERO__', 0, 1000));
+      return firstValueFrom(
+        this.animalsService.listActiveAnimals(
+          currentUser.ganaderoId ?? '__NO_AUTHENTICATED_GANADERO__',
+          0,
+          1000,
+        ),
+      );
     }
     return firstValueFrom(this.animalsService.listAnimals({ active: true, page: 0, size: 1000 }));
   }
 }
 
-function toAnimalEventLogPayload(item: AnimalHealthEventSnapshotPayload | AnimalHealthEventItem): AnimalEventLogSnapshotPayload {
+function toAnimalEventLogPayload(
+  item: AnimalHealthEventSnapshotPayload | AnimalHealthEventItem,
+): AnimalEventLogSnapshotPayload {
   const metadata = item.metadata as Record<string, unknown>;
-  const visit = typeof metadata['visit'] === 'object' && metadata['visit'] !== null ? metadata['visit'] as Record<string, unknown> : null;
-  const protocol = typeof metadata['protocol'] === 'object' && metadata['protocol'] !== null ? metadata['protocol'] as Record<string, unknown> : null;
+  const visit =
+    typeof metadata['visit'] === 'object' && metadata['visit'] !== null
+      ? (metadata['visit'] as Record<string, unknown>)
+      : null;
+  const protocol =
+    typeof metadata['protocol'] === 'object' && metadata['protocol'] !== null
+      ? (metadata['protocol'] as Record<string, unknown>)
+      : null;
 
   return {
     ...item,
@@ -333,6 +412,15 @@ function readString(record: Record<string, unknown> | null, key: string) {
   return typeof value === 'string' ? value : null;
 }
 
+function readVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {
+  const record = metadata as Record<string, unknown>;
+  const visit =
+    typeof record['visit'] === 'object' && record['visit'] !== null
+      ? (record['visit'] as Record<string, unknown>)
+      : null;
+  return readString(visit, 'visitId');
+}
+
 function readPayloadString(record: object, key: string) {
   const value = (record as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : null;
@@ -349,7 +437,10 @@ function readVisitMode(metadata: AnimalHealthEventOfflineMetadata) {
   return (metadata.visit as Record<string, unknown>)['mode'];
 }
 
-function withTargetAnimalCount(metadata: AnimalHealthEventOfflineMetadata, targetAnimalCount: number): AnimalHealthEventOfflineMetadata {
+function withTargetAnimalCount(
+  metadata: AnimalHealthEventOfflineMetadata,
+  targetAnimalCount: number,
+): AnimalHealthEventOfflineMetadata {
   if (!('visit' in metadata) || typeof metadata.visit !== 'object' || metadata.visit === null) {
     return metadata;
   }
@@ -362,7 +453,10 @@ function withTargetAnimalCount(metadata: AnimalHealthEventOfflineMetadata, targe
   } as AnimalHealthEventOfflineMetadata;
 }
 
-function createOptimisticHealthEventSnapshot(payload: AnimalHealthEventOfflineCreatePayload, now: string): AnimalHealthEventItem {
+function createOptimisticHealthEventSnapshot(
+  payload: AnimalHealthEventOfflineCreatePayload,
+  now: string,
+): AnimalHealthEventItem {
   return {
     id: payload.operationId,
     animalUuid: payload.animalUuid,

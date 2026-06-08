@@ -8,6 +8,7 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
+import type { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
 import { GanaderosService, type GanaderoItem } from './ganaderos.service';
 
 describe('GanaderosService', () => {
@@ -25,7 +26,11 @@ describe('GanaderosService', () => {
     ...overrides,
   });
 
-  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get' | 'post' | 'put'>> }) => {
+  const setup = (options: {
+    online: boolean;
+    http?: Partial<Pick<HttpClient, 'get' | 'post' | 'put'>>;
+    entityChangeBus?: Pick<OfflineEntityChangeBus, 'emit'>;
+  }) => {
     let onlineHandler: (() => void | Promise<void>) | undefined;
     vi.spyOn(window, 'addEventListener').mockImplementation((event, listener) => {
       if (event === 'online') {
@@ -74,6 +79,7 @@ describe('GanaderosService', () => {
     service.configureForTesting({
       store,
       now: () => '2026-04-26T10:06:00.000Z',
+      entityChangeBus: options.entityChangeBus as OfflineEntityChangeBus | undefined,
     });
 
     return { service, store, fireOnline: async () => await onlineHandler?.() };
@@ -85,10 +91,13 @@ describe('GanaderosService', () => {
   });
 
   it('should keep the ganadero create outbox identity canonical while exposing a pending snapshot offline', async () => {
-    const { service, store } = setup({ online: false });
+    const entityChangeBus = { emit: vi.fn() };
+    const { service, store } = setup({ online: false, entityChangeBus });
 
     await expect(
-      firstValueFrom(service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }))
+      firstValueFrom(
+        service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Alta de ganadero encolada. Se enviará al reconectar.',
@@ -107,6 +116,12 @@ describe('GanaderosService', () => {
         updatedAt: '2026-04-26T10:06:00.000Z',
       }),
     ]);
+    expect(entityChangeBus.emit).toHaveBeenCalledWith({
+      entity: 'GANADERO',
+      source: 'local-mutation',
+      operation: 'create',
+      ids: ['operation-ganadero-create-1'],
+    });
   });
 
   it('should enqueue ganadero creation online and delegate replay to the global sync orchestrator', async () => {
@@ -115,7 +130,9 @@ describe('GanaderosService', () => {
     const { service, store } = setup({ online: true, http: { post: post as never } });
 
     await expect(
-      firstValueFrom(service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }))
+      firstValueFrom(
+        service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Alta de ganadero encolada. Se disparó la sincronización automática.',
@@ -124,15 +141,128 @@ describe('GanaderosService', () => {
     const outbox = await store.listOutbox();
     expect(outbox).toHaveLength(1);
     expect(outbox[0].entityId).toBe('operation-ganadero-create-1');
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    );
     expect(post).not.toHaveBeenCalled();
     expect(service.syncState().pending).toBe(1);
+  });
+
+  it('should keep an online queued ganadero create visible after ack when the next list is stale', async () => {
+    const get = vi.fn(() => of({ ganaderos: [] }));
+    const { service, store } = setup({
+      online: true,
+      http: { get: get as never },
+      entityChangeBus: { emit: vi.fn() },
+    });
+
+    await firstValueFrom(
+      service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }),
+    );
+    await store.markAcked('operation-ganadero-create-1');
+
+    await expect(firstValueFrom(service.listGanaderos())).resolves.toEqual([
+      createGanadero({
+        id: 'pending:operation-ganadero-create-1',
+        email: '',
+        version: 0,
+        createdAt: '2026-04-26T10:06:00.000Z',
+        updatedAt: '2026-04-26T10:06:00.000Z',
+      }),
+    ]);
+  });
+
+  it('should keep a reconciled ganadero create visible after server-id ack when the next list is stale', async () => {
+    const get = vi.fn(() => of({ ganaderos: [] }));
+    const { service, store } = setup({
+      online: true,
+      http: { get: get as never },
+      entityChangeBus: { emit: vi.fn() },
+    });
+
+    await firstValueFrom(
+      service.createGanadero({ businessIdentifier: 'BO-100', name: 'Estancia Norte' }),
+    );
+    await store.reassignSnapshotEntityId(
+      'GANADERO',
+      'operation-ganadero-create-1',
+      'ganadero-server-1',
+    );
+    await store.markAcked('operation-ganadero-create-1');
+
+    await expect(firstValueFrom(service.listGanaderos())).resolves.toEqual([
+      createGanadero({
+        id: 'ganadero-server-1',
+        email: '',
+        version: 0,
+        createdAt: '2026-04-26T10:06:00.000Z',
+        updatedAt: '2026-04-26T10:06:00.000Z',
+      }),
+    ]);
+  });
+
+  it('should emit a GANADERO change when online ganadero update saves the returned snapshot', async () => {
+    const updated = createGanadero({ name: 'Estancia Norte Editada' });
+    const entityChangeBus = { emit: vi.fn() };
+    const { service } = setup({
+      online: true,
+      http: { put: vi.fn(() => of(updated)) as never },
+      entityChangeBus,
+    });
+
+    await expect(
+      firstValueFrom(
+        service.updateGanadero('ganadero-1', {
+          businessIdentifier: 'BO-100',
+          name: 'Estancia Norte Editada',
+          email: 'norte@hato.bo',
+        }),
+      ),
+    ).resolves.toEqual({ outcome: 'synced', message: 'Ganadero actualizado correctamente.' });
+
+    expect(entityChangeBus.emit).toHaveBeenCalledWith({
+      entity: 'GANADERO',
+      source: 'online-mutation',
+      operation: 'snapshot-upsert',
+      ids: ['ganadero-1'],
+    });
+  });
+
+  it('should prefer a recently updated ganadero snapshot over a stale online list row', async () => {
+    const stale = createGanadero({ name: 'Estancia Norte' });
+    const updated = createGanadero({
+      name: 'Estancia Norte Editada',
+      updatedAt: '2026-04-26T10:10:00.000Z',
+    });
+    const { service } = setup({
+      online: true,
+      http: {
+        put: vi.fn(() => of(updated)) as never,
+        get: vi.fn(() => of({ ganaderos: [stale] })) as never,
+      },
+      entityChangeBus: { emit: vi.fn() },
+    });
+
+    await firstValueFrom(
+      service.updateGanadero('ganadero-1', {
+        businessIdentifier: 'BO-100',
+        name: 'Estancia Norte Editada',
+        email: 'norte@hato.bo',
+      }),
+    );
+
+    await expect(firstValueFrom(service.listGanaderos())).resolves.toEqual([updated]);
   });
 
   it('should enqueue ganadero status changes online and delegate replay to the global sync orchestrator', async () => {
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
     const put = vi.fn();
-    const { service, store } = setup({ online: true, http: { put: put as never } });
+    const entityChangeBus = { emit: vi.fn() };
+    const { service, store } = setup({
+      online: true,
+      http: { put: put as never },
+      entityChangeBus,
+    });
     await store.saveSnapshot({
       key: 'GANADERO:ganadero-1',
       entityType: 'GANADERO',
@@ -150,8 +280,16 @@ describe('GanaderosService', () => {
     await expect(firstValueFrom(service.listGanaderos())).resolves.toEqual([
       createGanadero({ active: false, updatedAt: '2026-04-26T10:06:00.000Z' }),
     ]);
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    );
     expect(put).not.toHaveBeenCalled();
     expect(service.syncState().pending).toBe(1);
+    expect(entityChangeBus.emit).toHaveBeenCalledWith({
+      entity: 'GANADERO',
+      source: 'local-mutation',
+      operation: 'status-update',
+      ids: ['ganadero-1'],
+    });
   });
 });

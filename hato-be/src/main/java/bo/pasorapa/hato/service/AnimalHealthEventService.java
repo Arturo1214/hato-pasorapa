@@ -1,6 +1,7 @@
 package bo.pasorapa.hato.service;
 
 import bo.pasorapa.hato.domain.Animal;
+import bo.pasorapa.hato.domain.AnimalEventLog;
 import bo.pasorapa.hato.domain.Role;
 import bo.pasorapa.hato.domain.User;
 import bo.pasorapa.hato.domain.enumeration.AnimalHealthEventType;
@@ -14,6 +15,7 @@ import bo.pasorapa.hato.service.dto.animalhealthevent.AnimalHealthEventResponse;
 import bo.pasorapa.hato.service.dto.vetvisit.VetVisitFilterDto;
 import bo.pasorapa.hato.service.dto.vetvisit.VetVisitItemDto;
 import bo.pasorapa.hato.service.dto.vetvisit.VetVisitListResponse;
+import bo.pasorapa.hato.service.dto.vetvisit.VetVisitStatusNormalizer;
 import bo.pasorapa.hato.service.error.BusinessException;
 import bo.pasorapa.hato.service.mapper.AnimalHealthEventMapper;
 import bo.pasorapa.hato.service.model.AnimalHealthEvent;
@@ -38,36 +40,39 @@ public class AnimalHealthEventService {
     private final UserRepository userRepository;
     private final GanaderoRepository ganaderoRepository;
     private final AnimalHealthEventMapper animalHealthEventMapper;
+    private final AnimalAccessService animalAccessService;
 
     public AnimalHealthEventService(
             AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             UserRepository userRepository,
             GanaderoRepository ganaderoRepository,
-            AnimalHealthEventMapper animalHealthEventMapper) {
+            AnimalHealthEventMapper animalHealthEventMapper,
+            AnimalAccessService animalAccessService) {
         this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.userRepository = userRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.animalHealthEventMapper = animalHealthEventMapper;
+        this.animalAccessService = animalAccessService;
     }
 
     @Transactional
     public AnimalHealthEvent create(AnimalHealthEventRequest request) {
-        return create(request, request.performedByUserId());
+        return create(request, null);
     }
 
     @Transactional
     public AnimalHealthEvent create(AnimalHealthEventRequest request, UUID authenticatedUserId) {
-        AnimalHealthEvent existing = animalEventLogRepository.findByOperationId(request.operationId())
-                .map(animalHealthEventMapper::toAnimalHealthEvent)
-                .orElse(null);
-        if (existing != null) {
-            return existing;
+        AnimalEventLog existingLog = animalEventLogRepository.findByOperationId(request.operationId()).orElse(null);
+        if (existingLog != null) {
+            animalAccessService.requireAccessibleAnimal(existingLog.getAnimal(), authenticatedUserId);
+            return animalHealthEventMapper.toAnimalHealthEvent(existingLog);
         }
 
         Animal animal = animalRepository.findByUuid(request.animalUuid())
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        animalAccessService.requireAccessibleAnimal(animal, authenticatedUserId);
 
         UUID effectivePerformedByUserId = resolvePerformedByUserId(request, authenticatedUserId);
         animalHealthEventMapper.validateMetadata(request.healthEventType(), request.metadata(), request.notes());
@@ -250,7 +255,7 @@ public class AnimalHealthEventService {
         Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(representative.getMetadataJson());
         Map<String, Object> visit = readVisit(metadata);
         String mode = readText(visit.get("mode"));
-        String status = readText(visit.get("status"));
+        String status = VetVisitStatusNormalizer.canonicalize(readText(visit.get("status")));
         String parentVisitId = readText(visit.get("parentVisitId"));
         Map<String, Object> veterinarian = readMap(visit.get("veterinarian"));
         OffsetDateTime nextControlAt = readOffsetDateTime(visit.get("nextControlAt"));
@@ -286,16 +291,16 @@ public class AnimalHealthEventService {
     private int lifecycleRank(AnimalHealthEvent event) {
         Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
         Map<String, Object> visit = readVisit(metadata);
-        String status = readText(visit.get("status"));
+        String status = VetVisitStatusNormalizer.canonicalize(readText(visit.get("status")));
         String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
-        if ("CANCELADA".equalsIgnoreCase(status) || "CANCELED".equalsIgnoreCase(status)) {
+        if ("CANCELED".equalsIgnoreCase(status)) {
             return 40;
         }
-        if ("ATENDIDA".equalsIgnoreCase(status) || "ATTENDED".equalsIgnoreCase(status)
+        if ("ATTENDED".equalsIgnoreCase(status) || "FINALIZED".equalsIgnoreCase(status)
                 || "CLOSED".equalsIgnoreCase(protocolStatus)) {
             return 30;
         }
-        if ("REPROGRAMADA".equalsIgnoreCase(status) || "RESCHEDULED".equalsIgnoreCase(status)) {
+        if ("RESCHEDULED".equalsIgnoreCase(status)) {
             return 20;
         }
         return 10;
@@ -303,7 +308,10 @@ public class AnimalHealthEventService {
 
     private String deriveChainStatus(String visitStatus, String parentVisitId, Map<String, Object> metadata) {
         String protocolStatus = animalHealthEventMapper.readFieldVetProtocolStatus(metadata);
-        if ("CLOSED".equalsIgnoreCase(protocolStatus) || "CANCELADA".equalsIgnoreCase(visitStatus) || "CANCELED".equalsIgnoreCase(visitStatus)) {
+        String canonicalVisitStatus = VetVisitStatusNormalizer.canonicalize(visitStatus);
+        if ("CLOSED".equalsIgnoreCase(protocolStatus)
+                || "CANCELED".equalsIgnoreCase(canonicalVisitStatus)
+                || "FINALIZED".equalsIgnoreCase(canonicalVisitStatus)) {
             return "CLOSED";
         }
         return "ACTIVE";

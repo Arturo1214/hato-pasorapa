@@ -76,7 +76,7 @@ public class AnimalReproductionEventResource {
             @QueryParam("occurredFrom") OffsetDateTime occurredFrom,
             @QueryParam("occurredTo") OffsetDateTime occurredTo) {
         return new AnimalReproductionEventListResponse(
-                animalReproductionEventService.list(animalUuid, reproductionEventType, occurredFrom, occurredTo));
+                animalReproductionEventService.list(animalUuid, reproductionEventType, occurredFrom, occurredTo, currentUserId()));
     }
 
     @POST

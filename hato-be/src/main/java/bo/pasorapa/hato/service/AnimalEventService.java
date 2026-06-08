@@ -27,23 +27,26 @@ public class AnimalEventService {
     private final GanaderoRepository ganaderoRepository;
     private final AnimalEventMapper animalEventMapper;
     private final AnimalService animalService;
+    private final AnimalAccessService animalAccessService;
 
     public AnimalEventService(
             AnimalEventLogRepository animalEventLogRepository,
             AnimalRepository animalRepository,
             GanaderoRepository ganaderoRepository,
             AnimalEventMapper animalEventMapper,
-            AnimalService animalService) {
+            AnimalService animalService,
+            AnimalAccessService animalAccessService) {
         this.animalEventLogRepository = animalEventLogRepository;
         this.animalRepository = animalRepository;
         this.ganaderoRepository = ganaderoRepository;
         this.animalEventMapper = animalEventMapper;
         this.animalService = animalService;
+        this.animalAccessService = animalAccessService;
     }
 
     @Transactional
     public AnimalEvent create(AnimalEventRequest request) {
-        return create(request, request.performedByUserId());
+        return create(request, null);
     }
 
     @Transactional
@@ -54,11 +57,13 @@ public class AnimalEventService {
 
         AnimalEventLog existingLog = animalEventLogRepository.findByOperationId(request.operationId()).orElse(null);
         if (existingLog != null) {
+            animalAccessService.requireAccessibleAnimal(existingLog.getAnimal(), authenticatedUserId);
             return animalEventMapper.toAnimalEvent(existingLog);
         }
 
         Animal animal = animalRepository.findByUuid(request.animalUuid())
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        animalAccessService.requireAccessibleAnimal(animal, authenticatedUserId);
 
         UUID effectivePerformedByUserId = resolvePerformedByUserId(request, authenticatedUserId);
         validateOwnershipReferences(request.type(), request.metadata());
@@ -72,6 +77,11 @@ public class AnimalEventService {
     }
 
     public List<AnimalEventResponse> list(UUID animalUuid, AnimalEventType eventType, OffsetDateTime occurredFrom, OffsetDateTime occurredTo) {
+        return list(animalUuid, eventType, occurredFrom, occurredTo, null);
+    }
+
+    public List<AnimalEventResponse> list(UUID animalUuid, AnimalEventType eventType, OffsetDateTime occurredFrom, OffsetDateTime occurredTo, UUID currentUserId) {
+        animalAccessService.requireAccessibleAnimal(animalUuid, currentUserId);
         return animalEventLogRepository
                 .listGeneralHistory(
                         animalUuid,

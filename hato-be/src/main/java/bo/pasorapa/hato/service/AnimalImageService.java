@@ -24,27 +24,36 @@ public class AnimalImageService {
     private final AnimalRepository animalRepository;
     private final AnimalImageMapper animalImageMapper;
     private final AnimalImageStorageService animalImageStorageService;
+    private final AnimalAccessService animalAccessService;
 
     public AnimalImageService(
             AnimalImageRepository animalImageRepository,
             AnimalRepository animalRepository,
             AnimalImageMapper animalImageMapper,
-            AnimalImageStorageService animalImageStorageService) {
+            AnimalImageStorageService animalImageStorageService,
+            AnimalAccessService animalAccessService) {
         this.animalImageRepository = animalImageRepository;
         this.animalRepository = animalRepository;
         this.animalImageMapper = animalImageMapper;
         this.animalImageStorageService = animalImageStorageService;
+        this.animalAccessService = animalAccessService;
     }
 
     @Transactional
     public AnimalImage create(AnimalImageRequest request) {
+        return create(request, null);
+    }
+
+    public AnimalImage create(AnimalImageRequest request, UUID currentUserId) {
         AnimalImage existing = animalImageRepository.findByOperationId(request.operationId()).orElse(null);
         if (existing != null) {
+            animalAccessService.requireAccessibleAnimal(existing.getAnimal(), currentUserId);
             return existing;
         }
 
         Animal animal = animalRepository.findByUuid(request.animalUuid())
                 .orElseThrow(() -> new BusinessException("ANIMAL_NOT_FOUND", "No encontramos el animal solicitado.", Response.Status.NOT_FOUND));
+        animalAccessService.requireAccessibleAnimal(animal, currentUserId);
 
         AnimalImageStorageService.StoredAnimalImage storedImage = animalImageStorageService.store(request);
         try {
@@ -70,12 +79,22 @@ public class AnimalImageService {
     }
 
     public List<AnimalImageResponse> list(UUID animalUuid) {
+        return list(animalUuid, null);
+    }
+
+    public List<AnimalImageResponse> list(UUID animalUuid, UUID currentUserId) {
+        animalAccessService.requireAccessibleAnimal(animalUuid, currentUserId);
         return animalImageRepository.listByAnimalUuid(animalUuid).stream().map(animalImageMapper::toResponse).toList();
     }
 
     public AnimalImageContentResponse download(UUID imageId) {
+        return download(imageId, null);
+    }
+
+    public AnimalImageContentResponse download(UUID imageId, UUID currentUserId) {
         AnimalImage image = animalImageRepository.findByIdOptional(imageId)
                 .orElseThrow(() -> new BusinessException("ANIMAL_IMAGE_NOT_FOUND", "No encontramos la imagen solicitada.", Response.Status.NOT_FOUND));
+        animalAccessService.requireAccessibleAnimal(image.getAnimal(), currentUserId);
         return new AnimalImageContentResponse(
                 animalImageStorageService.read(image.getRelativePath()),
                 image.getMimeType(),

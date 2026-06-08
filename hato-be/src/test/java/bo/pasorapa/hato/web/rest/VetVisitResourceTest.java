@@ -124,6 +124,27 @@ class VetVisitResourceTest {
     }
 
     @Test
+    void shouldCanonicalizeLegacySpanishVetVisitStatusAndFilterAliases() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-350", vetVisitMetadata("VISIT-LEGACY-REST", "SPECIFIC", "PROGRAMADA", "Dra. Ana", null, null, 1, "Programada legacy"));
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("mode", "SPECIFIC")
+                .queryParam("status", "SCHEDULED")
+                .when()
+                .get("/api/vet-visits")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].visitId", equalTo("VISIT-LEGACY-REST"))
+                .body("items[0].status", equalTo("PENDING"))
+                .body("total", equalTo(1));
+    }
+
+    @Test
     void shouldScopeGanaderoVetVisitListToAuthenticatedOwnerAndKeepSpecificAnimalUuid() {
         seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
         seedAnimal(OTHER_OWNER_ANIMAL, OTHER_OWNER_ID);

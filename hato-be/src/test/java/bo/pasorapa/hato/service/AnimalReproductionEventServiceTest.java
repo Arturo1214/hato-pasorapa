@@ -389,6 +389,65 @@ class AnimalReproductionEventServiceTest {
     }
 
     @Test
+    void shouldRejectGanaderoBirthWhenMetadataReferencesOtherOwnerAnimals() {
+        UUID ownOwnerId = UUID.fromString("51515151-5151-4151-8151-515151515151");
+        UUID otherOwnerId = UUID.fromString("52525252-5252-4252-8252-525252525252");
+        UUID ganaderoUserId = UUID.fromString("53535353-5353-4353-8353-535353535353");
+        UUID ownMotherUuid = UUID.fromString("54545454-5454-4454-8454-545454545454");
+        UUID ownFatherUuid = UUID.fromString("55555555-5555-4555-8555-555555555555");
+        UUID ownCalfUuid = UUID.fromString("56565656-5656-4656-8656-565656565656");
+        UUID otherMotherUuid = UUID.fromString("57575757-5757-4757-8757-575757575757");
+        UUID otherFatherUuid = UUID.fromString("58585858-5858-4858-8858-585858585858");
+        UUID otherCalfUuid = UUID.fromString("59595959-5959-4959-8959-595959595959");
+        seedGanadero(ownOwnerId, "NIT-BIRTH-OWN", "Ganadero Birth Own", "birth-own@hato.bo");
+        seedGanadero(otherOwnerId, "NIT-BIRTH-OTHER", "Ganadero Birth Other", "birth-other@hato.bo");
+        seedUser(ganaderoUserId, "birth-own", "birth-own@hato.bo", Role.GANADERO);
+        seedAnimal(ownMotherUuid, "AR-birth-own-mother", AnimalSex.HEMBRA, ownOwnerId);
+        seedAnimal(ownFatherUuid, "AR-birth-own-father", AnimalSex.MACHO, ownOwnerId);
+        seedAnimal(ownCalfUuid, "AR-birth-own-calf", AnimalSex.HEMBRA, ownOwnerId);
+        seedAnimal(otherMotherUuid, "AR-birth-other-mother", AnimalSex.HEMBRA, otherOwnerId);
+        seedAnimal(otherFatherUuid, "AR-birth-other-father", AnimalSex.MACHO, otherOwnerId);
+        seedAnimal(otherCalfUuid, "AR-birth-other-calf", AnimalSex.HEMBRA, otherOwnerId);
+
+        BusinessException motherException = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(birthRequest(
+                ownMotherUuid,
+                ganaderoUserId,
+                UUID.fromString("5a5a5a5a-5a5a-4a5a-8a5a-5a5a5a5a5a5a"),
+                Map.of(
+                        "birthDate", "2026-04-27T10:00:00Z",
+                        "offspringCount", 1,
+                        "motherAnimalUuid", otherMotherUuid.toString(),
+                        "offspringAnimalUuids", List.of(ownCalfUuid.toString()))), ganaderoUserId));
+        BusinessException fatherException = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(birthRequest(
+                ownMotherUuid,
+                ganaderoUserId,
+                UUID.fromString("5b5b5b5b-5b5b-4b5b-8b5b-5b5b5b5b5b5b"),
+                Map.of(
+                        "birthDate", "2026-04-27T10:00:00Z",
+                        "offspringCount", 1,
+                        "motherAnimalUuid", ownMotherUuid.toString(),
+                        "fatherAnimalUuid", otherFatherUuid.toString(),
+                        "offspringAnimalUuids", List.of(ownCalfUuid.toString()))), ganaderoUserId));
+        BusinessException offspringException = assertThrows(BusinessException.class, () -> animalReproductionEventService.create(birthRequest(
+                ownMotherUuid,
+                ganaderoUserId,
+                UUID.fromString("5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c"),
+                Map.of(
+                        "birthDate", "2026-04-27T10:00:00Z",
+                        "offspringCount", 1,
+                        "motherAnimalUuid", ownMotherUuid.toString(),
+                        "fatherAnimalUuid", ownFatherUuid.toString(),
+                        "offspringAnimalUuids", List.of(otherCalfUuid.toString()))), ganaderoUserId));
+
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN", motherException.code());
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN", fatherException.code());
+        assertEquals("ANIMAL_REPRODUCTION_EVENT_OWNER_FORBIDDEN", offspringException.code());
+        Animal otherCalf = QuarkusTransaction.requiringNew().call(() -> animalRepository.findByUuid(otherCalfUuid).orElseThrow());
+        assertEquals(null, otherCalf.getMotherAnimalUuid());
+        assertEquals(0, animalEventLogRepository.count("eventCategory", AnimalEventCategory.REPRODUCTION));
+    }
+
+    @Test
     void shouldRejectBirthWhenParentageProjectionWouldOverwriteExistingMother() {
         UUID motherUuid = UUID.fromString("11111111-1111-1111-1111-111111111111");
         UUID conflictingMotherUuid = UUID.fromString("99999999-9999-9999-9999-999999999999");
@@ -477,6 +536,23 @@ class AnimalReproductionEventServiceTest {
                 OffsetDateTime.parse("2026-04-27T21:01:00Z")), UUID.fromString("efefefef-efef-4fef-8fef-efefefefefef")));
 
         assertEquals("ANIMAL_REPRODUCTION_EVENT_PERFORMED_BY_MISMATCH", exception.code());
+    }
+
+    private AnimalReproductionEventRequest birthRequest(
+            UUID animalUuid,
+            UUID performedByUserId,
+            UUID operationId,
+            Map<String, Object> metadata) {
+        return new AnimalReproductionEventRequest(
+                animalUuid,
+                AnimalReproductionEventType.BIRTH,
+                OffsetDateTime.parse("2026-04-27T10:00:00Z"),
+                "Parto offline",
+                performedByUserId,
+                "OFFLINE",
+                operationId,
+                metadata,
+                OffsetDateTime.parse("2026-04-27T10:01:00Z"));
     }
 
     private AnimalReproductionEventRequest request(

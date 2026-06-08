@@ -9,7 +9,10 @@ import {
   mapAnimalOfflineUiStatus,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
 import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 
@@ -190,6 +193,8 @@ export interface AnimalsServiceDependencies {
   windowRef: Pick<Window, 'dispatchEvent'>;
 }
 
+const NO_AUTHENTICATED_GANADERO_OWNER = '__NO_AUTHENTICATED_GANADERO__';
+
 @Injectable({ providedIn: 'root' })
 export class AnimalsService {
   private http: Pick<HttpClient, 'get' | 'post' | 'put'> = inject(HttpClient);
@@ -225,8 +230,21 @@ export class AnimalsService {
     return from(this.listAnimalsInternal(filters));
   }
 
-  listActiveAnimals(ownerGanaderoId: string, page = 0, size = 10, visible?: string | null): Observable<AnimalItem[]> {
-    return from(this.listAnimalsInternal({ ownerGanaderoId, active: true, page, size, visible: visible ?? undefined }));
+  listActiveAnimals(
+    ownerGanaderoId: string,
+    page = 0,
+    size = 10,
+    visible?: string | null,
+  ): Observable<AnimalItem[]> {
+    return from(
+      this.listAnimalsInternal({
+        ownerGanaderoId,
+        active: true,
+        page,
+        size,
+        visible: visible ?? undefined,
+      }),
+    );
   }
 
   getAnimal(uuid: string): Observable<AnimalItem> {
@@ -245,7 +263,10 @@ export class AnimalsService {
     return from(this.updateAnimalInternal(uuid, payload));
   }
 
-  registerBirth(motherUuid: string, payload: BirthRegistrationPayload): Observable<BirthRegistrationResponse> {
+  registerBirth(
+    motherUuid: string,
+    payload: BirthRegistrationPayload,
+  ): Observable<BirthRegistrationResponse> {
     return from(this.registerBirthInternal(motherUuid, payload));
   }
 
@@ -259,9 +280,12 @@ export class AnimalsService {
     }
 
     const response = await firstValueFrom(
-      this.http.get<AnimalsPageResponse>(`${this.appConfig.config().apiBaseUrl}/animals${buildListQuery(effectiveFilters)}`, {
-        headers: this.buildHeaders(),
-      })
+      this.http.get<AnimalsPageResponse>(
+        `${this.appConfig.config().apiBaseUrl}/animals${buildListQuery(effectiveFilters)}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
 
     const animals = (response.content ?? []).map(normalizeAnimalItem);
@@ -274,7 +298,7 @@ export class AnimalsService {
           ...animal,
           syncStatus: animal.syncStatus ?? 'synced',
           syncMessage: animal.syncMessage ?? null,
-        }) satisfies AnimalItem
+        }) satisfies AnimalItem,
     );
   }
 
@@ -293,7 +317,7 @@ export class AnimalsService {
     const response = await firstValueFrom(
       this.http.get<RawAnimalItem>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}`, {
         headers: this.buildHeaders(),
-      })
+      }),
     );
     const animal = normalizeAnimalItem(response);
     await this.saveAnimalSnapshot(animal);
@@ -302,16 +326,21 @@ export class AnimalsService {
 
   private async getGenealogyInternal(uuid: string, generations?: number) {
     const response = await firstValueFrom(
-      this.http.get<RawAnimalGenealogy>(`${this.appConfig.config().apiBaseUrl}/animals/${uuid}/genealogy${buildGenealogyQuery(generations)}`, {
-        headers: this.buildHeaders(),
-      })
+      this.http.get<RawAnimalGenealogy>(
+        `${this.appConfig.config().apiBaseUrl}/animals/${uuid}/genealogy${buildGenealogyQuery(generations)}`,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
 
     return {
       animal: markSynced(normalizeAnimalItem(response.animal)),
       mother: response.mother ? markSynced(normalizeAnimalItem(response.mother)) : null,
       father: response.father ? markSynced(normalizeAnimalItem(response.father)) : null,
-      offspring: (response.offspring ?? []).map((animal) => markSynced(normalizeAnimalItem(animal))),
+      offspring: (response.offspring ?? []).map((animal) =>
+        markSynced(normalizeAnimalItem(animal)),
+      ),
       ancestors: response.ancestors ? normalizeGenealogyNode(response.ancestors) : null,
     } satisfies AnimalGenealogy;
   }
@@ -324,14 +353,20 @@ export class AnimalsService {
 
     return {
       ...filters,
-      ownerGanaderoId: currentUser.ganaderoId ?? '__NO_AUTHENTICATED_GANADERO__',
+      ownerGanaderoId: currentUser.ganaderoId ?? NO_AUTHENTICATED_GANADERO_OWNER,
     };
   }
 
   private async createAnimalInternal(payload: AnimalMutationPayload) {
     const now = this.now();
     const animalUuid = globalThis.crypto.randomUUID();
-    const sanitizedPayload = sanitizeMutationPayload(payload);
+    const sanitizedPayload = this.withAuthenticatedGanaderoOwner(sanitizeMutationPayload(payload));
+    if (!sanitizedPayload) {
+      return {
+        outcome: 'blocked',
+        message: 'No pudimos identificar el ganadero autenticado para encolar el animal.',
+      } satisfies AnimalMutationFeedback;
+    }
 
     await this.store.enqueueOperation({
       entityType: 'ANIMAL',
@@ -342,7 +377,9 @@ export class AnimalsService {
       clientCreatedAt: now,
       clientUpdatedAt: now,
     });
-    await this.saveAnimalSnapshot(createOptimisticAnimalSnapshot(animalUuid, sanitizedPayload, now));
+    await this.saveAnimalSnapshot(
+      createOptimisticAnimalSnapshot(animalUuid, sanitizedPayload, now),
+    );
     this.recentlyMutatedAnimalUuids.add(animalUuid);
     await this.refreshPendingState({
       lastMessage: this.offlineStatus.isOnline()
@@ -368,7 +405,13 @@ export class AnimalsService {
 
   private async updateAnimalInternal(uuid: string, payload: AnimalMutationPayload) {
     const now = this.now();
-    const sanitizedPayload = sanitizeMutationPayload(payload);
+    const sanitizedPayload = this.withAuthenticatedGanaderoOwner(sanitizeMutationPayload(payload));
+    if (!sanitizedPayload) {
+      return {
+        outcome: 'blocked',
+        message: 'No pudimos identificar el ganadero autenticado para encolar el animal.',
+      } satisfies AnimalMutationFeedback;
+    }
     const currentSnapshot = await this.findAnimalSnapshot(uuid);
 
     await this.store.enqueueOperation({
@@ -381,7 +424,7 @@ export class AnimalsService {
       clientUpdatedAt: now,
     });
     await this.saveAnimalSnapshot(
-      applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now)
+      applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now),
     );
     this.recentlyMutatedAnimalUuids.add(uuid);
     await this.refreshPendingState({
@@ -406,9 +449,13 @@ export class AnimalsService {
 
   private async registerBirthInternal(motherUuid: string, payload: BirthRegistrationPayload) {
     const response = await firstValueFrom(
-      this.http.post<BirthRegistrationResponse>(`${this.appConfig.config().apiBaseUrl}/animals/${motherUuid}/birth-registration`, payload, {
-        headers: this.buildHeaders(),
-      })
+      this.http.post<BirthRegistrationResponse>(
+        `${this.appConfig.config().apiBaseUrl}/animals/${motherUuid}/birth-registration`,
+        payload,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
 
     const createdOffspring = response.offspring.map(normalizeAnimalItem);
@@ -425,7 +472,9 @@ export class AnimalsService {
     const outbox = await this.store.listOutbox();
 
     return snapshots
-      .map((snapshot) => normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem))
+      .map((snapshot) =>
+        normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem),
+      )
       .map((animal) => decorateAnimalSnapshot(animal, outbox))
       .filter((animal) => matchesAnimalFilters(animal, filters))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -447,7 +496,9 @@ export class AnimalsService {
     const outbox = await this.store.listOutbox();
     const missingRecentlyMutatedAnimals = snapshots
       .filter((snapshot) => this.recentlyMutatedAnimalUuids.has(snapshot.entityId))
-      .map((snapshot) => normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem))
+      .map((snapshot) =>
+        normalizeAnimalItem(snapshot.payload as unknown as RawAnimalItem | AnimalItem),
+      )
       .map((animal) => decorateAnimalSnapshot(animal, outbox))
       .filter((animal) => !remoteAnimalUuids.has(animal.uuid))
       .filter((animal) => matchesAnimalFilters(animal, filters));
@@ -457,14 +508,17 @@ export class AnimalsService {
     }
 
     return [...missingRecentlyMutatedAnimals, ...animals].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt)
+      right.updatedAt.localeCompare(left.updatedAt),
     );
   }
 
   private async hasLocalAnimalOperations() {
     const outbox = await this.store.listOutbox();
     return outbox.some(
-      (operation) => operation.entityType === 'ANIMAL' && operation.status !== 'acked' && operation.status !== 'failed'
+      (operation) =>
+        operation.entityType === 'ANIMAL' &&
+        operation.status !== 'acked' &&
+        operation.status !== 'failed',
     );
   }
 
@@ -481,7 +535,25 @@ export class AnimalsService {
 
   private async findAnimalSnapshot(uuid: string) {
     const snapshots = await this.store.listSnapshots('ANIMAL');
-    return snapshots.find((snapshot) => snapshot.entityId === uuid)?.payload as AnimalItem | undefined;
+    return snapshots.find((snapshot) => snapshot.entityId === uuid)?.payload as
+      | AnimalItem
+      | undefined;
+  }
+
+  private withAuthenticatedGanaderoOwner(payload: AnimalOfflineMutationPayload) {
+    const currentUser = this.authService.currentUser();
+    if (currentUser?.role !== 'GANADERO') {
+      return payload;
+    }
+
+    if (!currentUser.ganaderoId) {
+      return null;
+    }
+
+    return {
+      ...payload,
+      ownerGanaderoId: currentUser.ganaderoId,
+    } satisfies AnimalOfflineMutationPayload;
   }
 
   private buildHeaders() {
@@ -498,11 +570,11 @@ export class AnimalsService {
 function createOptimisticAnimalSnapshot(
   uuid: string,
   payload: AnimalOfflineMutationPayload,
-  now: string
+  now: string,
 ): AnimalItem {
   return {
     uuid,
-    ownerGanaderoId: payload.ownerGanaderoId ?? 'SESSION_GANADERO',
+    ownerGanaderoId: payload.ownerGanaderoId ?? NO_AUTHENTICATED_GANADERO_OWNER,
     motherAnimalUuid: payload.motherAnimalUuid ?? null,
     fatherAnimalUuid: payload.fatherAnimalUuid ?? null,
     arete: payload.arete ?? null,
@@ -531,11 +603,14 @@ function applyOptimisticAnimalUpdate(
   uuid: string,
   currentSnapshot: AnimalItem | undefined,
   payload: AnimalOfflineMutationPayload,
-  now: string
+  now: string,
 ): AnimalItem {
   return {
     uuid,
-    ownerGanaderoId: payload.ownerGanaderoId ?? currentSnapshot?.ownerGanaderoId ?? 'SESSION_GANADERO',
+    ownerGanaderoId:
+      payload.ownerGanaderoId ??
+      currentSnapshot?.ownerGanaderoId ??
+      NO_AUTHENTICATED_GANADERO_OWNER,
     motherAnimalUuid: payload.motherAnimalUuid ?? currentSnapshot?.motherAnimalUuid ?? null,
     fatherAnimalUuid: payload.fatherAnimalUuid ?? currentSnapshot?.fatherAnimalUuid ?? null,
     arete: payload.arete ?? null,
@@ -582,7 +657,10 @@ function normalizeGenealogyNode(node: RawAnimalGenealogyNode): AnimalGenealogyNo
   } satisfies AnimalGenealogyNode;
 }
 
-function normalizeAnimalCategory(category: RawAnimalItem['category'], sex: AnimalSex | null | undefined): AnimalCategory {
+function normalizeAnimalCategory(
+  category: RawAnimalItem['category'],
+  sex: AnimalSex | null | undefined,
+): AnimalCategory {
   switch (category) {
     case 'COW':
       return ANIMAL_CATEGORY.VACA;
@@ -648,7 +726,10 @@ function matchesAnimalFilters(animal: AnimalItem, filters: AnimalListFilters) {
     }
   }
 
-  if (filters.ownerGanaderoId?.trim() && animal.ownerGanaderoId !== filters.ownerGanaderoId.trim()) {
+  if (
+    filters.ownerGanaderoId?.trim() &&
+    animal.ownerGanaderoId !== filters.ownerGanaderoId.trim()
+  ) {
     return false;
   }
 
@@ -663,8 +744,13 @@ function matchesAnimalFilters(animal: AnimalItem, filters: AnimalListFilters) {
   return true;
 }
 
-function decorateAnimalSnapshot(animal: AnimalItem, outbox: Awaited<ReturnType<OfflineStoreService['listOutbox']>>): AnimalItem {
-  const relatedOperations = outbox.filter((operation) => operation.entityType === 'ANIMAL' && operation.entityId === animal.uuid);
+function decorateAnimalSnapshot(
+  animal: AnimalItem,
+  outbox: Awaited<ReturnType<OfflineStoreService['listOutbox']>>,
+): AnimalItem {
+  const relatedOperations = outbox.filter(
+    (operation) => operation.entityType === 'ANIMAL' && operation.entityId === animal.uuid,
+  );
   const statusOperation = findHighestPriorityOfflineOperation(relatedOperations);
   const syncStatus = mapAnimalOfflineUiStatus(statusOperation?.status);
 
@@ -675,17 +761,21 @@ function decorateAnimalSnapshot(animal: AnimalItem, outbox: Awaited<ReturnType<O
   };
 }
 
-function findHighestPriorityOfflineOperation(operations: Awaited<ReturnType<OfflineStoreService['listOutbox']>>) {
+function findHighestPriorityOfflineOperation(
+  operations: Awaited<ReturnType<OfflineStoreService['listOutbox']>>,
+) {
   return (
     operations.find((operation) => operation.status === 'conflict') ??
-    operations.find((operation) => operation.status === 'failed' || operation.status === 'dead_letter') ??
+    operations.find(
+      (operation) => operation.status === 'failed' || operation.status === 'dead_letter',
+    ) ??
     operations.find((operation) => operation.status !== 'acked')
   );
 }
 
 function resolveAnimalSyncMessage(
   status: AnimalOfflineUiStatus,
-  operation: Awaited<ReturnType<OfflineStoreService['listOutbox']>>[number] | undefined
+  operation: Awaited<ReturnType<OfflineStoreService['listOutbox']>>[number] | undefined,
 ) {
   if (status === 'conflict') {
     return operation?.conflict?.reason ?? operation?.lastErrorMessage ?? 'Hay un conflicto remoto.';

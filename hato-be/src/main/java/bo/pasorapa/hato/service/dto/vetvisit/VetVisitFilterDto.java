@@ -47,7 +47,7 @@ public class VetVisitFilterDto {
     }
 
     public String normalizedStatus() {
-        return normalize(status);
+        return VetVisitStatusNormalizer.canonicalize(status);
     }
 
     public String normalizedVisitId() {

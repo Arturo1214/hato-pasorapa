@@ -3,10 +3,23 @@ import { inject, Injectable } from '@angular/core';
 import { map, of, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
+import { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import type { RazaCreatePayload, RazaItem, RazaListResponse, RazaOption, RazaUpdatePayload } from '../models/raza.model';
+import type {
+  RazaCreatePayload,
+  RazaItem,
+  RazaListResponse,
+  RazaOption,
+  RazaUpdatePayload,
+} from '../models/raza.model';
 
-export type { RazaCreatePayload, RazaItem, RazaOption, RazaTipo, RazaUpdatePayload } from '../models/raza.model';
+export type {
+  RazaCreatePayload,
+  RazaItem,
+  RazaOption,
+  RazaTipo,
+  RazaUpdatePayload,
+} from '../models/raza.model';
 
 export interface RazaMutationFeedback {
   outcome: 'synced' | 'blocked';
@@ -20,6 +33,7 @@ export class RazasService {
   private readonly appConfig = inject(ApplicationConfigService);
   private readonly authService = inject(AuthService);
   private readonly offlineStatus = inject(OfflineStatusService);
+  private readonly entityChangeBus = inject(OfflineEntityChangeBus);
 
   listAll(): Observable<RazaItem[]> {
     return this.http
@@ -46,7 +60,12 @@ export class RazasService {
       .post<RazaItem>(`${this.appConfig.config().apiBaseUrl}/admin/razas`, payload, {
         headers: this.buildMutationHeaders(),
       })
-      .pipe(map((raza) => ({ outcome: 'synced', message: 'Raza creada correctamente.', raza })));
+      .pipe(
+        map((raza) => {
+          this.emitRazaChange(raza.uuid);
+          return { outcome: 'synced', message: 'Raza creada correctamente.', raza };
+        }),
+      );
   }
 
   update(uuid: string, payload: RazaUpdatePayload): Observable<RazaMutationFeedback> {
@@ -58,7 +77,12 @@ export class RazasService {
       .put<RazaItem>(`${this.appConfig.config().apiBaseUrl}/admin/razas/${uuid}`, payload, {
         headers: this.buildMutationHeaders(),
       })
-      .pipe(map((raza) => ({ outcome: 'synced', message: 'Raza actualizada correctamente.', raza })));
+      .pipe(
+        map((raza) => {
+          this.emitRazaChange(raza.uuid);
+          return { outcome: 'synced', message: 'Raza actualizada correctamente.', raza };
+        }),
+      );
   }
 
   setActive(uuid: string, activo: boolean): Observable<RazaMutationFeedback> {
@@ -67,15 +91,22 @@ export class RazasService {
     }
 
     return this.http
-      .patch<RazaItem>(`${this.appConfig.config().apiBaseUrl}/admin/razas/${uuid}/active`, { activo }, {
-        headers: this.buildMutationHeaders(),
-      })
+      .patch<RazaItem>(
+        `${this.appConfig.config().apiBaseUrl}/admin/razas/${uuid}/active`,
+        { activo },
+        {
+          headers: this.buildMutationHeaders(),
+        },
+      )
       .pipe(
-        map((raza) => ({
-          outcome: 'synced',
-          message: activo ? 'Raza activada correctamente.' : 'Raza desactivada correctamente.',
-          raza,
-        }))
+        map((raza) => {
+          this.emitRazaChange(raza.uuid);
+          return {
+            outcome: 'synced',
+            message: activo ? 'Raza activada correctamente.' : 'Raza desactivada correctamente.',
+            raza,
+          };
+        }),
       );
   }
 
@@ -84,6 +115,15 @@ export class RazasService {
       outcome: 'blocked',
       message: 'La gestión de razas requiere conexión. No se guarda información offline.',
     };
+  }
+
+  private emitRazaChange(razaUuid: string) {
+    this.entityChangeBus.emit({
+      entity: 'RAZA',
+      source: 'online-mutation',
+      operation: 'snapshot-upsert',
+      ids: [razaUuid],
+    });
   }
 
   private buildMutationHeaders() {

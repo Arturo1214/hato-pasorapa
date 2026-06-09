@@ -18,6 +18,7 @@ public record VetVisitItemDto(
         UUID animalUuid,
         Integer targetAnimalCount,
         String atencionNotas,
+        String findings,
         BigDecimal costo,
         String costCurrency,
         List<String> treatmentPlan) {

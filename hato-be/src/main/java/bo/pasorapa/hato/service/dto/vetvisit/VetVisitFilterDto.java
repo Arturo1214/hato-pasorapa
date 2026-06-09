@@ -21,6 +21,9 @@ public class VetVisitFilterDto {
     @QueryParam("visitId")
     public String visitId;
 
+    @QueryParam("veterinarian")
+    public String veterinarian;
+
     @QueryParam("occurredFrom")
     public OffsetDateTime occurredFrom;
 
@@ -52,6 +55,10 @@ public class VetVisitFilterDto {
 
     public String normalizedVisitId() {
         return normalize(visitId);
+    }
+
+    public String normalizedVeterinarian() {
+        return normalize(veterinarian);
     }
 
     private String normalize(String value) {

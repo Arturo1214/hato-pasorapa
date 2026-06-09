@@ -62,7 +62,6 @@ export function mapVetVisitFormToCreateInput(value: VetVisitFormValue): AnimalHe
       })),
       ...(includeClinicalFields && normalizeOptionalText(value.notes) ? { atencionNotas: normalizeOptionalText(value.notes)! } : {}),
       ...(includeClinicalFields && value.cost ? { cost: value.cost } : {}),
-      ...(includeClinicalFields && normalizedPlan.length ? { treatmentPlan: normalizedPlan } : {}),
       clinicalNote: {
         reason: value.clinicalNote.reason.trim(),
         ...(includeClinicalFields && normalizeOptionalText(value.clinicalNote.findings) ? { findings: normalizeOptionalText(value.clinicalNote.findings)! } : {}),

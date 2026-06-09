@@ -107,7 +107,7 @@ describe('vet-visit-form.mapper', () => {
     expect(metadata.checklist).toEqual([]);
     expect(metadata.protocol.nextDueAt).toBeUndefined();
     expect(metadata.cost).toBeUndefined();
-    expect(metadata.treatmentPlan).toBeUndefined();
+    expect(metadata['treatmentPlan']).toBeUndefined();
   });
 
   it('should map attended-now creation with current occurrence, clinical fields, and closed chain', () => {
@@ -148,7 +148,11 @@ describe('vet-visit-form.mapper', () => {
       occurredAt: '2026-05-20T09:00',
       notes: null,
       checklist: [],
-      clinicalNote: { reason: 'Control posterior', findings: 'No debería enviarse', plan: 'No debería enviarse' },
+      clinicalNote: {
+        reason: 'Control posterior',
+        findings: 'No debería enviarse',
+        plan: 'No debería enviarse',
+      },
       protocolStatus: 'STARTED',
       parentVisitId: 'visit-parent-1',
       followUpChoice: null,
@@ -226,7 +230,7 @@ describe('vet-visit-form.mapper', () => {
     ).toThrow('VET_VISIT_CANCEL_REASON_REQUIRED');
   });
 
-  it('should map attend action with findings, notes, cost, and structured treatment plan', () => {
+  it('should map attend action with findings, notes, cost, and clinical treatment plan only', () => {
     const input = mapVetVisitFormToCreateInput({
       action: 'attend',
       animalUuid: 'animal-8',
@@ -249,7 +253,7 @@ describe('vet-visit-form.mapper', () => {
     expect(metadata.clinicalNote.findings).toBe('Inflamación leve');
     expect(metadata['atencionNotas']).toBe('Se aplicó tratamiento inicial');
     expect(metadata.cost).toEqual({ amount: 150, currency: 'BOB' });
-    expect(metadata.treatmentPlan).toEqual(['Antibiótico por 3 días', 'Control en 7 días']);
+    expect(metadata['treatmentPlan']).toBeUndefined();
     expect(metadata.clinicalNote.plan).toEqual(['Antibiótico por 3 días', 'Control en 7 días']);
     expect(metadata.protocol.status).toBe('FOLLOW_UP_REQUIRED');
     expect(metadata.protocol.nextDueAt).toBe('2026-05-19T09:00:00.000Z');
@@ -265,14 +269,18 @@ describe('vet-visit-form.mapper', () => {
       occurredAt: '2026-05-12T09:00',
       notes: 'Atención finalizada',
       checklist: [],
-      clinicalNote: { reason: 'Herida', findings: 'Cicatrización completa', plan: 'Alta y observación' },
+      clinicalNote: {
+        reason: 'Herida',
+        findings: 'Cicatrización completa',
+        plan: 'Alta y observación',
+      },
       protocolStatus: 'STARTED',
       followUpChoice: 'finalize',
     });
     const metadata = input.metadata as FieldVetVisitMetadata;
 
     expect(metadata.visit.status).toBe('ATTENDED');
-    expect(metadata.treatmentPlan).toEqual(['Alta y observación']);
+    expect(metadata['treatmentPlan']).toBeUndefined();
     expect(metadata.clinicalNote.plan).toEqual(['Alta y observación']);
     expect(metadata.protocol.status).toBe('CLOSED');
     expect(metadata.protocol.nextDueAt).toBeUndefined();

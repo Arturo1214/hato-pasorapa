@@ -263,13 +263,24 @@ public class AnimalEventLogRepository implements PanacheRepositoryBase<AnimalEve
     }
 
     public List<AnimalEventLog> findByParentVisitId(String parentVisitId) {
+        return findByParentVisitId(null, parentVisitId);
+    }
+
+    public List<AnimalEventLog> findByParentVisitId(UUID ownerId, String parentVisitId) {
         if (parentVisitId == null || parentVisitId.isBlank()) {
             return List.of();
         }
-        return latestPerVisit(find("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and log.eventType = ?2 and log.parentVisitId = ?3 order by log.occurredAt asc, log.eventId asc",
-                AnimalEventCategory.HEALTH,
-                "FIELD_VET_VISIT",
-                parentVisitId).list()).stream()
+        StringBuilder query = new StringBuilder("from AnimalEventLog log left join fetch log.animal animal where log.eventCategory = ?1 and log.eventType = ?2 and log.parentVisitId = ?3");
+        List<Object> params = new ArrayList<>();
+        params.add(AnimalEventCategory.HEALTH);
+        params.add("FIELD_VET_VISIT");
+        params.add(parentVisitId);
+        if (ownerId != null) {
+            query.append(" and animal.ownerGanadero.id = ?").append(params.size() + 1);
+            params.add(ownerId);
+        }
+        query.append(" order by log.occurredAt asc, log.eventId asc");
+        return latestPerVisit(find(query.toString(), params.toArray()).list()).stream()
                 .sorted(Comparator.comparing(AnimalEventLog::getOccurredAt).thenComparing(AnimalEventLog::getEventId))
                 .toList();
     }

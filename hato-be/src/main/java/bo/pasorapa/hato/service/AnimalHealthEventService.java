@@ -25,11 +25,17 @@ import jakarta.ws.rs.core.Response;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -147,8 +153,11 @@ public class AnimalHealthEventService {
                 filter.occurredTo == null ? null : filter.occurredTo.toLocalDateTime(),
                 Integer.MAX_VALUE,
                 0);
+        String status = filter.normalizedStatus();
+        String veterinarian = filter.normalizedVeterinarian();
         List<VetVisitItemDto> groupedItems = groupVetVisits(toHealthEvents(animalEventLogRepository.findFieldVetVisitsByOwner(ownerId, query))).stream()
-                .filter(item -> filter.normalizedStatus() == null || filter.normalizedStatus().equalsIgnoreCase(item.status()))
+                .filter(item -> status == null || status.equalsIgnoreCase(item.status()))
+                .filter(item -> matchesVeterinarian(item, veterinarian))
                 .toList();
         int fromIndex = Math.min(filter.offset(), groupedItems.size());
         int toIndex = Math.min(fromIndex + filter.size, groupedItems.size());
@@ -157,40 +166,112 @@ public class AnimalHealthEventService {
 
     public List<VetVisitItemDto> getVisitChainDetail(String visitId, UUID currentUserId, boolean ganaderoScoped) {
         UUID ownerId = ganaderoScoped ? resolveAuthenticatedGanaderoId(currentUserId) : null;
-        List<AnimalHealthEvent> selectedEvents = filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByVisitIdRoot(visitId)), ownerId);
+        List<AnimalHealthEvent> selectedEvents = findVisitEventsByOwner(ownerId, visitId);
         if (selectedEvents.isEmpty()) {
             return List.of();
         }
 
-        AnimalHealthEvent selected = selectedEvents.stream()
-                .max(vetVisitLifecycleComparator())
-                .orElseThrow();
-        Map<String, Object> selectedMetadata = animalHealthEventMapper.readMetadataJson(selected.getMetadataJson());
-        String rootVisitId = readText(readVisit(selectedMetadata).get("parentVisitId"));
-        if (rootVisitId == null) {
-            rootVisitId = visitId;
-        }
-
-        List<AnimalHealthEvent> chainEvents = new ArrayList<>();
-        chainEvents.addAll(filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByVisitIdRoot(rootVisitId)), ownerId));
-        chainEvents.addAll(filterEventsByOwner(toHealthEvents(animalEventLogRepository.findByParentVisitId(rootVisitId)), ownerId));
-
-        return groupVetVisitItems(chainEvents).stream()
-                .sorted(Comparator.comparing((VetVisitItemDto item) -> item.parentVisitId() == null ? 0 : 1)
+        String rootVisitId = resolveRootVisitId(ownerId, visitId);
+        VisitChainTraversal traversal = collectVisitChain(ownerId, rootVisitId);
+        return groupVetVisitItems(traversal.events()).stream()
+                .sorted(Comparator.comparing((VetVisitItemDto item) -> traversal.depths().getOrDefault(item.visitId(), Integer.MAX_VALUE))
                         .thenComparing(VetVisitItemDto::occurredAt, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(VetVisitItemDto::visitId, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
-    private List<AnimalHealthEvent> filterEventsByOwner(List<AnimalHealthEvent> events, UUID ownerId) {
-        if (ownerId == null) {
-            return events;
+    private String resolveRootVisitId(UUID ownerId, String visitId) {
+        String currentVisitId = visitId;
+        Set<String> visited = new LinkedHashSet<>();
+        while (currentVisitId != null && visited.add(currentVisitId)) {
+            String parentVisitId = resolveParentVisitId(findVisitEventsByOwner(ownerId, currentVisitId));
+            if (parentVisitId == null || visited.contains(parentVisitId)) {
+                return currentVisitId;
+            }
+            if (findVisitEventsByOwner(ownerId, parentVisitId).isEmpty()) {
+                return currentVisitId;
+            }
+            currentVisitId = parentVisitId;
         }
+        return visitId;
+    }
+
+    private VisitChainTraversal collectVisitChain(UUID ownerId, String rootVisitId) {
+        List<AnimalHealthEvent> chainEvents = new ArrayList<>();
+        Map<String, Integer> depths = new HashMap<>();
+        Set<String> visited = new LinkedHashSet<>();
+        Deque<VisitChainNode> pending = new ArrayDeque<>();
+        pending.add(new VisitChainNode(rootVisitId, 0));
+
+        while (!pending.isEmpty()) {
+            VisitChainNode node = pending.removeFirst();
+            if (node.visitId() == null || !visited.add(node.visitId())) {
+                continue;
+            }
+
+            List<AnimalHealthEvent> visitEvents = findVisitEventsByOwner(ownerId, node.visitId());
+            if (visitEvents.isEmpty()) {
+                continue;
+            }
+            chainEvents.addAll(visitEvents);
+            depths.putIfAbsent(node.visitId(), node.depth());
+
+            List<AnimalHealthEvent> childEvents = toHealthEvents(animalEventLogRepository.findByParentVisitId(ownerId, node.visitId()));
+            for (AnimalHealthEvent childEvent : childEvents) {
+                String childVisitId = readVisitId(childEvent);
+                if (childVisitId != null && !visited.contains(childVisitId)) {
+                    pending.addLast(new VisitChainNode(childVisitId, node.depth() + 1));
+                }
+            }
+        }
+
+        return new VisitChainTraversal(chainEvents, depths);
+    }
+
+    private List<AnimalHealthEvent> findVisitEventsByOwner(UUID ownerId, String visitId) {
+        if (visitId == null || visitId.isBlank()) {
+            return List.of();
+        }
+        VetVisitQuery query = new VetVisitQuery(null, visitId, null, null, null, null, Integer.MAX_VALUE, 0);
+        return toHealthEvents(animalEventLogRepository.findFieldVetVisitsByOwner(ownerId, query));
+    }
+
+    private String resolveParentVisitId(List<AnimalHealthEvent> events) {
         return events.stream()
-                .filter(event -> event.getAnimal() != null
-                        && event.getAnimal().getOwnerGanadero() != null
-                        && ownerId.equals(event.getAnimal().getOwnerGanadero().getId()))
-                .toList();
+                .max(vetVisitLifecycleComparator())
+                .map(this::readParentVisitId)
+                .orElse(null);
+    }
+
+    private String readParentVisitId(AnimalHealthEvent event) {
+        Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
+        return readText(readVisit(metadata).get("parentVisitId"));
+    }
+
+    private String readVisitId(AnimalHealthEvent event) {
+        Map<String, Object> metadata = animalHealthEventMapper.readMetadataJson(event.getMetadataJson());
+        return readText(readVisit(metadata).get("visitId"));
+    }
+
+    private record VisitChainNode(String visitId, int depth) {}
+
+    private record VisitChainTraversal(List<AnimalHealthEvent> events, Map<String, Integer> depths) {}
+
+    private boolean matchesVeterinarian(VetVisitItemDto item, String veterinarian) {
+        if (veterinarian == null) {
+            return true;
+        }
+        if (item.veterinarian() == null) {
+            return false;
+        }
+
+        String needle = veterinarian.toLowerCase(Locale.ROOT);
+        return containsIgnoreCase(item.veterinarian().name(), needle)
+                || containsIgnoreCase(item.veterinarian().license(), needle);
+    }
+
+    private boolean containsIgnoreCase(String value, String lowerCaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowerCaseNeedle);
     }
 
     private List<AnimalHealthEvent> toHealthEvents(List<bo.pasorapa.hato.domain.AnimalEventLog> logs) {
@@ -275,6 +356,7 @@ public class AnimalHealthEventService {
                 "GLOBAL".equalsIgnoreCase(mode) ? null : representative.getAnimal().getUuid(),
                 resolveTargetAnimalCount(visit, group),
                 readAtencionNotas(visit, metadata),
+                readFindings(metadata),
                 readCostAmount(metadata),
                 readCostCurrency(metadata),
                 animalHealthEventMapper.readTreatmentPlan(metadata));
@@ -352,6 +434,12 @@ public class AnimalHealthEventService {
     private String readAtencionNotas(Map<String, Object> visit, Map<String, Object> metadata) {
         String notes = readText(visit.get("atencionNotas"));
         return notes == null ? readText(metadata.get("atencionNotas")) : notes;
+    }
+
+    private String readFindings(Map<String, Object> metadata) {
+        Map<String, Object> clinicalNote = readMap(metadata.get("clinicalNote"));
+        String findings = readText(clinicalNote.get("findings"));
+        return findings == null ? readText(metadata.get("findings")) : findings;
     }
 
     private Map<String, Object> readVisit(Map<String, Object> metadata) {

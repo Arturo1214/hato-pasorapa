@@ -38,7 +38,14 @@ export type OfflineOperationStatus = (typeof OFFLINE_OPERATION_STATUSES)[number]
 export const METRICS_WINDOWS = ['24h', '7d'] as const;
 export type MetricsWindow = (typeof METRICS_WINDOWS)[number];
 
-export const SYNC_QUEUE_STATUSES = ['pending', 'in_flight', 'retry_scheduled', 'failed', 'dead_letter', 'conflict'] as const;
+export const SYNC_QUEUE_STATUSES = [
+  'pending',
+  'in_flight',
+  'retry_scheduled',
+  'failed',
+  'dead_letter',
+  'conflict',
+] as const;
 export type SyncQueueStatus = (typeof SYNC_QUEUE_STATUSES)[number];
 export const SYNC_HARNESS_MAX_HAS_MORE_PAGES = 10;
 
@@ -243,7 +250,13 @@ export interface OfflineSyncStateMeta {
   sessionSecurity?: {
     fallbackStatus: 'active' | 'reauth_required' | 'expired';
     cleanupPolicy: 'soft_retention' | 'shared_device_hard';
-    lastBoundaryReason: 'ttl_elapsed' | 'logout' | 'user_switch' | 'manual_lock' | 'migration_reauth_required' | null;
+    lastBoundaryReason:
+      | 'ttl_elapsed'
+      | 'logout'
+      | 'user_switch'
+      | 'manual_lock'
+      | 'migration_reauth_required'
+      | null;
     lastBoundaryAt: string | null;
   };
 }
@@ -254,7 +267,10 @@ export type ReportingWindow = (typeof REPORTING_WINDOWS)[number];
 export const REPORTING_PRESET_IDS = ['all', 'active_only', 'inactive_only'] as const;
 export type ReportingPresetId = (typeof REPORTING_PRESET_IDS)[number];
 
-export type AdminReportingEventSourceType = 'ANIMAL_EVENT' | 'ANIMAL_HEALTH_EVENT' | 'ANIMAL_REPRODUCTION_EVENT';
+export type AdminReportingEventSourceType =
+  | 'ANIMAL_EVENT'
+  | 'ANIMAL_HEALTH_EVENT'
+  | 'ANIMAL_REPRODUCTION_EVENT';
 
 export interface AdminReportingFreshnessState {
   lastSyncAt: string | null;
@@ -315,7 +331,13 @@ export interface AdminReportingDerivedState {
   sourceSignature: Record<string, string | null>;
 }
 
-export const DECISION_SUPPORT_CATEGORIES = ['health', 'reproduction', 'cost', 'productivity', 'operations'] as const;
+export const DECISION_SUPPORT_CATEGORIES = [
+  'health',
+  'reproduction',
+  'cost',
+  'productivity',
+  'operations',
+] as const;
 export type DecisionSupportCategory = (typeof DECISION_SUPPORT_CATEGORIES)[number];
 
 export const DECISION_SUPPORT_SEVERITIES = ['info', 'watch', 'critical'] as const;
@@ -467,7 +489,14 @@ export interface AnimalOfflineSnapshotPayload extends AnimalOfflineMutationPaylo
   lastSyncedAt: string | null;
 }
 
-export const ANIMAL_EVENT_TYPES = ['SOLD', 'DECEASED', 'LOST', 'TRANSFERRED', 'CASTRATION', 'OBSERVATION'] as const;
+export const ANIMAL_EVENT_TYPES = [
+  'SOLD',
+  'DECEASED',
+  'LOST',
+  'TRANSFERRED',
+  'CASTRATION',
+  'OBSERVATION',
+] as const;
 export type AnimalEventType = (typeof ANIMAL_EVENT_TYPES)[number];
 export type AnimalEventSourceChannel = 'ONLINE' | 'OFFLINE';
 
@@ -605,7 +634,6 @@ export interface FieldVetVisitMetadata extends Record<string, unknown> {
   clinicalNote: FieldVetClinicalNote;
   protocol: FieldVetProtocol;
   cost?: { amount: number; currency: 'BOB' };
-  treatmentPlan?: string[];
 }
 
 export type AnimalHealthEventOfflineMetadata =
@@ -641,7 +669,13 @@ export interface AnimalHealthEventSnapshotPayload extends AnimalHealthEventOffli
   visitProjection?: 'CAMPAIGN' | 'SPECIFIC';
 }
 
-export const ANIMAL_REPRODUCTION_EVENT_TYPES = ['SERVICE', 'PREGNANCY_DIAGNOSIS', 'PREGNANCY_CONFIRMED', 'PREGNANCY_LOSS', 'BIRTH'] as const;
+export const ANIMAL_REPRODUCTION_EVENT_TYPES = [
+  'SERVICE',
+  'PREGNANCY_DIAGNOSIS',
+  'PREGNANCY_CONFIRMED',
+  'PREGNANCY_LOSS',
+  'BIRTH',
+] as const;
 export type AnimalReproductionEventType = (typeof ANIMAL_REPRODUCTION_EVENT_TYPES)[number];
 export type AnimalReproductionEventSourceChannel = 'ONLINE' | 'OFFLINE';
 export type AnimalReproductionEventSyncState = 'PENDING_SYNC' | 'SYNCED' | 'CONFLICT';
@@ -722,7 +756,7 @@ export interface AnimalMediaStatusSnapshot {
 
 export function mapAnimalOfflineUiStatus(
   outboxStatus?: OfflineOperationStatus | SyncQueueStatus | null,
-  imageState?: AnimalImageSyncState | null
+  imageState?: AnimalImageSyncState | null,
 ): AnimalOfflineUiStatus {
   if (outboxStatus === 'acked') {
     return 'synced';
@@ -736,7 +770,11 @@ export function mapAnimalOfflineUiStatus(
     return 'failed';
   }
 
-  if (outboxStatus === 'pending' || outboxStatus === 'in_flight' || outboxStatus === 'retry_scheduled') {
+  if (
+    outboxStatus === 'pending' ||
+    outboxStatus === 'in_flight' ||
+    outboxStatus === 'retry_scheduled'
+  ) {
     return 'pending';
   }
 
@@ -751,7 +789,9 @@ export function mapAnimalOfflineUiStatus(
   return 'synced';
 }
 
-export function mapAnimalMediaUiStatus(imageSnapshot?: AnimalMediaStatusSnapshot | null): AnimalOfflineUiStatus {
+export function mapAnimalMediaUiStatus(
+  imageSnapshot?: AnimalMediaStatusSnapshot | null,
+): AnimalOfflineUiStatus {
   if (!imageSnapshot) {
     return 'synced';
   }

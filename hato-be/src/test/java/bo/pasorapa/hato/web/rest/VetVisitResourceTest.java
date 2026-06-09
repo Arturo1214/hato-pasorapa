@@ -124,6 +124,42 @@ class VetVisitResourceTest {
     }
 
     @Test
+    void shouldFilterVetVisitsByVeterinarianNameOrLicense() {
+        seedAnimal(GLOBAL_ANIMAL_ONE, OWNER_ID);
+        seedAnimal(GLOBAL_ANIMAL_TWO, OWNER_ID);
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        seedEvent(GLOBAL_ANIMAL_ONE, "2026-05-10T08:00:00", "event-130", vetVisitMetadata("VISIT-LUNA", "GLOBAL", "PENDING", "Dra. Luna", "MAT-1", null, 2, "Campaña Luna"));
+        seedEvent(GLOBAL_ANIMAL_TWO, "2026-05-11T08:00:00", "event-131", vetVisitMetadata("VISIT-RIO", "GLOBAL", "PENDING", "Dr. Río", "MV-77", null, 2, "Campaña Río"));
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-12T08:00:00", "event-132", vetVisitMetadata("VISIT-SOL", "SPECIFIC", "PENDING", "Dra. Sol", "MAT-9", null, 1, "Visita Sol"));
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("veterinarian", "luna")
+                .when()
+                .get("/api/vet-visits")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].visitId", equalTo("VISIT-LUNA"))
+                .body("items[0].veterinarian.name", equalTo("Dra. Luna"))
+                .body("total", equalTo(1));
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("veterinarian", "mv-77")
+                .when()
+                .get("/api/vet-visits")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].visitId", equalTo("VISIT-RIO"))
+                .body("items[0].veterinarian.license", equalTo("MV-77"))
+                .body("total", equalTo(1));
+    }
+
+    @Test
     void shouldCanonicalizeLegacySpanishVetVisitStatusAndFilterAliases() {
         seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
         seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-350", vetVisitMetadata("VISIT-LEGACY-REST", "SPECIFIC", "PROGRAMADA", "Dra. Ana", null, null, 1, "Programada legacy"));
@@ -167,7 +203,7 @@ class VetVisitResourceTest {
     }
 
     @Test
-    void shouldProjectVetVisitCostCurrencyAndTreatmentPlanInListResponse() {
+    void shouldProjectVetVisitCostCurrencyFindingsAndTreatmentPlanInListResponse() {
         seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
         Map<String, Object> metadata = new LinkedHashMap<>(vetVisitMetadata("VISIT-COST-1", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Atención puntual"));
         metadata.put("cost", Map.of("amount", new BigDecimal("150.50"), "currency", "BOB"));
@@ -185,6 +221,7 @@ class VetVisitResourceTest {
                 .statusCode(200)
                 .body("items", hasSize(1))
                 .body("items[0].visitId", equalTo("VISIT-COST-1"))
+                .body("items[0].findings", equalTo("Ok"))
                 .body("items[0].costo", equalTo(150.50f))
                 .body("items[0].costCurrency", equalTo("BOB"))
                 .body("items[0].treatmentPlan", equalTo(List.of("Antibiótico", "Control en 7 días")));
@@ -246,10 +283,66 @@ class VetVisitResourceTest {
                 .body("items[0].visitId", equalTo("VISIT-REST-CHAIN-PARENT"))
                 .body("items[0].status", equalTo("ATTENDED"))
                 .body("items[0].parentVisitId", nullValue())
+                .body("items[0].findings", equalTo("Ok"))
                 .body("items[1].visitId", equalTo("VISIT-REST-CHAIN-CHILD"))
                 .body("items[1].status", equalTo("CANCELED"))
                 .body("items[1].parentVisitId", equalTo("VISIT-REST-CHAIN-PARENT"))
                 .body("items[1].cancelReason", equalTo("Animal movido"));
+    }
+
+    @Test
+    void shouldExposeFullVisitChainDetailWhenRequestingDeepFollowUp() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-630", vetVisitMetadata("VISIT-DEEP-ROOT", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Root attended"));
+        Map<String, Object> child = new LinkedHashMap<>(vetVisitMetadata("VISIT-DEEP-CHILD", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Child attended"));
+        LinkedHashMap<String, Object> childVisit = new LinkedHashMap<>((Map<String, Object>) child.get("visit"));
+        childVisit.put("parentVisitId", "VISIT-DEEP-ROOT");
+        child.put("visit", childVisit);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-10T09:00:00", "event-631", child);
+        Map<String, Object> grandchild = new LinkedHashMap<>(vetVisitMetadata("VISIT-DEEP-GRANDCHILD", "SPECIFIC", "PENDING", "Dr. Luis", null, null, 1, "Grandchild pending"));
+        LinkedHashMap<String, Object> grandchildVisit = new LinkedHashMap<>((Map<String, Object>) grandchild.get("visit"));
+        grandchildVisit.put("parentVisitId", "VISIT-DEEP-CHILD");
+        grandchild.put("visit", grandchildVisit);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-11T09:00:00", "event-632", grandchild);
+
+        String token = loginAs("vet-visits-admin", "VetVisitsAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/vet-visits/VISIT-DEEP-GRANDCHILD/chain")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(3))
+                .body("items[0].visitId", equalTo("VISIT-DEEP-ROOT"))
+                .body("items[0].parentVisitId", nullValue())
+                .body("items[1].visitId", equalTo("VISIT-DEEP-CHILD"))
+                .body("items[1].parentVisitId", equalTo("VISIT-DEEP-ROOT"))
+                .body("items[2].visitId", equalTo("VISIT-DEEP-GRANDCHILD"))
+                .body("items[2].parentVisitId", equalTo("VISIT-DEEP-CHILD"));
+    }
+
+    @Test
+    void shouldScopeGanaderoVisitChainDescendantsToAuthenticatedOwner() {
+        seedAnimal(SPECIFIC_ANIMAL, OWNER_ID);
+        seedAnimal(OTHER_OWNER_ANIMAL, OTHER_OWNER_ID);
+        seedEvent(SPECIFIC_ANIMAL, "2026-05-09T09:00:00", "event-633", vetVisitMetadata("VISIT-SCOPED-ROOT", "SPECIFIC", "ATTENDED", "Dr. Luis", null, null, 1, "Own root"));
+        Map<String, Object> otherOwnerChild = new LinkedHashMap<>(vetVisitMetadata("VISIT-SCOPED-OTHER-CHILD", "SPECIFIC", "PENDING", "Dra. Otra", null, null, 1, "Other child"));
+        LinkedHashMap<String, Object> otherOwnerChildVisit = new LinkedHashMap<>((Map<String, Object>) otherOwnerChild.get("visit"));
+        otherOwnerChildVisit.put("parentVisitId", "VISIT-SCOPED-ROOT");
+        otherOwnerChild.put("visit", otherOwnerChildVisit);
+        seedEvent(OTHER_OWNER_ANIMAL, "2026-05-10T09:00:00", "event-634", otherOwnerChild);
+
+        String token = loginAs("vet-visits-ganadero", "VetVisitsGanadero9");
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/vet-visits/VISIT-SCOPED-ROOT/chain")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].visitId", equalTo("VISIT-SCOPED-ROOT"));
     }
 
     private String loginAs(String username, String password) {

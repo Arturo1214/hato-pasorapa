@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { AuthService, type SessionUser } from '../../../../core/auth/data-access/auth.service';
@@ -36,14 +36,19 @@ describe('AnimalsImagesService', () => {
         SyncMetricsStore,
         { provide: HttpClient, useValue: { get: vi.fn() } },
         { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
-        { provide: AuthService, useValue: { getAccessToken: () => 'token', currentUser: () => currentUser } },
+        {
+          provide: AuthService,
+          useValue: { getAccessToken: () => 'token', currentUser: () => currentUser },
+        },
         { provide: OfflineStatusService, useValue: { isOnline: () => false } },
       ],
     });
 
     const service = TestBed.inject(AnimalsImagesService);
     const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
-    const imageBinaryStore = new OfflineImageBinaryStoreService(new InMemoryOfflineImageBinaryPersistenceAdapter());
+    const imageBinaryStore = new OfflineImageBinaryStoreService(
+      new InMemoryOfflineImageBinaryPersistenceAdapter(),
+    );
     service.configureForTesting({
       store,
       imageBinaryStore,
@@ -63,13 +68,94 @@ describe('AnimalsImagesService', () => {
     expect(outbox[0]).toEqual(expect.objectContaining({ entityType: 'ANIMAL_IMAGE' }));
 
     const binary = await imageBinaryStore.getBinary(outbox[0].operationId);
-    expect(binary).toEqual(expect.objectContaining({ operationId: outbox[0].operationId, sizeBytes: 3 }));
+    expect(binary).toEqual(
+      expect.objectContaining({ operationId: outbox[0].operationId, sizeBytes: 3 }),
+    );
 
     await expect(firstValueFrom(service.listImages('animal-1'))).resolves.toEqual([
       expect.objectContaining({
         id: outbox[0].operationId,
         syncState: 'PENDING',
         uiStatus: 'local_only',
+      }),
+    ]);
+  });
+
+  it('should save animal images directly online without outbox retries', async () => {
+    const post = vi.fn(() =>
+      of({
+        results: [
+          {
+            operationId: '77777777-7777-4777-8777-777777777777',
+            entityType: 'ANIMAL_IMAGE',
+            entityId: 'image-online-1',
+            classification: 'no_conflict',
+          },
+        ],
+      }),
+    );
+    TestBed.configureTestingModule({
+      providers: [
+        AnimalsImagesService,
+        SyncMetricsStore,
+        { provide: HttpClient, useValue: { get: vi.fn(), post } },
+        { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
+        {
+          provide: AuthService,
+          useValue: { getAccessToken: () => 'token', currentUser: () => currentUser },
+        },
+        { provide: OfflineStatusService, useValue: { isOnline: () => true } },
+      ],
+    });
+
+    const service = TestBed.inject(AnimalsImagesService);
+    const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
+    const imageBinaryStore = new OfflineImageBinaryStoreService(
+      new InMemoryOfflineImageBinaryPersistenceAdapter(),
+    );
+    service.configureForTesting({
+      store,
+      imageBinaryStore,
+      now: () => '2026-04-27T10:00:00.000Z',
+      windowRef: window,
+    });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '77777777-7777-4777-8777-777777777777',
+    );
+
+    const file = new File([new Uint8Array([1, 2, 3])], 'vaca.jpg', { type: 'image/jpeg' });
+
+    await expect(firstValueFrom(service.addImages('animal-1', [file]))).resolves.toEqual({
+      outcome: 'saved',
+      message: 'Imágenes guardadas correctamente.',
+    });
+
+    expect(post).toHaveBeenCalledWith(
+      '/api/sync/push',
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            operationId: '77777777-7777-4777-8777-777777777777',
+            entityType: 'ANIMAL_IMAGE',
+            entityId: '77777777-7777-4777-8777-777777777777',
+            payload: expect.objectContaining({
+              animalUuid: 'animal-1',
+              sourceChannel: 'ONLINE',
+              base64Data: 'AQID',
+            }),
+          }),
+        ],
+      }),
+      { headers: expect.any(HttpHeaders) },
+    );
+    await expect(store.listOutbox()).resolves.toEqual([]);
+    await expect(
+      imageBinaryStore.getBinary('77777777-7777-4777-8777-777777777777'),
+    ).resolves.toBeNull();
+    await expect(store.listSnapshots('ANIMAL_IMAGE')).resolves.toEqual([
+      expect.objectContaining({
+        key: 'ANIMAL_IMAGE:image-online-1',
+        payload: expect.objectContaining({ syncState: 'SYNCED' }),
       }),
     ]);
   });
@@ -81,14 +167,19 @@ describe('AnimalsImagesService', () => {
         SyncMetricsStore,
         { provide: HttpClient, useValue: { get: vi.fn() } },
         { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
-        { provide: AuthService, useValue: { getAccessToken: () => 'token', currentUser: () => currentUser } },
+        {
+          provide: AuthService,
+          useValue: { getAccessToken: () => 'token', currentUser: () => currentUser },
+        },
         { provide: OfflineStatusService, useValue: { isOnline: () => false } },
       ],
     });
 
     const service = TestBed.inject(AnimalsImagesService);
     const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
-    const imageBinaryStore = new OfflineImageBinaryStoreService(new InMemoryOfflineImageBinaryPersistenceAdapter());
+    const imageBinaryStore = new OfflineImageBinaryStoreService(
+      new InMemoryOfflineImageBinaryPersistenceAdapter(),
+    );
     service.configureForTesting({ store, imageBinaryStore });
     await store.saveSnapshot({
       key: 'ANIMAL_IMAGE:image-synced-1',
@@ -143,11 +234,19 @@ describe('AnimalsImagesService', () => {
       clientCreatedAt: '2026-04-27T11:00:00.000Z',
       clientUpdatedAt: '2026-04-27T11:00:00.000Z',
     });
-    await store.markDeadLetter(failed.operationId, { code: 'IMAGE_UPLOAD_FAILED', message: 'Upload agotado.' });
+    await store.markDeadLetter(failed.operationId, {
+      code: 'IMAGE_UPLOAD_FAILED',
+      message: 'Upload agotado.',
+    });
 
     await expect(firstValueFrom(service.listImages('animal-1'))).resolves.toEqual([
       expect.objectContaining({ id: 'image-synced-1', syncState: 'SYNCED', uiStatus: 'synced' }),
-      expect.objectContaining({ id: 'image-failed-1', syncState: 'FAILED', uiStatus: 'failed', syncMessage: 'Upload agotado.' }),
+      expect.objectContaining({
+        id: 'image-failed-1',
+        syncState: 'FAILED',
+        uiStatus: 'failed',
+        syncMessage: 'Upload agotado.',
+      }),
     ]);
   });
 
@@ -158,17 +257,22 @@ describe('AnimalsImagesService', () => {
         SyncMetricsStore,
         { provide: HttpClient, useValue: { get: vi.fn(() => of({ items: [] })) } },
         { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api' }) } },
-        { provide: AuthService, useValue: { getAccessToken: () => 'token', currentUser: () => currentUser } },
+        {
+          provide: AuthService,
+          useValue: { getAccessToken: () => 'token', currentUser: () => currentUser },
+        },
         { provide: OfflineStatusService, useValue: { isOnline: () => false } },
       ],
     });
 
     const service = TestBed.inject(AnimalsImagesService);
-    const files = [0, 1, 2, 3].map((index) => new File([String(index)], `file-${index}.jpg`, { type: 'image/jpeg' }));
+    const files = [0, 1, 2, 3].map(
+      (index) => new File([String(index)], `file-${index}.jpg`, { type: 'image/jpeg' }),
+    );
 
     await expect(firstValueFrom(service.addImages('animal-1', files))).resolves.toEqual({
       outcome: 'blocked',
-      message: 'V1 permite como máximo 3 imágenes por animal por ciclo de sync.',
+      message: 'V1 permite como máximo 3 imágenes por animal por ciclo de sincronización.',
     });
   });
 });

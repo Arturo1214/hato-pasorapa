@@ -12,13 +12,21 @@ import {
 } from '../../../../core/offline/offline-types';
 import {
   DEFAULT_OFFLINE_IMAGE_BINARY_STORE,
-  OfflineImageBinaryStoreService,
+  type OfflineImageBinaryStoreService,
 } from '../../../../core/offline/offline-image-binary-store.service';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
-import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
+import type { PushSyncResponse } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
-import { compareAnimalImageTimeline, decorateAnimalImageTimeline, normalizeAnimalImageItem, toSnapshotPayload } from './animal-images-timeline.adapter';
+import {
+  compareAnimalImageTimeline,
+  decorateAnimalImageTimeline,
+  normalizeAnimalImageItem,
+  toSnapshotPayload,
+} from './animal-images-timeline.adapter';
 
 export interface AnimalImageItem {
   id: string;
@@ -42,7 +50,7 @@ export interface AnimalImageItem {
 }
 
 export interface AnimalImageMutationFeedback {
-  outcome: 'queued' | 'blocked';
+  outcome: 'saved' | 'queued' | 'blocked';
   message: string;
 }
 
@@ -52,7 +60,7 @@ interface AnimalImageListResponse {
 
 @Injectable({ providedIn: 'root' })
 export class AnimalsImagesService {
-  private http: Pick<HttpClient, 'get'> = inject(HttpClient);
+  private http: Pick<HttpClient, 'get' | 'post'> = inject(HttpClient);
   private appConfig: Pick<ApplicationConfigService, 'config'> = inject(ApplicationConfigService);
   private authService: Pick<AuthService, 'getAccessToken' | 'currentUser'> = inject(AuthService);
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
@@ -62,17 +70,19 @@ export class AnimalsImagesService {
   private now = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
 
-  configureForTesting(dependencies: Partial<{
-    http: Pick<HttpClient, 'get'>;
-    appConfig: Pick<ApplicationConfigService, 'config'>;
-    authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
-    offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
-    store: OfflineStoreService;
-    imageBinaryStore: OfflineImageBinaryStoreService;
-    metricsStore: SyncMetricsStore;
-    now: () => string;
-    windowRef: Pick<Window, 'dispatchEvent'>;
-  }>) {
+  configureForTesting(
+    dependencies: Partial<{
+      http: Pick<HttpClient, 'get' | 'post'>;
+      appConfig: Pick<ApplicationConfigService, 'config'>;
+      authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
+      offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
+      store: OfflineStoreService;
+      imageBinaryStore: OfflineImageBinaryStoreService;
+      metricsStore: SyncMetricsStore;
+      now: () => string;
+      windowRef: Pick<Window, 'dispatchEvent'>;
+    }>,
+  ) {
     this.http = dependencies.http ?? this.http;
     this.appConfig = dependencies.appConfig ?? this.appConfig;
     this.authService = dependencies.authService ?? this.authService;
@@ -99,9 +109,12 @@ export class AnimalsImagesService {
     }
 
     const response = await firstValueFrom(
-      this.http.get<AnimalImageListResponse>(`${this.appConfig.config().apiBaseUrl}/animals/${animalUuid}/images`, {
-        headers: this.buildHeaders(),
-      })
+      this.http.get<AnimalImageListResponse>(
+        `${this.appConfig.config().apiBaseUrl}/animals/${animalUuid}/images`,
+        {
+          headers: this.buildHeaders(),
+        },
+      ),
     );
 
     const items = await Promise.all(
@@ -113,7 +126,7 @@ export class AnimalsImagesService {
           syncState: 'SYNCED',
           syncMessage: null,
         } satisfies AnimalImageItem;
-      })
+      }),
     );
 
     await Promise.all(items.map((item) => this.saveImageSnapshot(item)));
@@ -122,77 +135,131 @@ export class AnimalsImagesService {
 
   private async addImagesInternal(animalUuid: string, files: File[]) {
     if (!files.length) {
-      return { outcome: 'blocked', message: 'Seleccioná al menos una imagen.' } satisfies AnimalImageMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Seleccioná al menos una imagen.',
+      } satisfies AnimalImageMutationFeedback;
     }
 
     if (files.length > 3) {
-      return { outcome: 'blocked', message: 'V1 permite como máximo 3 imágenes por animal por ciclo de sync.' } satisfies AnimalImageMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'V1 permite como máximo 3 imágenes por animal por ciclo de sincronización.',
+      } satisfies AnimalImageMutationFeedback;
     }
 
-    const invalidType = files.find((file) => !ANIMAL_IMAGE_MIME_TYPES.includes(file.type as AnimalImageMimeType));
+    const invalidType = files.find(
+      (file) => !ANIMAL_IMAGE_MIME_TYPES.includes(file.type as AnimalImageMimeType),
+    );
     if (invalidType) {
-      return { outcome: 'blocked', message: 'Solo se permiten imágenes JPEG o PNG en V1.' } satisfies AnimalImageMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Solo se permiten imágenes JPEG o PNG en V1.',
+      } satisfies AnimalImageMutationFeedback;
     }
 
     const invalidSize = files.find((file) => file.size > 2 * 1024 * 1024);
     if (invalidSize) {
-      return { outcome: 'blocked', message: 'Cada imagen debe pesar como máximo 2MB.' } satisfies AnimalImageMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Cada imagen debe pesar como máximo 2MB.',
+      } satisfies AnimalImageMutationFeedback;
     }
 
     const now = this.now();
-    for (const file of files) {
-      const operationId = globalThis.crypto.randomUUID();
-      const checksumSha256 = await computeSha256(file);
-      const previewUrl = globalThis.URL?.createObjectURL?.(file) ?? null;
-      const payload: AnimalImageOfflineCreatePayload = {
-        animalUuid,
-        operationId,
-        sourceChannel: this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE',
-        fileName: file.name,
-        mimeType: file.type as AnimalImageMimeType,
-        sizeBytes: file.size,
-        checksumSha256,
-        capturedAt: now,
-        binaryRef: operationId,
-      };
+    const imageOperations = await Promise.all(
+      files.map(async (file) => {
+        const operationId = globalThis.crypto.randomUUID();
+        const checksumSha256 = await computeSha256(file);
+        const previewUrl = globalThis.URL?.createObjectURL?.(file) ?? null;
+        const payload: AnimalImageOfflineCreatePayload = {
+          animalUuid,
+          operationId,
+          sourceChannel: this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE',
+          fileName: file.name,
+          mimeType: file.type as AnimalImageMimeType,
+          sizeBytes: file.size,
+          checksumSha256,
+          capturedAt: now,
+          binaryRef: operationId,
+        };
+        return { file, operationId, payload, previewUrl };
+      }),
+    );
 
+    if (this.offlineStatus.isOnline()) {
+      const pushResult = await this.pushImageOperations(
+        await Promise.all(
+          imageOperations.map(async (operation) => ({
+            ...operation,
+            payload: {
+              ...operation.payload,
+              base64Data: arrayBufferToBase64(await blobToArrayBuffer(operation.file)),
+            },
+          })),
+        ),
+        now,
+      );
+      if (pushResult.outcome === 'blocked') {
+        return pushResult;
+      }
+
+      await runSequentially(imageOperations, (operation, index) =>
+        this.saveImageSnapshot({
+          ...operation.payload,
+          id: pushResult.entityIds[index] ?? operation.operationId,
+          previewUrl: operation.previewUrl,
+          thumbnailRef: null,
+          clientCreatedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          syncState: 'SYNCED',
+          syncMessage: null,
+        }),
+      );
+      this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
+      return {
+        outcome: 'saved',
+        message: 'Imágenes guardadas correctamente.',
+      } satisfies AnimalImageMutationFeedback;
+    }
+
+    await runSequentially(imageOperations, async (operation) => {
       await this.imageBinaryStore.saveBinary({
-        operationId,
-        blob: file,
-        mimeType: file.type,
-        sizeBytes: file.size,
+        operationId: operation.operationId,
+        blob: operation.file,
+        mimeType: operation.file.type,
+        sizeBytes: operation.file.size,
         capturedAt: now,
       });
       await this.store.enqueueOperation({
         entityType: 'ANIMAL_IMAGE',
-        entityId: operationId,
+        entityId: operation.operationId,
         opType: 'CREATE',
-        payload: payload as unknown as Record<string, unknown>,
+        payload: operation.payload as unknown as Record<string, unknown>,
         baseVersion: 0,
         clientCreatedAt: now,
         clientUpdatedAt: now,
-        operationId,
+        operationId: operation.operationId,
       });
       await this.saveImageSnapshot({
-        ...payload,
-        id: operationId,
-        previewUrl,
+        ...operation.payload,
+        id: operation.operationId,
+        previewUrl: operation.previewUrl,
         thumbnailRef: null,
         clientCreatedAt: now,
         createdAt: now,
         updatedAt: now,
         syncState: 'PENDING',
-        syncMessage: 'Pendiente de sync.',
+        syncMessage: 'Pendiente de sincronización.',
       });
-    }
+    });
 
     this.metricsStore.patch({ pending: await this.store.countPendingOperations() });
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
-      return { outcome: 'queued', message: 'Imágenes encoladas. Se disparó la sincronización automática.' } satisfies AnimalImageMutationFeedback;
-    }
-
-    return { outcome: 'queued', message: 'Imágenes encoladas. Se enviarán al reconectar.' } satisfies AnimalImageMutationFeedback;
+    return {
+      outcome: 'queued',
+      message: 'Imágenes encoladas. Se enviarán al reconectar.',
+    } satisfies AnimalImageMutationFeedback;
   }
 
   private async listLocalImageSnapshots(animalUuid: string) {
@@ -204,8 +271,9 @@ export class AnimalsImagesService {
         .filter((item) => item.animalUuid === animalUuid)
         .map(async (item) => ({
           ...item,
-          previewUrl: item.previewUrl ?? (await this.imageBinaryStore.createPreviewUrl(item.binaryRef)),
-        }))
+          previewUrl:
+            item.previewUrl ?? (await this.imageBinaryStore.createPreviewUrl(item.binaryRef)),
+        })),
     );
     return decorateAnimalImageTimeline(items, outbox);
   }
@@ -216,8 +284,48 @@ export class AnimalsImagesService {
       (operation) =>
         operation.entityType === 'ANIMAL_IMAGE' &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
-        operation.status !== 'acked'
+        operation.status !== 'acked',
     );
+  }
+
+  private async pushImageOperations(
+    operations: Array<{
+      operationId: string;
+      payload: AnimalImageOfflineCreatePayload;
+    }>,
+    now: string,
+  ) {
+    const response = await firstValueFrom(
+      this.http.post<PushSyncResponse>(
+        `${this.appConfig.config().apiBaseUrl}/sync/push`,
+        {
+          operations: operations.map((operation) => ({
+            operationId: operation.operationId,
+            entityType: 'ANIMAL_IMAGE',
+            entityId: operation.operationId,
+            opType: 'CREATE',
+            payload: operation.payload as unknown as Record<string, unknown>,
+            baseVersion: 0,
+            clientCreatedAt: now,
+            clientUpdatedAt: now,
+            status: 'pending',
+            attempts: 0,
+          })),
+        },
+        { headers: this.buildHeaders() },
+      ),
+    );
+    const failed = response.results.find((result) => result.classification !== 'no_conflict');
+    if (failed) {
+      return {
+        outcome: 'blocked',
+        message: failed.conflict?.reason ?? 'No pudimos guardar las imágenes.',
+      } satisfies AnimalImageMutationFeedback;
+    }
+    return {
+      outcome: 'saved' as const,
+      entityIds: response.results.map((result) => result.entityId),
+    };
   }
 
   private async saveImageSnapshot(item: AnimalImageItem) {
@@ -236,7 +344,7 @@ export class AnimalsImagesService {
         this.http.get(`${this.appConfig.config().apiBaseUrl}/animal-images/${imageId}/content`, {
           headers: this.buildHeaders(),
           responseType: 'blob' as const,
-        })
+        }),
       );
       return globalThis.URL?.createObjectURL?.(blob) ?? null;
     } catch {
@@ -250,12 +358,31 @@ export class AnimalsImagesService {
   }
 }
 
+function runSequentially<T>(
+  items: readonly T[],
+  action: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  return items.reduce(
+    (chain, item, index) => chain.then(() => action(item, index)),
+    Promise.resolve(),
+  );
+}
+
 async function computeSha256(file: Blob) {
   const buffer = await blobToArrayBuffer(file);
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(buffer));
   return Array.from(new Uint8Array(digest))
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('');
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return globalThis.btoa(binary);
 }
 
 async function blobToArrayBuffer(file: Blob) {

@@ -13,7 +13,6 @@ import {
   DEFAULT_OFFLINE_STORE_SERVICE,
   type OfflineStoreService,
 } from '../../../../core/offline/offline-store.service';
-import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 
 export const ANIMAL_CATEGORY = {
@@ -169,7 +168,7 @@ interface RawAnimalItem extends Omit<AnimalItem, 'category' | 'sex'> {
 }
 
 export interface AnimalMutationFeedback {
-  outcome: 'queued' | 'blocked';
+  outcome: 'saved' | 'queued' | 'blocked';
   animalUuid?: string;
   message: string;
 }
@@ -359,43 +358,37 @@ export class AnimalsService {
 
   private async createAnimalInternal(payload: AnimalMutationPayload) {
     const now = this.now();
-    const animalUuid = globalThis.crypto.randomUUID();
     const sanitizedPayload = this.withAuthenticatedGanaderoOwner(sanitizeMutationPayload(payload));
     if (!sanitizedPayload) {
       return {
         outcome: 'blocked',
-        message: 'No pudimos identificar el ganadero autenticado para encolar el animal.',
+        message: 'No pudimos identificar el ganadero autenticado para guardar el animal.',
       } satisfies AnimalMutationFeedback;
     }
-
-    await this.store.enqueueOperation({
-      entityType: 'ANIMAL',
-      entityId: animalUuid,
-      opType: 'CREATE',
-      payload: sanitizedPayload,
-      baseVersion: 0,
-      clientCreatedAt: now,
-      clientUpdatedAt: now,
-    });
-    await this.saveAnimalSnapshot(
-      createOptimisticAnimalSnapshot(animalUuid, sanitizedPayload, now),
-    );
-    this.recentlyMutatedAnimalUuids.add(animalUuid);
-    await this.refreshPendingState({
-      lastMessage: this.offlineStatus.isOnline()
-        ? 'Alta de animal encolada. Se disparó la sincronización automática.'
-        : 'Alta de animal encolada. Se enviará al reconectar.',
-    });
 
     if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
+      const response = await firstValueFrom(
+        this.http.post<RawAnimalItem>(
+          `${this.appConfig.config().apiBaseUrl}/animals`,
+          sanitizedPayload,
+          {
+            headers: this.buildHeaders(),
+          },
+        ),
+      );
+      const animal = normalizeAnimalItem(response);
+      await this.saveAnimalSnapshot(animal);
+      this.recentlyMutatedAnimalUuids.add(animal.uuid);
+      await this.refreshPendingState({ lastMessage: 'Animal registrado correctamente.' });
       return {
-        outcome: 'queued',
-        animalUuid,
-        message: 'Alta de animal encolada. Se disparó la sincronización automática.',
+        outcome: 'saved',
+        animalUuid: animal.uuid,
+        message: 'Animal registrado correctamente.',
       } satisfies AnimalMutationFeedback;
     }
 
+    const animalUuid = globalThis.crypto.randomUUID();
+    await this.queueAnimalCreate(animalUuid, sanitizedPayload, now);
     return {
       outcome: 'queued',
       animalUuid,
@@ -409,38 +402,33 @@ export class AnimalsService {
     if (!sanitizedPayload) {
       return {
         outcome: 'blocked',
-        message: 'No pudimos identificar el ganadero autenticado para encolar el animal.',
+        message: 'No pudimos identificar el ganadero autenticado para guardar el animal.',
       } satisfies AnimalMutationFeedback;
     }
     const currentSnapshot = await this.findAnimalSnapshot(uuid);
 
-    await this.store.enqueueOperation({
-      entityType: 'ANIMAL',
-      entityId: uuid,
-      opType: 'UPDATE',
-      payload: sanitizedPayload,
-      baseVersion: currentSnapshot?.version ?? 0,
-      clientCreatedAt: now,
-      clientUpdatedAt: now,
-    });
-    await this.saveAnimalSnapshot(
-      applyOptimisticAnimalUpdate(uuid, currentSnapshot, sanitizedPayload, now),
-    );
-    this.recentlyMutatedAnimalUuids.add(uuid);
-    await this.refreshPendingState({
-      lastMessage: this.offlineStatus.isOnline()
-        ? 'Actualización de animal encolada. Se disparó la sincronización automática.'
-        : 'Actualización de animal encolada. Se enviará al reconectar.',
-    });
-
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
+    if (this.offlineStatus.isOnline() && !(await this.hasPendingCreateForAnimal(uuid))) {
+      const response = await firstValueFrom(
+        this.http.put<RawAnimalItem>(
+          `${this.appConfig.config().apiBaseUrl}/animals/${uuid}`,
+          sanitizedPayload,
+          {
+            headers: this.buildHeaders(),
+          },
+        ),
+      );
+      const animal = normalizeAnimalItem(response);
+      await this.saveAnimalSnapshot(animal);
+      this.recentlyMutatedAnimalUuids.add(animal.uuid);
+      await this.refreshPendingState({ lastMessage: 'Animal actualizado correctamente.' });
       return {
-        outcome: 'queued',
-        message: 'Actualización de animal encolada. Se disparó la sincronización automática.',
+        outcome: 'saved',
+        animalUuid: animal.uuid,
+        message: 'Animal actualizado correctamente.',
       } satisfies AnimalMutationFeedback;
     }
 
+    await this.queueAnimalUpdate(uuid, sanitizedPayload, now, currentSnapshot);
     return {
       outcome: 'queued',
       message: 'Actualización de animal encolada. Se enviará al reconectar.',
@@ -518,8 +506,65 @@ export class AnimalsService {
       (operation) =>
         operation.entityType === 'ANIMAL' &&
         operation.status !== 'acked' &&
-        operation.status !== 'failed',
+        operation.status !== 'failed' &&
+        operation.status !== 'dead_letter',
     );
+  }
+
+  private async hasPendingCreateForAnimal(uuid: string) {
+    const outbox = await this.store.listOutbox();
+    return outbox.some(
+      (operation) =>
+        operation.entityType === 'ANIMAL' &&
+        operation.entityId === uuid &&
+        operation.opType === 'CREATE' &&
+        operation.status !== 'acked' &&
+        operation.status !== 'failed' &&
+        operation.status !== 'dead_letter',
+    );
+  }
+
+  private async queueAnimalCreate(
+    animalUuid: string,
+    payload: AnimalOfflineMutationPayload,
+    now: string,
+  ) {
+    await this.store.enqueueOperation({
+      entityType: 'ANIMAL',
+      entityId: animalUuid,
+      opType: 'CREATE',
+      payload,
+      baseVersion: 0,
+      clientCreatedAt: now,
+      clientUpdatedAt: now,
+    });
+    await this.saveAnimalSnapshot(createOptimisticAnimalSnapshot(animalUuid, payload, now));
+    this.recentlyMutatedAnimalUuids.add(animalUuid);
+    await this.refreshPendingState({
+      lastMessage: 'Alta de animal encolada. Se enviará al reconectar.',
+    });
+  }
+
+  private async queueAnimalUpdate(
+    uuid: string,
+    payload: AnimalOfflineMutationPayload,
+    now: string,
+    currentSnapshot: AnimalItem | undefined,
+  ) {
+    await this.store.enqueueOperation({
+      entityType: 'ANIMAL',
+      entityId: uuid,
+      opType: 'UPDATE',
+      payload,
+      baseVersion: currentSnapshot?.version ?? 0,
+      clientCreatedAt: now,
+      clientUpdatedAt: now,
+    });
+    await this.saveAnimalSnapshot(applyOptimisticAnimalUpdate(uuid, currentSnapshot, payload, now));
+    this.recentlyMutatedAnimalUuids.add(uuid);
+    await this.refreshPendingState({
+      lastMessage: 'Actualización de animal encolada. Se enviará al reconectar.',
+    });
   }
 
   private async saveAnimalSnapshot(animal: AnimalItem) {
@@ -595,7 +640,7 @@ function createOptimisticAnimalSnapshot(
     version: 0,
     lastSyncedAt: null,
     syncStatus: 'pending',
-    syncMessage: 'Pendiente de sync.',
+    syncMessage: 'Pendiente de sincronización.',
   };
 }
 
@@ -631,7 +676,7 @@ function applyOptimisticAnimalUpdate(
     updatedAt: now,
     lastSyncedAt: currentSnapshot?.lastSyncedAt ?? null,
     syncStatus: 'pending',
-    syncMessage: 'Pendiente de sync.',
+    syncMessage: 'Pendiente de sincronización.',
   };
 }
 
@@ -784,7 +829,7 @@ function resolveAnimalSyncMessage(
     return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
   }
   if (status === 'pending') {
-    return 'Pendiente de sync.';
+    return 'Pendiente de sincronización.';
   }
   return null;
 }

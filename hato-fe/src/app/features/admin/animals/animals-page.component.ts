@@ -1,15 +1,35 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal, type TemplateRef, viewChild } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+  type TemplateRef,
+  viewChild,
+} from '@angular/core';
+import {
+  FormBuilder,
+  ReactiveFormsModule,
+  Validators,
+  type AbstractControl,
+  type ValidationErrors,
+  type ValidatorFn,
+} from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogModule,
+  MatDialogRef,
+} from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
-import { finalize, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../core/offline/offline-status.service';
 import {
@@ -34,7 +54,6 @@ import {
   ANIMAL_SEX_OPTIONS,
   AnimalsService,
   type AnimalItem,
-  type AnimalMutationPayload,
 } from './data-access/animals.service';
 import {
   ANIMAL_DIALOG_MODE,
@@ -61,9 +80,9 @@ const ANIMAL_TABLE_ACTION = {
   template: `
     <section class="admin-page">
       <mat-card appearance="outlined">
-        <p>Estado de sync: {{ syncSummary() }}</p>
+        <p>Estado de sincronización: {{ syncSummary() }}</p>
         @if (syncState().syncing) {
-          <p>Sincronizando cambios offline…</p>
+          <p>Sincronizando cambios sin conexión…</p>
         }
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
@@ -77,18 +96,28 @@ const ANIMAL_TABLE_ACTION = {
       </mat-card>
 
       <div class="toolbar-actions">
-        <button mat-flat-button color="primary" class="primary-action-button" type="button" (click)="goCreate()">
+        <button
+          mat-flat-button
+          color="primary"
+          class="primary-action-button"
+          type="button"
+          (click)="goCreate()"
+        >
           <mat-icon>add</mat-icon>
           <span>Nuevo animal</span>
         </button>
       </div>
 
       @if (feedbackMessage()) {
-        <mat-card appearance="outlined" role="status" aria-live="polite"><p>{{ feedbackMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="status" aria-live="polite"
+          ><p>{{ feedbackMessage() }}</p></mat-card
+        >
       }
 
       @if (errorMessage()) {
-        <mat-card appearance="outlined" role="alert" aria-live="assertive"><p>{{ errorMessage() }}</p></mat-card>
+        <mat-card appearance="outlined" role="alert" aria-live="assertive"
+          ><p>{{ errorMessage() }}</p></mat-card
+        >
       } @else if (!animals().length) {
         <mat-card appearance="outlined"><p>Todavía no hay animales registrados.</p></mat-card>
       } @else {
@@ -141,8 +170,11 @@ const ANIMAL_TABLE_ACTION = {
                   <span class="animal-identity__meta">{{ animal.syncMessage }}</span>
                 }
               }
-              <span class="animal-identity__meta">Marca: {{ animal.marca || '—' }} · Tatuaje: {{ animal.tatuaje || '—' }}</span>
-              <span class="animal-identity__meta">Color: {{ animal.color || '—' }}</span>
+              @if (animalMetaLabels(animal).length) {
+                <span class="animal-identity__meta">{{
+                  animalMetaLabels(animal).join(' · ')
+                }}</span>
+              }
             </div>
           </ng-template>
 
@@ -189,7 +221,11 @@ const ANIMAL_TABLE_ACTION = {
         overflow: hidden;
         border: 1px solid var(--mat-sys-outline-variant);
         border-radius: 0.75rem;
-        background: color-mix(in srgb, var(--mat-sys-primary-container) 35%, var(--mat-sys-surface));
+        background: color-mix(
+          in srgb,
+          var(--mat-sys-primary-container) 35%,
+          var(--mat-sys-surface)
+        );
       }
 
       .animal-thumbnail img {
@@ -269,8 +305,10 @@ export class AnimalsPageComponent {
   private readonly router = inject(Router);
   private readonly offlineStatus = inject(OfflineStatusService);
   private readonly dialog = inject(MatDialog);
-  private readonly animalPreviewCell = viewChild.required<TemplateRef<DataTableCellContext>>('animalPreviewCell');
-  private readonly animalIdentityCell = viewChild.required<TemplateRef<DataTableCellContext>>('animalIdentityCell');
+  private readonly animalPreviewCell =
+    viewChild.required<TemplateRef<DataTableCellContext>>('animalPreviewCell');
+  private readonly animalIdentityCell =
+    viewChild.required<TemplateRef<DataTableCellContext>>('animalIdentityCell');
 
   readonly animals = signal<AnimalItem[]>([]);
   readonly ownerOptions = signal<AnimalOwnerOption[]>([]);
@@ -283,7 +321,9 @@ export class AnimalsPageComponent {
   readonly offlineMessage = this.offlineStatus.message;
   readonly syncSummary = computed(() => {
     const syncState = this.syncState();
-    const lastSyncLabel = syncState.lastSyncAt ? ` · Última sync ${syncState.lastSyncAt}` : '';
+    const lastSyncLabel = syncState.lastSyncAt
+      ? ` · Última sincronización ${syncState.lastSyncAt}`
+      : '';
     return `${syncState.pending} pendiente(s)${lastSyncLabel}`;
   });
   readonly columns = computed<readonly DataTableColumn[]>(() => [
@@ -301,7 +341,7 @@ export class AnimalsPageComponent {
       label: 'Raza',
       sortable: true,
       filterType: DATA_TABLE_FILTER_TYPE.TEXT,
-      formatter: (value) => typeof value === 'string' && value ? value : 'Sin raza asignada',
+      formatter: (value) => (typeof value === 'string' && value ? value : 'Sin raza asignada'),
     },
     {
       key: 'category',
@@ -336,12 +376,27 @@ export class AnimalsPageComponent {
       sortable: true,
       formatter: (_value, row) => formatWeightAndAge(this.animalFromRow(row)),
     },
-    { key: 'admissionDate', label: 'Ingreso', sortable: true, filterType: DATA_TABLE_FILTER_TYPE.DATE },
+    {
+      key: 'admissionDate',
+      label: 'Ingreso',
+      sortable: true,
+      filterType: DATA_TABLE_FILTER_TYPE.DATE,
+    },
   ]);
   readonly actions: DataTableAction[] = [
     { id: ANIMAL_TABLE_ACTION.OPERATIVE_EVENT, label: 'Evento operativo', icon: 'event' },
-    { id: ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT, label: 'Evento reproductivo', icon: 'child_friendly', visible: (row) => isReproductionEligibleAnimal(this.animalFromRow(row)) },
-    { id: ANIMAL_TABLE_ACTION.CASTRATION, label: 'Castración', icon: 'content_cut', visible: (row) => isCastrationEligibleAnimal(this.animalFromRow(row)) },
+    {
+      id: ANIMAL_TABLE_ACTION.REPRODUCTIVE_EVENT,
+      label: 'Evento reproductivo',
+      icon: 'child_friendly',
+      visible: (row) => isReproductionEligibleAnimal(this.animalFromRow(row)),
+    },
+    {
+      id: ANIMAL_TABLE_ACTION.CASTRATION,
+      label: 'Castración',
+      icon: 'content_cut',
+      visible: (row) => isCastrationEligibleAnimal(this.animalFromRow(row)),
+    },
     { id: ANIMAL_TABLE_ACTION.IMAGES, label: 'Imágenes', icon: 'photo_library' },
     { id: ANIMAL_TABLE_ACTION.VIEW_DETAIL, label: 'Ver ficha', icon: 'visibility' },
     { id: ANIMAL_TABLE_ACTION.VIEW_EDIT, label: 'Editar ficha', icon: 'edit' },
@@ -427,6 +482,14 @@ export class AnimalsPageComponent {
     return `Foto de ${animal.arete || animal.marca || animal.tatuaje || 'animal sin identificador'}`;
   }
 
+  animalMetaLabels(animal: AnimalItem) {
+    return [
+      animal.marca ? `Marca: ${animal.marca}` : null,
+      animal.tatuaje ? `Tatuaje: ${animal.tatuaje}` : null,
+      animal.color ? `Color: ${animal.color}` : null,
+    ].filter((value): value is string => Boolean(value));
+  }
+
   animalStatusLabel(status: AnimalItem['syncStatus']) {
     return animalStatusLabel(status);
   }
@@ -437,28 +500,6 @@ export class AnimalsPageComponent {
 
   mediaStatusAriaLabel(image: AnimalImageItem | undefined) {
     return image ? `Estado de foto: ${mediaStatusLabel(image.uiStatus)}` : null;
-  }
-
-  private openEditDialog(animal: AnimalItem) {
-    if (!this.canOpenAnimalDialog()) {
-      return;
-    }
-
-    this.dialog
-      .open(AnimalFormDialogComponent, {
-        width: 'min(72rem, 98vw)',
-        maxWidth: '98vw',
-        maxHeight: '92vh',
-        data: this.buildAnimalDialogData({ mode: ANIMAL_DIALOG_MODE.EDIT, animal }),
-      })
-      .afterClosed()
-      .subscribe((result: AnimalDialogResult | undefined) => {
-        if (!result) {
-          return;
-        }
-
-        this.submitAnimalMutation(() => this.animalsService.updateAnimal(animal.uuid, result));
-      });
   }
 
   private openOperativeEventDialog(animal: AnimalItem, lockedType?: AnimalEventItem['type']) {
@@ -475,19 +516,20 @@ export class AnimalsPageComponent {
           return;
         }
 
-        const request$ = result.type === 'CASTRATION'
-          ? this.animalsEventsService.createCastrationEvent(animal.uuid, {
-              occurredAt: result.occurredAt,
-              notes: result.notes,
-              metadata: result.metadata,
-            })
-          : this.animalsEventsService.createEvent({
-              animalUuid: animal.uuid,
-              type: result.type,
-              occurredAt: result.occurredAt,
-              notes: result.notes,
-              metadata: result.metadata,
-            });
+        const request$ =
+          result.type === 'CASTRATION'
+            ? this.animalsEventsService.createCastrationEvent(animal.uuid, {
+                occurredAt: result.occurredAt,
+                notes: result.notes,
+                metadata: result.metadata,
+              })
+            : this.animalsEventsService.createEvent({
+                animalUuid: animal.uuid,
+                type: result.type,
+                occurredAt: result.occurredAt,
+                notes: result.notes,
+                metadata: result.metadata,
+              });
 
         this.submitGenericMutation(request$, true);
       });
@@ -531,7 +573,10 @@ export class AnimalsPageComponent {
               return;
             }
 
-            this.submitGenericMutation(this.animalsImagesService.addImages(animal.uuid, files), false);
+            this.submitGenericMutation(
+              this.animalsImagesService.addImages(animal.uuid, files),
+              false,
+            );
           });
       })
       .catch(() => {
@@ -557,7 +602,11 @@ export class AnimalsPageComponent {
   }
 
   private submitGenericMutation(
-    request$: ReturnType<AnimalsEventsService['createEvent']> | ReturnType<AnimalsEventsService['createCastrationEvent']> | ReturnType<AnimalsReproductionEventsService['createEvent']> | ReturnType<AnimalsImagesService['addImages']>,
+    request$:
+      | ReturnType<AnimalsEventsService['createEvent']>
+      | ReturnType<AnimalsEventsService['createCastrationEvent']>
+      | ReturnType<AnimalsReproductionEventsService['createEvent']>
+      | ReturnType<AnimalsImagesService['addImages']>,
     reloadAnimals: boolean,
   ) {
     this.errorMessage.set(null);
@@ -596,12 +645,21 @@ export class AnimalsPageComponent {
 
   private async loadImageTimelines(animals: AnimalItem[]) {
     const entries = await Promise.all(
-      animals.map(async (animal) => [animal.uuid, await firstValueFrom(this.animalsImagesService.listImages(animal.uuid))] as const),
+      animals.map(
+        async (animal) =>
+          [
+            animal.uuid,
+            await firstValueFrom(this.animalsImagesService.listImages(animal.uuid)),
+          ] as const,
+      ),
     );
     this.imageTimelines.set(Object.fromEntries(entries));
   }
 
-  private buildAnimalDialogData(base: { mode: typeof ANIMAL_DIALOG_MODE.CREATE | typeof ANIMAL_DIALOG_MODE.EDIT; animal?: AnimalItem }) {
+  private buildAnimalDialogData(base: {
+    mode: typeof ANIMAL_DIALOG_MODE.CREATE | typeof ANIMAL_DIALOG_MODE.EDIT;
+    animal?: AnimalItem;
+  }) {
     return {
       ...base,
       currentUserRole: this.authService.currentUser()?.role ?? 'GANADERO',
@@ -620,13 +678,15 @@ export class AnimalsPageComponent {
           ganaderos.map((ganadero) => ({
             id: ganadero.id,
             label: `${ganadero.name} · ${ganadero.businessIdentifier}`,
-          }))
+          })),
         );
         this.ownerOptionsError.set(null);
       },
       error: () => {
         this.ownerOptions.set([]);
-        this.ownerOptionsError.set('No pudimos cargar el listado de ganaderos para asignar el propietario.');
+        this.ownerOptionsError.set(
+          'No pudimos cargar el listado de ganaderos para asignar el propietario.',
+        );
       },
     });
   }
@@ -640,12 +700,17 @@ export class AnimalsPageComponent {
       return true;
     }
 
-    this.errorMessage.set(this.ownerOptionsError() ?? 'Necesitás al menos un ganadero registrado para asignar el animal.');
+    this.errorMessage.set(
+      this.ownerOptionsError() ??
+        'Necesitás al menos un ganadero registrado para asignar el animal.',
+    );
     return false;
   }
 
   private animalsRouteBase() {
-    return this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/animales' : '/admin/animales';
+    return this.authService.currentUser()?.role === 'GANADERO'
+      ? '/ganadero/animales'
+      : '/admin/animales';
   }
 }
 
@@ -668,7 +733,15 @@ interface OperativeEventDialogResult {
 @Component({
   selector: 'app-animal-operative-event-dialog',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatButtonModule,
+  ],
   template: `
     <h2 mat-dialog-title>{{ title() }}</h2>
     <mat-dialog-content>
@@ -713,7 +786,15 @@ interface OperativeEventDialogResult {
 
     <mat-dialog-actions align="end">
       <button mat-button type="button" (click)="dialogRef.close()">Cancelar</button>
-      <button mat-flat-button color="primary" type="button" [disabled]="form.invalid" (click)="submit()">Registrar evento</button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="form.invalid"
+        (click)="submit()"
+      >
+        Registrar evento
+      </button>
     </mat-dialog-actions>
   `,
   styles: [
@@ -729,22 +810,34 @@ interface OperativeEventDialogResult {
 })
 class AnimalOperativeEventDialogComponent {
   readonly data = inject<OperativeEventDialogData>(MAT_DIALOG_DATA);
-  readonly dialogRef = inject(MatDialogRef<AnimalOperativeEventDialogComponent, OperativeEventDialogResult | undefined>);
+  readonly dialogRef = inject(
+    MatDialogRef<AnimalOperativeEventDialogComponent, OperativeEventDialogResult | undefined>,
+  );
   private readonly formBuilder = inject(FormBuilder);
 
-  readonly eventTypeOptions = computed(() => [
-    { value: 'OBSERVATION', label: 'Observación' },
-    { value: 'TRANSFERRED', label: 'Transferido' },
-    { value: 'SOLD', label: 'Vendido' },
-    { value: 'DECEASED', label: 'Fallecido' },
-    { value: 'LOST', label: 'Perdido' },
-    ...(isCastrationEligibleAnimal(this.data.animal) ? [{ value: 'CASTRATION', label: 'Castración' } as const] : []),
-  ] as const);
+  readonly eventTypeOptions = computed(
+    () =>
+      [
+        { value: 'OBSERVATION', label: 'Observación' },
+        { value: 'TRANSFERRED', label: 'Transferido' },
+        { value: 'SOLD', label: 'Vendido' },
+        { value: 'DECEASED', label: 'Fallecido' },
+        { value: 'LOST', label: 'Perdido' },
+        ...(isCastrationEligibleAnimal(this.data.animal)
+          ? [{ value: 'CASTRATION', label: 'Castración' } as const]
+          : []),
+      ] as const,
+  );
   readonly typeLocked = computed(() => this.data.lockedType === 'CASTRATION');
-  readonly title = computed(() => (this.data.lockedType === 'CASTRATION' ? 'Registrar castración' : 'Registrar evento operativo'));
+  readonly title = computed(() =>
+    this.data.lockedType === 'CASTRATION' ? 'Registrar castración' : 'Registrar evento operativo',
+  );
   readonly form = this.formBuilder.group(
     {
-      type: [this.data.lockedType ?? ('OBSERVATION' as AnimalEventItem['type']), [Validators.required]],
+      type: [
+        this.data.lockedType ?? ('OBSERVATION' as AnimalEventItem['type']),
+        [Validators.required],
+      ],
       occurredAt: [currentLocalDateTimeInput(), [Validators.required]],
       notes: [''],
       reasonCode: [''],
@@ -792,7 +885,15 @@ interface ReproductionEventDialogResult {
 @Component({
   selector: 'app-animal-reproduction-event-dialog',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule],
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatButtonModule,
+  ],
   template: `
     <h2 mat-dialog-title>Registrar evento reproductivo</h2>
     <mat-dialog-content>
@@ -825,7 +926,15 @@ interface ReproductionEventDialogResult {
 
     <mat-dialog-actions align="end">
       <button mat-button type="button" (click)="dialogRef.close()">Cancelar</button>
-      <button mat-flat-button color="primary" type="button" [disabled]="form.invalid" (click)="submit()">Registrar evento reproductivo</button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="form.invalid"
+        (click)="submit()"
+      >
+        Registrar evento reproductivo
+      </button>
     </mat-dialog-actions>
   `,
   styles: [
@@ -841,7 +950,9 @@ interface ReproductionEventDialogResult {
 })
 class AnimalReproductionEventDialogComponent {
   readonly data = inject<ReproductionEventDialogData>(MAT_DIALOG_DATA);
-  readonly dialogRef = inject(MatDialogRef<AnimalReproductionEventDialogComponent, ReproductionEventDialogResult | undefined>);
+  readonly dialogRef = inject(
+    MatDialogRef<AnimalReproductionEventDialogComponent, ReproductionEventDialogResult | undefined>,
+  );
   private readonly formBuilder = inject(FormBuilder);
 
   readonly reproductionEventTypeOptions = [
@@ -850,7 +961,10 @@ class AnimalReproductionEventDialogComponent {
     { value: 'PREGNANCY_LOSS', label: 'Pérdida de preñez' },
   ] as const;
   readonly form = this.formBuilder.group({
-    reproductionEventType: ['SERVICE' as AnimalReproductionEventItem['reproductionEventType'], [Validators.required]],
+    reproductionEventType: [
+      'SERVICE' as AnimalReproductionEventItem['reproductionEventType'],
+      [Validators.required],
+    ],
     occurredAt: [currentLocalDateTimeInput(), [Validators.required]],
     notes: [''],
     serviceMethod: ['Monta controlada'],
@@ -920,7 +1034,10 @@ interface AnimalImagesDialogData {
       }
 
       @if (selectedImagePreviews().length) {
-        <div class="selected-image-preview-list" aria-label="Vista previa de imágenes seleccionadas">
+        <div
+          class="selected-image-preview-list"
+          aria-label="Vista previa de imágenes seleccionadas"
+        >
           @for (preview of selectedImagePreviews(); track preview.url) {
             <article class="selected-image-preview">
               <img [src]="preview.url" [alt]="preview.fileName" />
@@ -933,7 +1050,15 @@ interface AnimalImagesDialogData {
 
     <mat-dialog-actions align="end">
       <button mat-button type="button" (click)="dialogRef.close()">Cerrar</button>
-      <button mat-flat-button color="primary" type="button" [disabled]="!selectedFiles().length" (click)="submit()">Guardar imágenes</button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="!selectedFiles().length"
+        (click)="submit()"
+      >
+        Guardar imágenes
+      </button>
     </mat-dialog-actions>
   `,
   styles: [
@@ -1019,7 +1144,9 @@ class AnimalImagesDialogComponent {
     this.destroyRef.onDestroy(() => this.clearSelectedImageSelection());
   }
 
-  openImagePicker(input: HTMLInputElement) { input.click(); }
+  openImagePicker(input: HTMLInputElement) {
+    input.click();
+  }
 
   onFilesSelected(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -1041,7 +1168,12 @@ class AnimalImagesDialogComponent {
     }
 
     this.selectedFiles.set(selection.acceptedFiles);
-    this.selectedImagePreviews.set(selection.acceptedFiles.map((file) => ({ fileName: file.name, url: URL.createObjectURL(file) })));
+    this.selectedImagePreviews.set(
+      selection.acceptedFiles.map((file) => ({
+        fileName: file.name,
+        url: URL.createObjectURL(file),
+      })),
+    );
     this.selectionMessage.set(message);
   }
 
@@ -1064,13 +1196,20 @@ interface SelectedImagePreview {
   url: string;
 }
 
-const transferMetadataValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const value = control.value as { type?: string | null; fromOwnerGanaderoId?: string | null; toOwnerGanaderoId?: string | null };
+const transferMetadataValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
+  const value = control.value as {
+    type?: string | null;
+    fromOwnerGanaderoId?: string | null;
+    toOwnerGanaderoId?: string | null;
+  };
   if (value.type !== 'TRANSFERRED') {
     return null;
   }
 
-  return normalizeOptionalText(value.fromOwnerGanaderoId) && normalizeOptionalText(value.toOwnerGanaderoId)
+  return normalizeOptionalText(value.fromOwnerGanaderoId) &&
+    normalizeOptionalText(value.toOwnerGanaderoId)
     ? null
     : { transferMetadataRequired: true };
 };
@@ -1081,11 +1220,15 @@ function normalizeOptionalText(value: string | null | undefined) {
 }
 
 function formatAnimalIdentity(animal: AnimalItem) {
-  return [animal.arete, animal.marca, animal.tatuaje].filter((value): value is string => Boolean(value)).join(' ');
+  return [animal.arete, animal.marca, animal.tatuaje]
+    .filter((value): value is string => Boolean(value))
+    .join(' ');
 }
 
 function animalCategoryLabel(value: unknown) {
-  return ANIMAL_CATEGORY_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—');
+  return (
+    ANIMAL_CATEGORY_OPTIONS.find((option) => option.value === value)?.label ?? String(value ?? '—')
+  );
 }
 
 function animalSexLabel(value: unknown) {
@@ -1127,13 +1270,17 @@ function mediaStatusLabel(status: AnimalImageItem['uiStatus']) {
 }
 
 function isCastrationEligibleAnimal(animal: AnimalItem) {
-  return animal.sex === ANIMAL_SEX.MACHO
-    && (animal.category === ANIMAL_CATEGORY.TORO || animal.category === ANIMAL_CATEGORY.TERNERO);
+  return (
+    animal.sex === ANIMAL_SEX.MACHO &&
+    (animal.category === ANIMAL_CATEGORY.TORO || animal.category === ANIMAL_CATEGORY.TERNERO)
+  );
 }
 
 function isReproductionEligibleAnimal(animal: AnimalItem) {
-  return animal.sex === ANIMAL_SEX.HEMBRA
-    && (animal.category === ANIMAL_CATEGORY.VACA || animal.category === ANIMAL_CATEGORY.VAQUILLONA);
+  return (
+    animal.sex === ANIMAL_SEX.HEMBRA &&
+    (animal.category === ANIMAL_CATEGORY.VACA || animal.category === ANIMAL_CATEGORY.VAQUILLONA)
+  );
 }
 
 function formatWeightAndAge(animal: AnimalItem) {
@@ -1151,7 +1298,10 @@ function formatAge(birthDate: string) {
   const today = new Date();
   const totalMonths = Math.max(
     0,
-    (today.getFullYear() - birth.getFullYear()) * 12 + today.getMonth() - birth.getMonth() - (today.getDate() < birth.getDate() ? 1 : 0),
+    (today.getFullYear() - birth.getFullYear()) * 12 +
+      today.getMonth() -
+      birth.getMonth() -
+      (today.getDate() < birth.getDate() ? 1 : 0),
   );
 
   if (totalMonths < 12) {

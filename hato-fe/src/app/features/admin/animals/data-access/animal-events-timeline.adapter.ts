@@ -84,7 +84,7 @@ function resolveEventSyncMessage(status: AnimalOfflineUiStatus, operation: Offli
     return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
   }
   if (status === 'pending') {
-    return 'Pendiente de sync.';
+    return 'Pendiente de sincronización.';
   }
   return null;
 }

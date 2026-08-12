@@ -577,7 +577,7 @@ describe('AnimalsService', () => {
     await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([]);
   });
 
-  it('should queue online animal updates by canonical uuid and preserve the uuid-based snapshot key', async () => {
+  it('should update animals directly online by canonical uuid and preserve the uuid-based snapshot key', async () => {
     const updatedAnimal = createAnimal({ uuid: 'animal-uuid-9', arete: 'AR-999', version: 7 });
     const put = vi.fn(() => of(updatedAnimal));
     const { service, store } = setup({ online: true, http: { put: put as never } });
@@ -596,19 +596,25 @@ describe('AnimalsService', () => {
         }),
       ),
     ).resolves.toEqual({
-      outcome: 'queued',
-      message: 'Actualización de animal encolada. Se disparó la sincronización automática.',
+      outcome: 'saved',
+      animalUuid: 'animal-uuid-9',
+      message: 'Animal actualizado correctamente.',
     });
 
-    expect(put).not.toHaveBeenCalled();
+    expect(put).toHaveBeenCalledWith(
+      '/api/animals/animal-uuid-9',
+      expect.objectContaining({ arete: 'AR-999' }),
+      { headers: expect.any(HttpHeaders) },
+    );
 
     await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([
       expect.objectContaining({
         key: 'ANIMAL:animal-uuid-9',
         entityId: 'animal-uuid-9',
         payload: expect.objectContaining({
-          motherAnimalUuid: 'mother-uuid-1',
-          fatherAnimalUuid: 'father-uuid-1',
+          uuid: 'animal-uuid-9',
+          arete: 'AR-999',
+          version: 7,
         }),
       }),
     ]);
@@ -616,7 +622,7 @@ describe('AnimalsService', () => {
 
   it('should queue animal creation offline using the canonical uuid as entity identity and keep a stable local snapshot', async () => {
     const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
-    const { service, store } = setup({ online: true });
+    const { service, store } = setup({ online: false });
     vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
       '11111111-2222-4333-8444-555555555555',
     );
@@ -637,7 +643,7 @@ describe('AnimalsService', () => {
     ).resolves.toEqual({
       outcome: 'queued',
       animalUuid: '11111111-2222-4333-8444-555555555555',
-      message: 'Alta de animal encolada. Se disparó la sincronización automática.',
+      message: 'Alta de animal encolada. Se enviará al reconectar.',
     });
 
     const outbox = await store.listOutbox();
@@ -665,7 +671,7 @@ describe('AnimalsService', () => {
         }),
       }),
     ]);
-    expect(dispatchEvent).toHaveBeenCalledWith(
+    expect(dispatchEvent).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
     );
     expect(service.syncState().pending).toBe(1);
@@ -673,11 +679,10 @@ describe('AnimalsService', () => {
 
   it('should keep a freshly created animal visible when the next online list response is still stale', async () => {
     const remoteAnimal = createAnimal({ uuid: 'remote-animal-1', arete: 'AR-100' });
+    const createdAnimal = createAnimal({ uuid: 'created-online-1', arete: 'AR-NEW' });
     const get = vi.fn(() => of({ content: [remoteAnimal] }));
-    const { service, store } = setup({ online: true, http: { get: get as never } });
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      '44444444-5555-4666-8777-888888888888',
-    );
+    const post = vi.fn(() => of(createdAnimal));
+    const { service } = setup({ online: true, http: { get: get as never, post: post as never } });
 
     await firstValueFrom(
       service.createAnimal({
@@ -689,12 +694,10 @@ describe('AnimalsService', () => {
         admissionDate: '2026-05-11',
       }),
     );
-    const [createOperation] = await store.listOutbox();
-    await store.markAcked(createOperation.operationId);
 
     await expect(firstValueFrom(service.listAnimals())).resolves.toEqual([
       expect.objectContaining({
-        uuid: '44444444-5555-4666-8777-888888888888',
+        uuid: 'created-online-1',
         arete: 'AR-NEW',
         syncStatus: 'synced',
       }),
@@ -747,10 +750,16 @@ describe('AnimalsService', () => {
 
   it('should apply current list filters before merging freshly created snapshots into a stale online response', async () => {
     const get = vi.fn(() => of({ content: [] }));
-    const { service, store } = setup({ online: true, http: { get: get as never } });
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
-      '55555555-6666-4777-8888-999999999999',
+    const post = vi.fn(() =>
+      of(
+        createAnimal({
+          uuid: 'created-filtered-online',
+          ownerGanaderoId: 'ganadero-uuid-1',
+          arete: 'AR-FILTERED',
+        }),
+      ),
     );
+    const { service } = setup({ online: true, http: { get: get as never, post: post as never } });
 
     await firstValueFrom(
       service.createAnimal({
@@ -762,8 +771,6 @@ describe('AnimalsService', () => {
         admissionDate: '2026-05-11',
       }),
     );
-    const [createOperation] = await store.listOutbox();
-    await store.markAcked(createOperation.operationId);
 
     await expect(
       firstValueFrom(service.listAnimals({ ownerGanaderoId: 'other-ganadero' })),
@@ -947,7 +954,7 @@ describe('AnimalsService', () => {
       ),
     ).resolves.toEqual({
       outcome: 'blocked',
-      message: 'No pudimos identificar el ganadero autenticado para encolar el animal.',
+      message: 'No pudimos identificar el ganadero autenticado para guardar el animal.',
     });
     await expect(store.listOutbox()).resolves.toEqual([]);
     await expect(store.listSnapshots('ANIMAL')).resolves.toEqual([]);

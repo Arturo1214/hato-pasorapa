@@ -3,23 +3,29 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom, from, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
-import {
-  type AnimalEventLogSnapshotPayload,
-  type AnimalOfflineUiStatus,
-  type AnimalReproductionEventOfflineCreatePayload,
-  type AnimalReproductionEventOfflineMetadata,
-  type AnimalReproductionEventSnapshotPayload,
+import type {
+  AnimalEventLogSnapshotPayload,
+  AnimalOfflineUiStatus,
+  AnimalReproductionEventOfflineCreatePayload,
+  AnimalReproductionEventOfflineMetadata,
+  AnimalReproductionEventSnapshotPayload,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
-import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
+import type { PushSyncResponse } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import {
   decorateAnimalReproductionTimeline,
   matchesAnimalReproductionEventFilters,
   normalizeAnimalReproductionEventItem,
 } from './animal-reproduction-events-timeline.adapter';
-import { animalEventLogToReproductionEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
+import {
+  animalEventLogToReproductionEventItem,
+  filterAnimalEventLogsByCategory,
+} from './animal-timeline.adapter';
 
 export interface AnimalBirthMetadata extends Record<string, unknown> {
   birthDate: string;
@@ -34,14 +40,16 @@ export const REPRODUCTIVE_SERVICE_METHOD = {
   INSEMINACION_ARTIFICIAL: 'INSEMINACION_ARTIFICIAL',
 } as const;
 
-export type ReproductiveServiceMethod = (typeof REPRODUCTIVE_SERVICE_METHOD)[keyof typeof REPRODUCTIVE_SERVICE_METHOD];
+export type ReproductiveServiceMethod =
+  (typeof REPRODUCTIVE_SERVICE_METHOD)[keyof typeof REPRODUCTIVE_SERVICE_METHOD];
 
 export const PREGNANCY_DIAGNOSIS_RESULT = {
   PRENADA: 'PRENADA',
   NO_PRENADA: 'NO_PRENADA',
 } as const;
 
-export type PregnancyDiagnosisResult = (typeof PREGNANCY_DIAGNOSIS_RESULT)[keyof typeof PREGNANCY_DIAGNOSIS_RESULT];
+export type PregnancyDiagnosisResult =
+  (typeof PREGNANCY_DIAGNOSIS_RESULT)[keyof typeof PREGNANCY_DIAGNOSIS_RESULT];
 
 export interface AnimalServiceMetadata extends Record<string, unknown> {
   serviceMethod: ReproductiveServiceMethod;
@@ -63,7 +71,12 @@ export interface AnimalPregnancyDiagnosisMetadata extends Record<string, unknown
 export interface AnimalReproductionEventItem {
   id: string;
   animalUuid: string;
-  reproductionEventType: 'SERVICE' | 'PREGNANCY_DIAGNOSIS' | 'PREGNANCY_CONFIRMED' | 'PREGNANCY_LOSS' | 'BIRTH';
+  reproductionEventType:
+    | 'SERVICE'
+    | 'PREGNANCY_DIAGNOSIS'
+    | 'PREGNANCY_CONFIRMED'
+    | 'PREGNANCY_LOSS'
+    | 'BIRTH';
   occurredAt: string;
   notes: string | null;
   performedByUserId: string;
@@ -93,7 +106,7 @@ export interface AnimalReproductionEventCreateInput {
 }
 
 export interface AnimalReproductionEventMutationFeedback {
-  outcome: 'queued' | 'blocked';
+  outcome: 'saved' | 'queued' | 'blocked';
   message: string;
 }
 
@@ -103,7 +116,7 @@ interface AnimalReproductionEventListResponse {
 
 @Injectable({ providedIn: 'root' })
 export class AnimalsReproductionEventsService {
-  private http: Pick<HttpClient, 'get'> = inject(HttpClient);
+  private http: Pick<HttpClient, 'get' | 'post'> = inject(HttpClient);
   private appConfig: Pick<ApplicationConfigService, 'config'> = inject(ApplicationConfigService);
   private authService: Pick<AuthService, 'getAccessToken' | 'currentUser'> = inject(AuthService);
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
@@ -112,16 +125,18 @@ export class AnimalsReproductionEventsService {
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'dispatchEvent'> | undefined = globalThis.window;
 
-  configureForTesting(dependencies: Partial<{
-    http: Pick<HttpClient, 'get'>;
-    appConfig: Pick<ApplicationConfigService, 'config'>;
-    authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
-    offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
-    store: OfflineStoreService;
-    metricsStore: SyncMetricsStore;
-    now: () => string;
-    windowRef: Pick<Window, 'dispatchEvent'>;
-  }>) {
+  configureForTesting(
+    dependencies: Partial<{
+      http: Pick<HttpClient, 'get' | 'post'>;
+      appConfig: Pick<ApplicationConfigService, 'config'>;
+      authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
+      offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
+      store: OfflineStoreService;
+      metricsStore: SyncMetricsStore;
+      now: () => string;
+      windowRef: Pick<Window, 'dispatchEvent'>;
+    }>,
+  ) {
     this.http = dependencies.http ?? this.http;
     this.appConfig = dependencies.appConfig ?? this.appConfig;
     this.authService = dependencies.authService ?? this.authService;
@@ -132,15 +147,27 @@ export class AnimalsReproductionEventsService {
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
 
-  listEvents(animalUuid: string, filters: AnimalReproductionEventListFilters = {}): Observable<AnimalReproductionEventItem[]> {
-    return from(this.listEventsInternal(animalUuid, filters) as Promise<AnimalReproductionEventItem[]>);
+  listEvents(
+    animalUuid: string,
+    filters: AnimalReproductionEventListFilters = {},
+  ): Observable<AnimalReproductionEventItem[]> {
+    return from(
+      this.listEventsInternal(animalUuid, filters) as Promise<AnimalReproductionEventItem[]>,
+    );
   }
 
-  createEvent(input: AnimalReproductionEventCreateInput): Observable<AnimalReproductionEventMutationFeedback> {
-    return from(this.createEventInternal(input) as Promise<AnimalReproductionEventMutationFeedback>);
+  createEvent(
+    input: AnimalReproductionEventCreateInput,
+  ): Observable<AnimalReproductionEventMutationFeedback> {
+    return from(
+      this.createEventInternal(input) as Promise<AnimalReproductionEventMutationFeedback>,
+    );
   }
 
-  private async listEventsInternal(animalUuid: string, filters: AnimalReproductionEventListFilters) {
+  private async listEventsInternal(
+    animalUuid: string,
+    filters: AnimalReproductionEventListFilters,
+  ) {
     const hasLocalOperations = await this.hasLocalReproductionEventOperations(animalUuid);
 
     if (!this.offlineStatus.isOnline() || hasLocalOperations) {
@@ -150,8 +177,8 @@ export class AnimalsReproductionEventsService {
     const response = await firstValueFrom(
       this.http.get<AnimalReproductionEventListResponse>(
         `${this.appConfig.config().apiBaseUrl}/animals/${animalUuid}/reproduction-events${buildReproductionEventsQuery(filters)}`,
-        { headers: this.buildHeaders() }
-      )
+        { headers: this.buildHeaders() },
+      ),
     );
 
     const items = (response.items ?? [])
@@ -164,7 +191,10 @@ export class AnimalsReproductionEventsService {
   private async createEventInternal(input: AnimalReproductionEventCreateInput) {
     const currentUser = this.authService.currentUser();
     if (!currentUser) {
-      return { outcome: 'blocked', message: 'Necesitás sesión activa para registrar eventos reproductivos.' } satisfies AnimalReproductionEventMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Necesitás sesión activa para registrar eventos reproductivos.',
+      } satisfies AnimalReproductionEventMutationFeedback;
     }
 
     const now = this.now();
@@ -181,27 +211,41 @@ export class AnimalsReproductionEventsService {
       metadata: input.metadata,
     };
 
+    const optimisticSnapshot = createOptimisticReproductionEventSnapshot(payload, now);
+
+    if (this.offlineStatus.isOnline()) {
+      const pushResult = await this.pushEventOperation(operationId, optimisticSnapshot, now);
+      if (pushResult.outcome === 'blocked') {
+        return pushResult;
+      }
+
+      await this.saveEventSnapshot({
+        ...optimisticSnapshot,
+        id: pushResult.entityId ?? optimisticSnapshot.id,
+        syncStatus: 'synced',
+        syncState: 'SYNCED',
+        syncMessage: null,
+      });
+      await this.refreshPendingState();
+      return {
+        outcome: 'saved',
+        message: 'Evento reproductivo guardado correctamente.',
+      } satisfies AnimalReproductionEventMutationFeedback;
+    }
+
     await this.store.enqueueOperation({
       entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: toAnimalEventLogPayload(createOptimisticReproductionEventSnapshot(payload, now)),
+      payload: toAnimalEventLogPayload(optimisticSnapshot),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
       operationId,
     });
 
-    await this.saveEventSnapshot(createOptimisticReproductionEventSnapshot(payload, now));
+    await this.saveEventSnapshot(optimisticSnapshot);
     await this.refreshPendingState();
-
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
-      return {
-        outcome: 'queued',
-        message: 'Evento reproductivo encolado. Se disparó la sincronización automática.',
-      } satisfies AnimalReproductionEventMutationFeedback;
-    }
 
     return {
       outcome: 'queued',
@@ -209,14 +253,22 @@ export class AnimalsReproductionEventsService {
     } satisfies AnimalReproductionEventMutationFeedback;
   }
 
-  private async listLocalEventSnapshots(animalUuid: string, filters: AnimalReproductionEventListFilters) {
+  private async listLocalEventSnapshots(
+    animalUuid: string,
+    filters: AnimalReproductionEventListFilters,
+  ) {
     const unifiedSnapshots = await this.store.listSnapshots('ANIMAL_EVENT_LOG');
     const legacySnapshots = await this.store.listSnapshots('ANIMAL_REPRODUCTION_EVENT');
     const outbox = await this.store.listOutbox();
 
     const items = [
-      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'REPRODUCTION').map(animalEventLogToReproductionEventItem),
-      ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalReproductionEventItem),
+      ...filterAnimalEventLogsByCategory(
+        unifiedSnapshots.map((snapshot) => snapshot.payload),
+        'REPRODUCTION',
+      ).map(animalEventLogToReproductionEventItem),
+      ...legacySnapshots.map(
+        (snapshot) => snapshot.payload as unknown as AnimalReproductionEventItem,
+      ),
     ]
       .filter((item) => item.animalUuid === animalUuid)
       .filter((item) => matchesAnimalReproductionEventFilters(item, filters));
@@ -229,11 +281,49 @@ export class AnimalsReproductionEventsService {
     return outbox.some(
       (operation) =>
         (operation.entityType === 'ANIMAL_REPRODUCTION_EVENT' ||
-          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'REPRODUCTION')) &&
+          (operation.entityType === 'ANIMAL_EVENT_LOG' &&
+            operation.payload['eventCategory'] === 'REPRODUCTION')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
-        operation.status !== 'failed'
+        operation.status !== 'failed',
     );
+  }
+
+  private async pushEventOperation(
+    operationId: string,
+    item: AnimalReproductionEventItem,
+    now: string,
+  ) {
+    const response = await firstValueFrom(
+      this.http.post<PushSyncResponse>(
+        `${this.appConfig.config().apiBaseUrl}/sync/push`,
+        {
+          operations: [
+            {
+              operationId,
+              entityType: 'ANIMAL_EVENT_LOG',
+              entityId: operationId,
+              opType: 'CREATE',
+              payload: toAnimalEventLogPayload(item),
+              baseVersion: 0,
+              clientCreatedAt: now,
+              clientUpdatedAt: now,
+              status: 'pending',
+              attempts: 0,
+            },
+          ],
+        },
+        { headers: this.buildHeaders() },
+      ),
+    );
+    const result = response.results[0];
+    if (!result || result.classification !== 'no_conflict') {
+      return {
+        outcome: 'blocked',
+        message: result?.conflict?.reason ?? 'No pudimos guardar el evento reproductivo.',
+      } satisfies AnimalReproductionEventMutationFeedback;
+    }
+    return { outcome: 'saved' as const, entityId: result.entityId };
   }
 
   private async saveEventSnapshot(item: AnimalReproductionEventItem) {
@@ -241,7 +331,9 @@ export class AnimalsReproductionEventsService {
       key: `ANIMAL_EVENT_LOG:${item.id}`,
       entityType: 'ANIMAL_EVENT_LOG',
       entityId: item.id,
-      payload: toAnimalEventLogPayload({ ...item } satisfies AnimalReproductionEventSnapshotPayload),
+      payload: toAnimalEventLogPayload({
+        ...item,
+      } satisfies AnimalReproductionEventSnapshotPayload),
       updatedAt: item.updatedAt,
     });
   }
@@ -257,7 +349,7 @@ export class AnimalsReproductionEventsService {
 }
 
 function toAnimalEventLogPayload(
-  item: AnimalReproductionEventSnapshotPayload | AnimalReproductionEventItem
+  item: AnimalReproductionEventSnapshotPayload | AnimalReproductionEventItem,
 ): AnimalEventLogSnapshotPayload {
   return {
     ...item,
@@ -282,7 +374,7 @@ function toAnimalEventLogPayload(
 
 function createOptimisticReproductionEventSnapshot(
   payload: AnimalReproductionEventOfflineCreatePayload,
-  now: string
+  now: string,
 ): AnimalReproductionEventItem {
   return {
     id: payload.operationId,
@@ -298,7 +390,7 @@ function createOptimisticReproductionEventSnapshot(
     createdAt: now,
     updatedAt: now,
     syncStatus: 'pending',
-    syncMessage: 'Pendiente de sync.',
+    syncMessage: 'Pendiente de sincronización.',
     syncState: 'PENDING_SYNC',
   };
 }
@@ -361,13 +453,19 @@ export function buildPregnancyDiagnosisMetadata(input: {
   serviceEventUuid?: string | null;
   relatedServiceEventId?: string | null;
 }): AnimalPregnancyDiagnosisMetadata {
-  const serviceEventUuid = normalizeOptionalText(input.serviceEventUuid) ?? normalizeOptionalText(input.relatedServiceEventId) ?? undefined;
+  const serviceEventUuid =
+    normalizeOptionalText(input.serviceEventUuid) ??
+    normalizeOptionalText(input.relatedServiceEventId) ??
+    undefined;
   const metadata: AnimalPregnancyDiagnosisMetadata = {
     diagnosisDate: normalizeOccurredAt(input.diagnosisDate),
     result: input.result,
-    expectedBirthDate: input.result === PREGNANCY_DIAGNOSIS_RESULT.PRENADA
-      ? normalizeOptionalText(input.expectedBirthDate ? normalizeOccurredAt(input.expectedBirthDate) : null) ?? undefined
-      : undefined,
+    expectedBirthDate:
+      input.result === PREGNANCY_DIAGNOSIS_RESULT.PRENADA
+        ? (normalizeOptionalText(
+            input.expectedBirthDate ? normalizeOccurredAt(input.expectedBirthDate) : null,
+          ) ?? undefined)
+        : undefined,
     serviceEventUuid,
     relatedServiceEventId: undefined,
   };

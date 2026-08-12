@@ -71,7 +71,7 @@ export function decorateAnimalImageTimeline(items: AnimalImageItem[], outbox: Of
       ...item,
       syncState,
       uiStatus: mapAnimalMediaUiStatus({ syncState, binaryRef: item.binaryRef }),
-      syncMessage: 'Pendiente de sync.',
+      syncMessage: 'Pendiente de sincronización.',
     } satisfies AnimalImageItem;
   });
 }

@@ -26,6 +26,7 @@ import {
   animalEventLogToReproductionEventItem,
   filterAnimalEventLogsByCategory,
 } from './animal-timeline.adapter';
+import { queueAnimalEventLogCreate } from './animal-offline-mutation.helpers';
 
 export interface AnimalBirthMetadata extends Record<string, unknown> {
   birthDate: string;
@@ -233,18 +234,14 @@ export class AnimalsReproductionEventsService {
       } satisfies AnimalReproductionEventMutationFeedback;
     }
 
-    await this.store.enqueueOperation({
-      entityType: 'ANIMAL_EVENT_LOG',
-      entityId: operationId,
-      opType: 'CREATE',
-      payload: toAnimalEventLogPayload(optimisticSnapshot),
-      baseVersion: 0,
-      clientCreatedAt: now,
-      clientUpdatedAt: now,
+    await queueAnimalEventLogCreate({
+      store: this.store,
       operationId,
+      snapshot: optimisticSnapshot,
+      now,
+      toPayload: toAnimalEventLogPayload,
+      saveSnapshot: (snapshot) => this.saveEventSnapshot(snapshot),
     });
-
-    await this.saveEventSnapshot(optimisticSnapshot);
     await this.refreshPendingState();
 
     return {

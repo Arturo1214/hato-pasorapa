@@ -27,6 +27,7 @@ import {
   normalizeAnimalImageItem,
   toSnapshotPayload,
 } from './animal-images-timeline.adapter';
+import { runSequentially } from './animal-offline-mutation.helpers';
 
 export interface AnimalImageItem {
   id: string;
@@ -356,16 +357,6 @@ export class AnimalsImagesService {
     const token = this.authService.getAccessToken();
     return token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : new HttpHeaders();
   }
-}
-
-function runSequentially<T>(
-  items: readonly T[],
-  action: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-  return items.reduce(
-    (chain, item, index) => chain.then(() => action(item, index)),
-    Promise.resolve(),
-  );
 }
 
 async function computeSha256(file: Blob) {

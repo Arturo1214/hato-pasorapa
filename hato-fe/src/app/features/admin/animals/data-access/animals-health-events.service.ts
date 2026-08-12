@@ -28,6 +28,7 @@ import {
   animalEventLogToHealthEventItem,
   filterAnimalEventLogsByCategory,
 } from './animal-timeline.adapter';
+import { queueAnimalEventLogCreate, runSequentially } from './animal-offline-mutation.helpers';
 
 export interface AnimalHealthEventItem {
   id: string;
@@ -208,18 +209,14 @@ export class AnimalsHealthEventsService {
       } satisfies AnimalHealthEventMutationFeedback;
     }
 
-    await this.store.enqueueOperation({
-      entityType: 'ANIMAL_EVENT_LOG',
-      entityId: operationId,
-      opType: 'CREATE',
-      payload: toAnimalEventLogPayload(optimisticSnapshot),
-      baseVersion: 0,
-      clientCreatedAt: now,
-      clientUpdatedAt: now,
+    await queueAnimalEventLogCreate({
+      store: this.store,
       operationId,
+      snapshot: optimisticSnapshot,
+      now,
+      toPayload: toAnimalEventLogPayload,
+      saveSnapshot: (snapshot) => this.saveEventSnapshot(snapshot),
     });
-
-    await this.saveEventSnapshot(optimisticSnapshot);
     this.emitHealthEventChanges(operationId, input.metadata, sourceChannel);
     await this.refreshPendingState();
 
@@ -484,16 +481,6 @@ function toAnimalEventLogPayload(
 function readString(record: Record<string, unknown> | null, key: string) {
   const value = record?.[key];
   return typeof value === 'string' ? value : null;
-}
-
-function runSequentially<T>(
-  items: readonly T[],
-  action: (item: T, index: number) => Promise<void>,
-): Promise<void> {
-  return items.reduce(
-    (chain, item, index) => chain.then(() => action(item, index)),
-    Promise.resolve(),
-  );
 }
 
 function readVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {

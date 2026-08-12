@@ -13,7 +13,7 @@ import { AdminDecisionSupportStore } from './data-access/admin-decision-support.
     <section class="decision-support-page">
       <mat-card appearance="outlined">
         <p>{{ scopeGuardMessage() }}</p>
-        <p>Última sync: {{ freshness().lastSyncAt ?? 'Sin sync previa' }}</p>
+        <p>Última sincronización: {{ freshness().lastSyncAt ?? 'Sin sincronización previa' }}</p>
         <p>Último cálculo: {{ freshness().lastComputedAt ?? 'Todavía no calculado' }}</p>
         @if (statusMessage()) {
           <p>{{ statusMessage() }}</p>

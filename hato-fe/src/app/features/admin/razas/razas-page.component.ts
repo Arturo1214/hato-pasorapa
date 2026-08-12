@@ -35,7 +35,7 @@ import {
         @if (offlineMessage()) {
           <p>{{ offlineMessage() }}</p>
         }
-        <p>La gestión de razas requiere conexión. El catálogo es administrativo y online-only.</p>
+        <p>La gestión de razas requiere conexión. El catálogo es administrativo y solo funciona con conexión.</p>
       </mat-card>
 
       <div class="toolbar-actions">

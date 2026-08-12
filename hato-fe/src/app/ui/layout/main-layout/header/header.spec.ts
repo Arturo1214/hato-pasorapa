@@ -1,5 +1,10 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ActivatedRoute,
+  type ActivatedRouteSnapshot,
+  NavigationEnd,
+  Router,
+} from '@angular/router';
 import { signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
@@ -132,7 +137,9 @@ describe('HeaderComponent', () => {
     expect(text).toContain('Admin Root');
     expect(text).not.toContain('Pasorapa');
     expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(3);
-    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]'),
+    ).toBeNull();
   });
 
   it('should show the online connectivity indicator in Spanish', async () => {
@@ -149,7 +156,9 @@ describe('HeaderComponent', () => {
       rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
       currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
     });
-    const indicator = fixture.nativeElement.querySelector('[data-testid="header-connectivity-status"]') as HTMLElement;
+    const indicator = fixture.nativeElement.querySelector(
+      '[data-testid="header-connectivity-status"]',
+    ) as HTMLElement;
 
     expect(indicator.textContent).toContain('En línea');
     expect(indicator.getAttribute('aria-label')).toBe('Estado de conexión: en línea');
@@ -174,7 +183,9 @@ describe('HeaderComponent', () => {
     routerEvents.next(new NavigationEnd(1, '/ganadero/animales', '/ganadero/dashboard'));
     fixture.detectChanges();
 
-    const indicator = fixture.nativeElement.querySelector('[data-testid="header-connectivity-status"]') as HTMLElement;
+    const indicator = fixture.nativeElement.querySelector(
+      '[data-testid="header-connectivity-status"]',
+    ) as HTMLElement;
     expect(indicator.textContent).toContain('Sin conexión');
     expect(indicator.getAttribute('aria-label')).toBe('Estado de conexión: sin conexión');
   });
@@ -193,7 +204,9 @@ describe('HeaderComponent', () => {
       rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
       currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
     });
-    const bell = fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]') as HTMLButtonElement;
+    const bell = fixture.nativeElement.querySelector(
+      '[data-testid="ganadero-notification-bell"]',
+    ) as HTMLButtonElement;
 
     expect(bell).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('5');
@@ -216,8 +229,12 @@ describe('HeaderComponent', () => {
       currentUser: { displayName: 'Ganadero Uno', role: 'GANADERO' },
     });
 
-    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[data-testid="ganadero-notification-count"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="ganadero-notification-bell"]'),
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="ganadero-notification-count"]'),
+    ).toBeNull();
   });
 
   it('should delegate logout to the auth service from the header action', async () => {
@@ -232,7 +249,9 @@ describe('HeaderComponent', () => {
       url: '/admin/dashboard',
       rootSnapshot: createSnapshot({ firstChild: dashboardSnapshot }),
     });
-    const buttons = fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>;
+    const buttons = fixture.nativeElement.querySelectorAll(
+      'button',
+    ) as NodeListOf<HTMLButtonElement>;
     buttons[2].click();
 
     expect(logout).toHaveBeenCalled();
@@ -243,7 +262,8 @@ describe('HeaderComponent', () => {
       path: 'admin/reportes',
       data: {
         title: 'Reportes',
-        subtitle: 'Indicadores agregados para productividad, costos, frescura y actividad reciente.',
+        subtitle:
+          'Indicadores agregados para productividad, costos, frescura y actividad reciente.',
       },
     });
     const lazyShellSnapshot = createSnapshot({ firstChild: reportesSnapshot });
@@ -267,19 +287,21 @@ describe('HeaderComponent', () => {
 
     expect(fixture.componentInstance.routeData()).toEqual({
       title: 'Reportes',
-      subtitle: 'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
+      subtitle:
+        'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
     });
   });
 
-  it('should not throw when the route tree is unavailable and should use the dashboard default', async () => {
+  it('should not throw when the route tree is unavailable and should use the panel default', async () => {
     const fixture = await configureHeader({
       url: '/',
       activatedRoute: {},
     });
 
     expect(fixture.componentInstance.routeData()).toEqual({
-      title: 'Dashboard',
-      subtitle: 'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
+      title: 'Panel',
+      subtitle:
+        'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
     });
   });
 });

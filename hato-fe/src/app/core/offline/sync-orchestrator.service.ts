@@ -316,11 +316,11 @@ export class SyncOrchestratorService {
             }
 
             lastMessage =
-              result.conflict?.reason ?? 'La operación offline fue rechazada por validación.';
+              result.conflict?.reason ?? 'La operación sin conexión fue rechazada por validación.';
             await this.store.markFailed(result.operationId, {
               code: 'VALIDATION_ERROR',
               message:
-                result.conflict?.reason ?? 'La operación offline fue rechazada por validación.',
+                result.conflict?.reason ?? 'La operación sin conexión fue rechazada por validación.',
             });
           }
         } catch {
@@ -345,7 +345,7 @@ export class SyncOrchestratorService {
 
             await this.store.markDeadLetter(operation.operationId, {
               code: 'RETRY_LIMIT_EXCEEDED',
-              message: 'Se agotó la política de retry para esta operación offline.',
+              message: 'Se agotó la política de reintentos para esta operación sin conexión.',
             });
           }
 
@@ -669,7 +669,7 @@ function diffMs(startedAt: string, finishedAt: string) {
 
 function describeBlockedSession(status: Exclude<OfflineSessionStatus, 'active'>) {
   return status === 'expired'
-    ? 'La sesión offline expiró. Iniciá sesión nuevamente antes de sincronizar.'
+    ? 'La sesión sin conexión expiró. Iniciá sesión nuevamente antes de sincronizar.'
     : 'Este dispositivo requiere reautenticación antes de sincronizar.';
 }
 

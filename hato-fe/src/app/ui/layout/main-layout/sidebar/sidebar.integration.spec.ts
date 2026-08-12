@@ -36,7 +36,7 @@ describe('SidebarComponent integration', () => {
 
   it('should switch from admin menu to ganadero menu when the role changes', () => {
     expect(fixture.componentInstance.menuItems().map((item) => item.label)).toEqual([
-      'Dashboard',
+      'Panel',
       'Usuarios',
       'Ganaderos',
       'Razas',
@@ -48,7 +48,7 @@ describe('SidebarComponent integration', () => {
     fixture.detectChanges();
 
     expect(fixture.componentInstance.menuItems().map((item) => item.label)).toEqual([
-      'Dashboard',
+      'Panel',
       'Animales',
       'Visitas veterinarias',
       'Calendario',

@@ -141,7 +141,7 @@ export class GanaderosPageComponent {
   ];
   readonly actions: DataTableAction[] = [
     { id: 'edit', label: 'Editar', icon: 'edit' },
-    { id: 'reset-password', label: 'Reset password', icon: 'lock_reset', color: 'warn' },
+    { id: 'reset-password', label: 'Restablecer contraseña', icon: 'lock_reset', color: 'warn' },
     { id: 'toggle-status', label: 'Deshabilitar', icon: 'block', color: 'warn' },
   ];
 
@@ -232,9 +232,9 @@ export class GanaderosPageComponent {
     this.dialog
       .open(ConfirmationDialogComponent, {
         data: {
-          title: 'Reset password temporal',
-          message: `Vas a resetear la contraseña de ${ganadero.name} (${ganadero.businessIdentifier}) a 112345AB.`,
-          confirmLabel: 'Confirmar reset',
+          title: 'Restablecer contraseña temporal',
+          message: `Vas a restablecer la contraseña de ${ganadero.name} (${ganadero.businessIdentifier}) a 112345AB.`,
+          confirmLabel: 'Confirmar restablecimiento',
           tone: CONFIRMATION_DIALOG_TONE.WARN,
         },
       })
@@ -249,7 +249,7 @@ export class GanaderosPageComponent {
             this.feedbackMessage.set(response.message);
             this.errorMessage.set(response.outcome === 'blocked' ? response.message : null);
           },
-          error: () => this.errorMessage.set('No pudimos resetear la contraseña temporal.'),
+          error: () => this.errorMessage.set('No pudimos restablecer la contraseña temporal.'),
         });
       });
   }

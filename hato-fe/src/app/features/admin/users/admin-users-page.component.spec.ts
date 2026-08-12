@@ -292,7 +292,7 @@ describe('AdminUsersPageComponent', () => {
 
     expect(createButton.disabled).toBe(true);
     expect(fixture.nativeElement.textContent).toContain(
-      'Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.',
+      'Las altas, ediciones y restablecimientos de contraseñas de usuarios se resuelven solo con conexión.',
     );
   });
 });

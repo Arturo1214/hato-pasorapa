@@ -9,7 +9,10 @@ import { MatInputModule } from '@angular/material/input';
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AuthService } from '../../../core/auth/data-access/auth.service';
-import { PASSWORD_POLICY_MESSAGE, passwordPolicyValidators } from '../../../shared/forms/password-policy';
+import {
+  PASSWORD_POLICY_MESSAGE,
+  passwordPolicyValidators,
+} from '../../../shared/forms/password-policy';
 import { BrandLockupComponent } from '../../../shared/ui/brand-lockup/brand-lockup.component';
 import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.component';
 
@@ -48,13 +51,18 @@ function passwordsMatch(value: {
 
         <p class="eyebrow">Registro</p>
         <h1>Registro de ganaderos</h1>
-        <p class="support-copy">Completá tu alta y entrá directo al dashboard para seguir trabajando.</p>
+        <p class="support-copy">
+          Completá tu alta y entrá directo al panel para seguir trabajando.
+        </p>
 
         <form [formGroup]="form" class="registration-form" (ngSubmit)="submit()">
           <mat-form-field appearance="outline">
             <mat-label>CI o identificador *</mat-label>
             <input matInput formControlName="businessIdentifier" required />
-            <app-form-errors [control]="form.controls.businessIdentifier" [messages]="messages.businessIdentifier" />
+            <app-form-errors
+              [control]="form.controls.businessIdentifier"
+              [messages]="messages.businessIdentifier"
+            />
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -71,14 +79,29 @@ function passwordsMatch(value: {
 
           <mat-form-field appearance="outline">
             <mat-label>Contraseña *</mat-label>
-            <input matInput type="password" formControlName="password" autocomplete="new-password" required />
+            <input
+              matInput
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+              required
+            />
             <app-form-errors [control]="form.controls.password" [messages]="messages.password" />
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>Confirmar contraseña *</mat-label>
-            <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password" required />
-            <app-form-errors [control]="form.controls.confirmPassword" [messages]="messages.confirmPassword" />
+            <input
+              matInput
+              type="password"
+              formControlName="confirmPassword"
+              autocomplete="new-password"
+              required
+            />
+            <app-form-errors
+              [control]="form.controls.confirmPassword"
+              [messages]="messages.confirmPassword"
+            />
           </mat-form-field>
 
           <input
@@ -111,7 +134,12 @@ function passwordsMatch(value: {
             </div>
           }
 
-          <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || submitting() || passwordMismatch()">
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="form.invalid || submitting() || passwordMismatch()"
+          >
             {{ submitting() ? 'Registrando…' : 'Crear cuenta y entrar' }}
           </button>
         </form>
@@ -205,7 +233,7 @@ export class GanaderoRegistrationPageComponent {
     },
     {
       validators: (group) => passwordsMatch(group.getRawValue()),
-    }
+    },
   );
   readonly passwordMismatch = computed(() => this.form.hasError('passwordMismatch'));
   readonly messages = {
@@ -236,7 +264,8 @@ export class GanaderoRegistrationPageComponent {
       return;
     }
 
-    const { businessIdentifier, name, email, password, website, formIssuedAt } = this.form.getRawValue();
+    const { businessIdentifier, name, email, password, website, formIssuedAt } =
+      this.form.getRawValue();
     this.feedbackMessage.set(null);
     this.successMessage.set(null);
     this.submitting.set(true);
@@ -253,11 +282,13 @@ export class GanaderoRegistrationPageComponent {
       .pipe(finalize(() => this.submitting.set(false)))
       .subscribe((result) => {
         if (!result.success) {
-          this.feedbackMessage.set(result.error?.message ?? 'Error en el registro, intenta más tarde.');
+          this.feedbackMessage.set(
+            result.error?.message ?? 'Error en el registro, intenta más tarde.',
+          );
           return;
         }
 
-        this.successMessage.set('Usuario creado exitosamente. Entrando al dashboard…');
+        this.successMessage.set('Usuario creado exitosamente. Entrando al panel…');
         setTimeout(() => void this.router.navigateByUrl('/ganadero/dashboard'), 600);
       });
   }

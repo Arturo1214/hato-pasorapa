@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../data-access/auth.service';
 
 @Component({
@@ -17,12 +17,14 @@ import { AuthService } from '../data-access/auth.service';
         <p class="eyebrow">403</p>
         <h1>No tenés acceso a esta sección</h1>
         <p class="support-copy">
-          Tu usuario está activo, pero no tiene permisos para entrar a esta pantalla. Si necesitás acceso,
-          pedile a un administrador que revise tu rol.
+          Tu usuario está activo, pero no tiene permisos para entrar a esta pantalla. Si necesitás
+          acceso, pedile a un administrador que revise tu rol.
         </p>
 
         <div class="actions">
-          <a mat-flat-button color="primary" [routerLink]="defaultDashboardUrl()">Volver a mi dashboard</a>
+          <a mat-flat-button color="primary" [routerLink]="defaultDashboardUrl()"
+            >Volver a mi panel</a
+          >
           <button mat-stroked-button type="button" (click)="logout()">Cerrar sesión</button>
         </div>
       </mat-card>
@@ -81,10 +83,10 @@ import { AuthService } from '../data-access/auth.service';
 })
 export class ForbiddenPageComponent {
   private readonly authService = inject(AuthService);
-  private readonly router = inject(Router);
-
   defaultDashboardUrl() {
-    return this.authService.currentUser()?.role === 'GANADERO' ? '/ganadero/dashboard' : '/admin/dashboard';
+    return this.authService.currentUser()?.role === 'GANADERO'
+      ? '/ganadero/dashboard'
+      : '/admin/dashboard';
   }
 
   logout() {

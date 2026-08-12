@@ -98,7 +98,7 @@ describe('RazasService', () => {
       ),
     ).resolves.toEqual({
       outcome: 'blocked',
-      message: 'La gestión de razas requiere conexión. No se guarda información offline.',
+      message: 'La gestión de razas requiere conexión. No se guarda información sin conexión.',
     });
     await expect(
       firstValueFrom(
@@ -113,11 +113,11 @@ describe('RazasService', () => {
       ),
     ).resolves.toEqual({
       outcome: 'blocked',
-      message: 'La gestión de razas requiere conexión. No se guarda información offline.',
+      message: 'La gestión de razas requiere conexión. No se guarda información sin conexión.',
     });
     await expect(firstValueFrom(service.setActive('raza-1', false))).resolves.toEqual({
       outcome: 'blocked',
-      message: 'La gestión de razas requiere conexión. No se guarda información offline.',
+      message: 'La gestión de razas requiere conexión. No se guarda información sin conexión.',
     });
     expect(post).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();

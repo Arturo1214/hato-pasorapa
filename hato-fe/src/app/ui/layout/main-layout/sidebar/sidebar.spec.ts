@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
@@ -17,28 +17,31 @@ describe('SidebarComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-          provideRouter([]),
-          {
-            provide: CalendarAlertsStore,
-            useValue: {
-              totalPending: () => 2,
-              badgeSeverity: () => 'overdue',
-            },
+        provideRouter([]),
+        {
+          provide: CalendarAlertsStore,
+          useValue: {
+            totalPending: () => 2,
+            badgeSeverity: () => 'overdue',
           },
-          {
-            provide: AdminConflictResolutionStore,
-            useValue: {
-              unresolvedCount: () => 3,
-            },
+        },
+        {
+          provide: AdminConflictResolutionStore,
+          useValue: {
+            unresolvedCount: () => 3,
           },
-          {
-            provide: ApplicationConfigService,
-            useValue: { config: () => ({ apiBaseUrl: '/api', offlineBackupV1Enabled: true }) },
+        },
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api', offlineBackupV1Enabled: true }) },
         },
         {
           provide: AuthService,
           useValue: {
-            currentUser: () => ({ role, displayName: role === 'ADMIN' ? 'Admin Root' : 'Ganadero Base' }),
+            currentUser: () => ({
+              role,
+              displayName: role === 'ADMIN' ? 'Admin Root' : 'Ganadero Base',
+            }),
             logout: vi.fn(),
           },
         },
@@ -65,7 +68,14 @@ describe('SidebarComponent', () => {
 
     const labels = fixture.componentInstance.menuItems().map((item) => item.label);
 
-    expect(labels).toEqual(['Dashboard', 'Usuarios', 'Ganaderos', 'Razas', 'Notificaciones', 'Reportes']);
+    expect(labels).toEqual([
+      'Panel',
+      'Usuarios',
+      'Ganaderos',
+      'Razas',
+      'Notificaciones',
+      'Reportes',
+    ]);
     expect(labels).toHaveLength(6);
   });
 
@@ -75,7 +85,7 @@ describe('SidebarComponent', () => {
     const labels = fixture.componentInstance.menuItems().map((item) => item.label);
 
     expect(labels).toEqual([
-      'Dashboard',
+      'Panel',
       'Animales',
       'Visitas veterinarias',
       'Calendario',
@@ -90,9 +100,26 @@ describe('SidebarComponent', () => {
   it('should render the operational badge for calendario entries', async () => {
     await configure('GANADERO');
 
-    const badges = Array.from(fixture.nativeElement.querySelectorAll('.menu-badge')) as HTMLElement[];
-    expect(badges.some((badge) => badge.textContent?.includes('2') && badge.getAttribute('data-severity') === 'overdue')).toBe(true);
-    expect(badges.some((badge) => badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high')).toBe(false);
-    expect(badges.some((badge) => badge.textContent?.includes('1') && badge.getAttribute('data-severity') === 'info')).toBe(false);
+    const badges = Array.from(
+      fixture.nativeElement.querySelectorAll('.menu-badge'),
+    ) as HTMLElement[];
+    expect(
+      badges.some(
+        (badge) =>
+          badge.textContent?.includes('2') && badge.getAttribute('data-severity') === 'overdue',
+      ),
+    ).toBe(true);
+    expect(
+      badges.some(
+        (badge) =>
+          badge.textContent?.includes('3') && badge.getAttribute('data-severity') === 'high',
+      ),
+    ).toBe(false);
+    expect(
+      badges.some(
+        (badge) =>
+          badge.textContent?.includes('1') && badge.getAttribute('data-severity') === 'info',
+      ),
+    ).toBe(false);
   });
 });

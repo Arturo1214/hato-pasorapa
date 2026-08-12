@@ -147,7 +147,7 @@ export class AdminConflictResolutionStore {
             : null
       );
     } catch {
-      this.errorState.set('No pudimos reconstruir la bandeja de conflictos offline.');
+      this.errorState.set('No pudimos reconstruir la bandeja de conflictos sin conexión.');
     } finally {
       this.loadingState.set(false);
     }

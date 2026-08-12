@@ -49,7 +49,7 @@ export class LoginPageComponent {
     const sessionContext = this.sessionContext();
 
     if (sessionContext === 'expired') {
-      return 'Tu sesión offline expiró. Volvé a iniciar sesión antes de sincronizar o entrar a la app.';
+      return 'Tu sesión sin conexión expiró. Volvé a iniciar sesión antes de sincronizar o entrar a la app.';
     }
 
     if (sessionContext === 'reauth_required') {

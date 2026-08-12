@@ -444,7 +444,7 @@ describe('SyncOrchestratorService', () => {
       expect(apiClient.pull).not.toHaveBeenCalled();
       expect(metrics.snapshot().lastMessage).toBe(
         status === 'expired'
-          ? 'La sesión offline expiró. Iniciá sesión nuevamente antes de sincronizar.'
+          ? 'La sesión sin conexión expiró. Iniciá sesión nuevamente antes de sincronizar.'
           : 'Este dispositivo requiere reautenticación antes de sincronizar.',
       );
     }

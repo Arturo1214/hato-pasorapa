@@ -36,7 +36,7 @@ import {
           <p>{{ offlineMessage() }}</p>
         }
         @if (sensitiveActionsOnlineOnly()) {
-          <p>Las altas, ediciones y resets de contraseñas de usuarios se resuelven solo online.</p>
+          <p>Las altas, ediciones y restablecimientos de contraseñas de usuarios se resuelven solo con conexión.</p>
         }
       </mat-card>
 

@@ -295,6 +295,14 @@ class AnimalResourceTest {
                 .body("content[0].arete", equalTo("ARETE-OPERATIVO-01"))
                 .body("content[0].category", equalTo("VACA"))
                 .body("content[0].active", equalTo(true));
+
+        given()
+                .auth().oauth2(token)
+                .when()
+                .get("/api/animals/count?visible.contains=operativo&ownerGanaderoId.equals={owner}&active.equals=true&category.equals=VACA", ownerA)
+                .then()
+                .statusCode(200)
+                .body(equalTo("1"));
     }
 
     @Test

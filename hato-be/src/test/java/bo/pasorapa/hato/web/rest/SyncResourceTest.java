@@ -191,6 +191,65 @@ class SyncResourceTest {
     }
 
     @Test
+    void shouldAcceptUnifiedAnimalEventLogPushContract() {
+        UUID animalUuid = UUID.fromString("b9666e6a-d8df-49ac-b82d-52044b7241a1");
+        QuarkusTransaction.requiringNew().run(() -> animalRepository.persist(buildAnimal(animalUuid, "BO-LOG", 0L, LocalDateTime.of(2026, 4, 26, 10, 0))));
+        String token = loginAs("root-admin", "RootAdmin9");
+
+        given()
+                .auth().oauth2(token)
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "operations": [
+                            {
+                              "operationId": "6f51850f-5fc4-4cbe-b23f-6fe8837fd4d1",
+                              "entityType": "ANIMAL_EVENT_LOG",
+                              "entityId": "6f51850f-5fc4-4cbe-b23f-6fe8837fd4d1",
+                              "opType": "CREATE",
+                              "payload": {
+                                "animalUuid": "%s",
+                                "eventCategory": "GENERAL",
+                                "eventType": "OBSERVATION",
+                                "occurredAt": "2026-04-26T10:03:00Z",
+                                "notes": "Control visual sin novedades",
+                                "performedByUserId": "%s",
+                                "sourceChannel": "OFFLINE",
+                                "operationId": "6f51850f-5fc4-4cbe-b23f-6fe8837fd4d1",
+                                "metadata": { "source": "smoke" }
+                              },
+                              "baseVersion": 0,
+                              "clientCreatedAt": "2026-04-26T10:03:00Z",
+                              "clientUpdatedAt": "2026-04-26T10:03:00Z"
+                            }
+                          ]
+                        }
+                        """.formatted(animalUuid, currentUserIdFor("root-admin")))
+                .when()
+                .post("/api/sync/push")
+                .then()
+                .statusCode(200)
+                .body("results", hasSize(1))
+                .body("results[0].classification", equalTo("no_conflict"))
+                .body("results[0].entityType", equalTo("ANIMAL_EVENT_LOG"))
+                .body("results[0].operationId", equalTo("6f51850f-5fc4-4cbe-b23f-6fe8837fd4d1"));
+
+        given()
+                .auth().oauth2(token)
+                .queryParam("entityType", "ANIMAL_EVENT_LOG")
+                .queryParam("cursorUpdatedAt", "2026-04-26T10:00:00Z")
+                .queryParam("cursorId", "00000000-0000-0000-0000-000000000001")
+                .when()
+                .get("/api/sync/pull")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].animalUuid", equalTo(animalUuid.toString()))
+                .body("items[0].eventCategory", equalTo("GENERAL"))
+                .body("items[0].eventType", equalTo("OBSERVATION"));
+    }
+
+    @Test
     void shouldRejectAnimalEventTypesOutsideV1CatalogThroughSyncResource() {
         UUID animalUuid = UUID.fromString("b9666e6a-d8df-49ac-b82d-52044b72418d");
         QuarkusTransaction.requiringNew().run(() -> animalRepository.persist(buildAnimal(animalUuid, "BO-0021", 0L, LocalDateTime.of(2026, 4, 26, 10, 0))));

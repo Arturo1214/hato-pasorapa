@@ -122,6 +122,17 @@ class RazaResourceTest {
                 .body("activo", equalTo(false));
 
         given()
+                .auth().oauth2(adminToken)
+                .when()
+                .get("/api/admin/razas")
+                .then()
+                .statusCode(200)
+                .body("items", hasSize(1))
+                .body("items[0].uuid", equalTo(uuid))
+                .body("items[0].nombre", equalTo("Braford"))
+                .body("items[0].activo", equalTo(false));
+
+        given()
                 .auth().oauth2(ganaderoToken)
                 .contentType(ContentType.JSON)
                 .body("""

@@ -237,9 +237,7 @@ export class SyncOrchestratorService {
 
       if (eligibleOperations.length > 0) {
         const pushStartedAt = this.now();
-        for (const operation of eligibleOperations) {
-          await this.store.markInFlight(operation.operationId);
-        }
+        await this.markEligibleOperationsInFlightSequentially(eligibleOperations);
         await this.publishRuntimeSnapshot(_trigger, runtimeContext, {
           startedAt: cycleStartedAt,
           finishedAt: null,
@@ -255,7 +253,7 @@ export class SyncOrchestratorService {
           const pushResponse = await this.apiClient.push({ operations: hydratedOperations });
           pushDurationMs = diffMs(pushStartedAt, this.now());
 
-          for (const result of pushResponse.results) {
+          await runSequentially(pushResponse.results, async (result) => {
             if (result.classification === 'no_conflict') {
               success += 1;
               entityChanges.push({
@@ -285,7 +283,7 @@ export class SyncOrchestratorService {
                 await this.imageBinaryStore.purgeBinary(result.operationId);
               }
               await this.store.markAcked(result.operationId);
-              continue;
+              return;
             }
 
             failed += 1;
@@ -312,7 +310,7 @@ export class SyncOrchestratorService {
                 createdAt: cycleStartedAt,
               } satisfies ConflictAuditEntry);
               triggerSyncConflictsRefresh(this.windowRef);
-              continue;
+              return;
             }
 
             lastMessage =
@@ -320,34 +318,21 @@ export class SyncOrchestratorService {
             await this.store.markFailed(result.operationId, {
               code: 'VALIDATION_ERROR',
               message:
-                result.conflict?.reason ?? 'La operación sin conexión fue rechazada por validación.',
+                result.conflict?.reason ??
+                'La operación sin conexión fue rechazada por validación.',
             });
-          }
+          });
         } catch {
           failed += eligibleOperations.length;
-          const inFlightOperations = (await this.store.listOutbox()).filter((operation) =>
+          const outboxOperations = await this.store.listOutbox();
+          const inFlightOperations = outboxOperations.filter((operation) =>
             eligibleOperations.some((eligible) => eligible.operationId === operation.operationId),
           );
 
-          for (const operation of inFlightOperations) {
-            const retryDecision = this.retryPolicy.schedule(operation.attempts, cycleStartedAt);
-            if (retryDecision.shouldRetry && retryDecision.nextAttemptAt) {
-              await this.store.markRetryScheduled(
-                operation.operationId,
-                {
-                  code: 'TRANSIENT_SYNC_ERROR',
-                  message: 'La sincronización falló temporalmente. Se reintentará automáticamente.',
-                },
-                retryDecision.nextAttemptAt,
-              );
-              continue;
-            }
-
-            await this.store.markDeadLetter(operation.operationId, {
-              code: 'RETRY_LIMIT_EXCEEDED',
-              message: 'Se agotó la política de reintentos para esta operación sin conexión.',
-            });
-          }
+          await this.rescheduleFailedInFlightOperationsSequentially(
+            inFlightOperations,
+            cycleStartedAt,
+          );
 
           const pending = await this.store.countPendingOperations();
           const finishedAt = this.now();
@@ -377,42 +362,13 @@ export class SyncOrchestratorService {
       }
 
       const pullStartedAt = this.now();
-      for (const entityType of this.supportedEntities) {
-        let cursor = await this.store.getCheckpoint(entityType);
-        for (let page = 0; page < SYNC_HARNESS_MAX_HAS_MORE_PAGES; page += 1) {
-          const response = await this.apiClient.pull({ entityType, cursor });
-          runtimeContext = {
-            ...runtimeContext,
-            hasMoreObserved: runtimeContext.hasMoreObserved || response.hasMore,
-          };
-          const pullChanges = await this.store.applyPullResponse(
-            entityType,
-            response.items,
-            response.nextCursor,
-          );
-          if (pullChanges.count > 0) {
-            entityChanges.push({
-              entity: entityType,
-              source: 'pull',
-              operation: 'sync-batch',
-              ids: pullChanges.ids,
-              count: pullChanges.count,
-            });
-          }
-
-          if (!response.hasMore) {
-            break;
-          }
-
-          if (page + 1 >= SYNC_HARNESS_MAX_HAS_MORE_PAGES) {
-            const message = `Sync harness pagination overflow after ${SYNC_HARNESS_MAX_HAS_MORE_PAGES} pages for ${entityType}.`;
-            this.metricsStore.patch({ lastMessage: message });
-            throw new Error(message);
-          }
-
-          cursor = response.nextCursor;
-        }
-      }
+      await runSequentially(this.supportedEntities, async (entityType) => {
+        runtimeContext = await this.pullEntityPagesSequentially(
+          entityType,
+          runtimeContext,
+          entityChanges,
+        );
+      });
       pullDurationMs = diffMs(pullStartedAt, this.now());
 
       if (entityChanges.length > 0) {
@@ -486,7 +442,7 @@ export class SyncOrchestratorService {
   ): Promise<SyncRuntimeSnapshotV2> {
     const queue = await this.store.summarizeOutboxByStatusAndEntity();
     const errors = await this.store.summarizeErrors();
-    const entityHealth = await this.withAllEntityHealth(
+    const entityHealth = this.withAllEntityHealth(
       await this.store.listCheckpointHealth(this.now()),
     );
 
@@ -514,7 +470,7 @@ export class SyncOrchestratorService {
     };
   }
 
-  private async withAllEntityHealth(
+  private withAllEntityHealth(
     partial: Awaited<ReturnType<OfflineStoreService['listCheckpointHealth']>>,
   ) {
     const result = { ...partial } as Awaited<
@@ -529,13 +485,101 @@ export class SyncOrchestratorService {
         stale: true,
       };
 
-      if (result[entityType].stalenessMs != null) {
+      if (result[entityType].stalenessMs !== null) {
         result[entityType].stale =
           result[entityType].stalenessMs > SYNC_OBSERVABILITY_STALE_DEFAULT_MS;
       }
     }
 
     return result;
+  }
+
+  private markEligibleOperationsInFlightSequentially(
+    eligibleOperations: OfflineOperationEnvelope[],
+  ) {
+    return runSequentially(eligibleOperations, async (operation) => {
+      await this.store.markInFlight(operation.operationId);
+    });
+  }
+
+  private rescheduleFailedInFlightOperationsSequentially(
+    inFlightOperations: OfflineOperationEnvelope[],
+    cycleStartedAt: string,
+  ) {
+    return runSequentially(inFlightOperations, async (operation) => {
+      const retryDecision = this.retryPolicy.schedule(operation.attempts, cycleStartedAt);
+      if (retryDecision.shouldRetry && retryDecision.nextAttemptAt) {
+        await this.store.markRetryScheduled(
+          operation.operationId,
+          {
+            code: 'TRANSIENT_SYNC_ERROR',
+            message: 'La sincronización falló temporalmente. Se reintentará automáticamente.',
+          },
+          retryDecision.nextAttemptAt,
+        );
+        return;
+      }
+
+      await this.store.markDeadLetter(operation.operationId, {
+        code: 'RETRY_LIMIT_EXCEEDED',
+        message: 'Se agotó la política de reintentos para esta operación sin conexión.',
+      });
+    });
+  }
+
+  private async pullEntityPagesSequentially(
+    entityType: OfflineEntityType,
+    runtimeContext: SyncCycleRuntimeContext,
+    entityChanges: Array<Omit<OfflineEntityChange, 'occurredAt'>>,
+  ) {
+    const cursor = await this.store.getCheckpoint(entityType);
+    return this.pullEntityPageSequentially(entityType, cursor, runtimeContext, entityChanges, 0);
+  }
+
+  private async pullEntityPageSequentially(
+    entityType: OfflineEntityType,
+    cursor: OfflineSyncCheckpoint | null,
+    runtimeContext: SyncCycleRuntimeContext,
+    entityChanges: Array<Omit<OfflineEntityChange, 'occurredAt'>>,
+    page: number,
+  ): Promise<SyncCycleRuntimeContext> {
+    const response = await this.apiClient.pull({ entityType, cursor });
+    const nextRuntimeContext = {
+      ...runtimeContext,
+      hasMoreObserved: runtimeContext.hasMoreObserved || response.hasMore,
+    };
+    const pullChanges = await this.store.applyPullResponse(
+      entityType,
+      response.items,
+      response.nextCursor,
+    );
+    if (pullChanges.count > 0) {
+      entityChanges.push({
+        entity: entityType,
+        source: 'pull',
+        operation: 'sync-batch',
+        ids: pullChanges.ids,
+        count: pullChanges.count,
+      });
+    }
+
+    if (!response.hasMore) {
+      return nextRuntimeContext;
+    }
+
+    if (page + 1 >= SYNC_HARNESS_MAX_HAS_MORE_PAGES) {
+      const message = `Sync harness pagination overflow after ${SYNC_HARNESS_MAX_HAS_MORE_PAGES} pages for ${entityType}.`;
+      this.metricsStore.patch({ lastMessage: message });
+      throw new Error(message);
+    }
+
+    return this.pullEntityPageSequentially(
+      entityType,
+      response.nextCursor,
+      nextRuntimeContext,
+      entityChanges,
+      page + 1,
+    );
   }
 
   private async reconcileAcknowledgedCreateSnapshot(
@@ -625,7 +669,7 @@ export class SyncApiService implements SyncApiClient {
   private readonly appConfig = inject(ApplicationConfigService);
   private readonly authService = inject(AuthService);
 
-  async push(request: { operations: OfflineOperationEnvelope[] }) {
+  push(request: { operations: OfflineOperationEnvelope[] }) {
     return firstValueFrom(
       this.http.post<PushSyncResponse>(`${this.appConfig.config().apiBaseUrl}/sync/push`, request, {
         headers: this.buildHeaders(),
@@ -633,7 +677,7 @@ export class SyncApiService implements SyncApiClient {
     );
   }
 
-  async pull(request: { entityType: OfflineEntityType; cursor: OfflineSyncCheckpoint | null }) {
+  pull(request: { entityType: OfflineEntityType; cursor: OfflineSyncCheckpoint | null }) {
     const params = new URLSearchParams({ entityType: request.entityType });
     if (request.cursor) {
       params.set('cursorUpdatedAt', request.cursor.cursorUpdatedAt);
@@ -661,6 +705,16 @@ export class SyncApiService implements SyncApiClient {
     }
     return new HttpHeaders(headers);
   }
+}
+
+function runSequentially<T>(
+  items: readonly T[],
+  action: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  return items.reduce(
+    (chain, item, index) => chain.then(() => action(item, index)),
+    Promise.resolve(),
+  );
 }
 
 function diffMs(startedAt: string, finishedAt: string) {

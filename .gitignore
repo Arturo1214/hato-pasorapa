@@ -8,6 +8,7 @@ apps/api/target/
 .env
 infra/compose/.env
 .atl/
+.codegraph/
 /images/
 /logs/
 hato-be/databasechangelog.csv

@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY hato-fe/ ./
 
-RUN npm run build -- --configuration production --output-path=dist/docker
+RUN npm run build -- --configuration development --output-path=dist/docker
 
 FROM nginx:1.27-alpine
 

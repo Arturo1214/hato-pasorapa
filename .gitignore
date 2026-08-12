@@ -12,3 +12,6 @@ infra/compose/.env
 /images/
 /logs/
 hato-be/databasechangelog.csv
+hato-be/target/
+hato-be/src/main/resources/keys/*.pem
+hato-be/src/test/resources/keys/*.pem

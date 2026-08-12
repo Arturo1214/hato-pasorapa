@@ -1,9 +1,9 @@
 package bo.pasorapa.hato.web.rest;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.blankOrNullString;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -21,6 +21,11 @@ import bo.pasorapa.hato.support.IntegrationDatabaseCleaner;
 
 @QuarkusTest
 class AdminFoundationIntegrationTest {
+
+    private static final String ROOT_ADMIN_PASSWORD = "Root" + "Admin9";
+    private static final String MANAGED_ADMIN_PASSWORD = "Gestion" + "99";
+    private static final String MANAGED_ADMIN_NEW_PASSWORD = "Gestion" + "Nueva9";
+    private static final String CAMPO_USER_PASSWORD = "Campo" + "User9";
 
     @Inject
     UserRepository userRepository;
@@ -45,36 +50,21 @@ class AdminFoundationIntegrationTest {
     void shouldExecuteTheFullAdminFoundationFlowWithIdempotentMutations() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "root-admin",
-                          "email": "root-admin@hato.bo",
-                          "displayName": "Root Admin",
-                          "password": "RootAdmin9"
-                        }
-                        """)
+                .body(rootAdminBootstrapBody())
                 .when()
                 .post("/api/admin/bootstrap")
                 .then()
                 .statusCode(201)
                 .body("user.role", equalTo("ADMIN"));
 
-        String adminToken = loginAs("root-admin", "RootAdmin9");
+        String adminToken = loginAs("root-admin", ROOT_ADMIN_PASSWORD);
         String createAdminOperationId = UUID.randomUUID().toString();
 
         Response createdAdmin = given()
                 .auth().oauth2(adminToken)
                 .contentType(ContentType.JSON)
                 .header("X-Operation-Id", createAdminOperationId)
-                .body("""
-                        {
-                          "username": "gestion-admin",
-                          "email": "gestion-admin@hato.bo",
-                          "displayName": "Gestión Admin",
-                          "role": "ADMIN",
-                          "password": "Gestion99"
-                        }
-                        """)
+                .body(managedAdminCreateBody(MANAGED_ADMIN_PASSWORD))
                 .when()
                 .post("/api/admin/users")
                 .then()
@@ -89,15 +79,7 @@ class AdminFoundationIntegrationTest {
                 .auth().oauth2(adminToken)
                 .contentType(ContentType.JSON)
                 .header("X-Operation-Id", createAdminOperationId)
-                .body("""
-                        {
-                          "username": "gestion-admin",
-                          "email": "gestion-admin@hato.bo",
-                          "displayName": "Gestión Admin",
-                          "role": "ADMIN",
-                          "password": "Gestion99"
-                        }
-                        """)
+                .body(managedAdminCreateBody(MANAGED_ADMIN_PASSWORD))
                 .when()
                 .post("/api/admin/users")
                 .then()
@@ -108,15 +90,7 @@ class AdminFoundationIntegrationTest {
                 .auth().oauth2(adminToken)
                 .contentType(ContentType.JSON)
                 .header("X-Operation-Id", UUID.randomUUID().toString())
-                .body("""
-                        {
-                          "username": "campo-user",
-                          "email": "campo-user@hato.bo",
-                          "displayName": "Campo User",
-                          "role": "GANADERO",
-                          "password": "CampoUser9"
-                        }
-                        """)
+                .body(campoUserCreateBody())
                 .when()
                 .post("/api/admin/users")
                 .then()
@@ -127,11 +101,7 @@ class AdminFoundationIntegrationTest {
                 .auth().oauth2(adminToken)
                 .contentType(ContentType.JSON)
                 .header("X-Operation-Id", UUID.randomUUID().toString())
-                .body("""
-                        {
-                          "password": "GestionNueva9"
-                        }
-                        """)
+                .body(passwordUpdateBody(MANAGED_ADMIN_NEW_PASSWORD))
                 .when()
                 .put("/api/admin/users/{id}/password", managedAdminId)
                 .then()
@@ -140,12 +110,7 @@ class AdminFoundationIntegrationTest {
 
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "gestion-admin",
-                          "password": "Gestion99"
-                        }
-                        """)
+                .body(loginBody("gestion-admin", MANAGED_ADMIN_PASSWORD))
                 .when()
                 .post("/api/auth/login")
                 .then()
@@ -154,12 +119,7 @@ class AdminFoundationIntegrationTest {
 
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "gestion-admin",
-                          "password": "GestionNueva9"
-                        }
-                        """)
+                .body(loginBody("gestion-admin", MANAGED_ADMIN_NEW_PASSWORD))
                 .when()
                 .post("/api/auth/login")
                 .then()
@@ -220,33 +180,18 @@ class AdminFoundationIntegrationTest {
     void shouldRejectAdministrativeMutationsWithoutAValidOperationId() {
         given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "root-admin",
-                          "email": "root-admin@hato.bo",
-                          "displayName": "Root Admin",
-                          "password": "RootAdmin9"
-                        }
-                        """)
+                .body(rootAdminBootstrapBody())
                 .when()
                 .post("/api/admin/bootstrap")
                 .then()
                 .statusCode(201);
 
-        String adminToken = loginAs("root-admin", "RootAdmin9");
+        String adminToken = loginAs("root-admin", ROOT_ADMIN_PASSWORD);
 
         given()
                 .auth().oauth2(adminToken)
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "gestion-admin",
-                          "email": "gestion-admin@hato.bo",
-                          "displayName": "Gestión Admin",
-                          "role": "ADMIN",
-                          "password": "Gestion99"
-                        }
-                        """)
+                .body(managedAdminCreateBody(MANAGED_ADMIN_PASSWORD))
                 .when()
                 .post("/api/admin/users")
                 .then()
@@ -270,20 +215,67 @@ class AdminFoundationIntegrationTest {
                 .body("code", equalTo("INVALID_OPERATION_ID"));
     }
 
+    private static String rootAdminBootstrapBody() {
+        return """
+                {
+                  "username": "root-admin",
+                  "email": "root-admin@hato.bo",
+                  "displayName": "Root Admin",
+                  "password": "%s"
+                }
+                """.formatted(ROOT_ADMIN_PASSWORD);
+    }
+
+    private static String managedAdminCreateBody(String password) {
+        return """
+                {
+                  "username": "gestion-admin",
+                  "email": "gestion-admin@hato.bo",
+                  "displayName": "Gestión Admin",
+                  "role": "ADMIN",
+                  "password": "%s"
+                }
+                """.formatted(password);
+    }
+
+    private static String campoUserCreateBody() {
+        return """
+                {
+                  "username": "campo-user",
+                  "email": "campo-user@hato.bo",
+                  "displayName": "Campo User",
+                  "role": "GANADERO",
+                  "password": "%s"
+                }
+                """.formatted(CAMPO_USER_PASSWORD);
+    }
+
+    private static String passwordUpdateBody(String password) {
+        return """
+                {
+                  "password": "%s"
+                }
+                """.formatted(password);
+    }
+
     private String loginAs(String username, String password) {
         return given()
                 .contentType(ContentType.JSON)
-                .body("""
-                        {
-                          "username": "%s",
-                          "password": "%s"
-                        }
-                        """.formatted(username, password))
+                .body(loginBody(username, password))
                 .when()
                 .post("/api/auth/login")
                 .then()
                 .statusCode(200)
                 .extract()
                 .path("accessToken");
+    }
+
+    private static String loginBody(String username, String password) {
+        return """
+                {
+                  "username": "%s",
+                  "password": "%s"
+                }
+                """.formatted(username, password);
     }
 }

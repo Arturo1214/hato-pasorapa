@@ -2,6 +2,9 @@ FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-21 AS build
 
 WORKDIR /project
 
+USER root
+RUN microdnf install -y openssl && microdnf clean all
+
 COPY hato-be/.mvn/ .mvn/
 COPY --chmod=0755 hato-be/mvnw hato-be/pom.xml ./
 
@@ -9,7 +12,7 @@ RUN ./mvnw -B -DskipTests dependency:go-offline
 
 COPY --chown=1001:0 hato-be/ ./
 
-RUN chmod 0644 src/main/resources/keys/*.pem && rm -rf target
+RUN rm -rf target
 
 RUN ./mvnw -B -DskipTests -Dnative package
 

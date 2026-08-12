@@ -79,6 +79,8 @@ Usala solo para el primer acceso y cambiala/rotala inmediatamente en ambientes r
 
 ## JWT para desarrollo
 
+Las claves JWT no se versionan. Maven genera claves RSA efímeras en `target/classes/keys` y `target/test-classes/keys` durante `generate-resources` / `generate-test-resources` para desarrollo y tests locales.
+
 Se incluyó un endpoint público para emitir tokens de desarrollo:
 
 ```http

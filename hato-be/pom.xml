@@ -133,6 +133,65 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-runtime-jwt-keys</id>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.outputDirectory}/keys" />
+                                <exec executable="openssl" failonerror="true">
+                                    <arg value="genrsa" />
+                                    <arg value="-out" />
+                                    <arg value="${project.build.outputDirectory}/keys/privateKey.pem" />
+                                    <arg value="2048" />
+                                </exec>
+                                <exec executable="openssl" failonerror="true">
+                                    <arg value="rsa" />
+                                    <arg value="-in" />
+                                    <arg value="${project.build.outputDirectory}/keys/privateKey.pem" />
+                                    <arg value="-pubout" />
+                                    <arg value="-out" />
+                                    <arg value="${project.build.outputDirectory}/keys/publicKey.pem" />
+                                </exec>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>generate-test-jwt-keys</id>
+                        <phase>generate-test-resources</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.testOutputDirectory}/keys" />
+                                <exec executable="openssl" failonerror="true">
+                                    <arg value="genrsa" />
+                                    <arg value="-out" />
+                                    <arg value="${project.build.testOutputDirectory}/keys/privateKey.pem" />
+                                    <arg value="2048" />
+                                </exec>
+                                <exec executable="openssl" failonerror="true">
+                                    <arg value="rsa" />
+                                    <arg value="-in" />
+                                    <arg value="${project.build.testOutputDirectory}/keys/privateKey.pem" />
+                                    <arg value="-pubout" />
+                                    <arg value="-out" />
+                                    <arg value="${project.build.testOutputDirectory}/keys/publicKey.pem" />
+                                </exec>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>

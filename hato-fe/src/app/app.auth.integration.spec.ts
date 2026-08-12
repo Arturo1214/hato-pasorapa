@@ -174,7 +174,7 @@ describe('admin auth integration flow', () => {
     harness.detectChanges();
 
     expect(router.url).toBe('/admin/dashboard');
-    expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
+    expect(harness.routeNativeElement?.textContent).toContain('Panel');
   });
 
   it('should allow bootstrap for guests and expose admin navigation after the initial setup', async () => {
@@ -210,7 +210,7 @@ describe('admin auth integration flow', () => {
     harness.detectChanges();
 
     expect(router.url).toBe('/admin/dashboard');
-    expect(harness.routeNativeElement?.textContent).toContain('Dashboard');
+    expect(harness.routeNativeElement?.textContent).toContain('Panel');
     expect(harness.routeNativeElement?.textContent).toContain('Usuarios');
     expect(harness.routeNativeElement?.textContent).toContain('Ganaderos');
   });
@@ -253,6 +253,6 @@ describe('admin auth integration flow', () => {
     expect(router.url).toContain('/login');
     expect(router.url).toContain('session=expired');
     expect(router.url).toContain('returnUrl=%2Fadmin%2Fdashboard');
-    expect(harness.routeNativeElement?.textContent).toContain('Tu sesión offline expiró.');
+    expect(harness.routeNativeElement?.textContent).toContain('Tu sesión sin conexión expiró.');
   });
 });

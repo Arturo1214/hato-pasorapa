@@ -510,9 +510,9 @@ describe('VetVisitsPageComponent', () => {
           visit: expect.objectContaining({ visitId: 'VISIT-GLOBAL', status: 'ATTENDED' }),
           clinicalNote: expect.objectContaining({
             findings: 'Animal estable con signos leves de infección.',
+            plan: ['Aplicar antibiótico', 'Revisar temperatura'],
           }),
           cost: { amount: 150, currency: 'BOB' },
-          treatmentPlan: ['Aplicar antibiótico', 'Revisar temperatura'],
           protocol: expect.objectContaining({
             status: 'FOLLOW_UP_REQUIRED',
             nextDueAt: '2026-05-15T00:00:00.000Z',

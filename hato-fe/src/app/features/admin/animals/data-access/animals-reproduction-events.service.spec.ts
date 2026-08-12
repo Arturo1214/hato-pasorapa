@@ -7,8 +7,14 @@ import { InMemoryOfflinePersistenceAdapter } from '../../../../core/offline/offl
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
-import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
-import { AnimalsReproductionEventsService, PREGNANCY_DIAGNOSIS_RESULT, buildBirthMetadata, buildPregnancyDiagnosisMetadata, buildServiceMetadata, type AnimalReproductionEventItem } from './animals-reproduction-events.service';
+import {
+  AnimalsReproductionEventsService,
+  PREGNANCY_DIAGNOSIS_RESULT,
+  buildBirthMetadata,
+  buildPregnancyDiagnosisMetadata,
+  buildServiceMetadata,
+  type AnimalReproductionEventItem,
+} from './animals-reproduction-events.service';
 
 describe('AnimalsReproductionEventsService', () => {
   const currentUser: SessionUser = {
@@ -24,7 +30,9 @@ describe('AnimalsReproductionEventsService', () => {
     lastSyncedAt: null,
   };
 
-  const createEvent = (overrides: Partial<AnimalReproductionEventItem> = {}): AnimalReproductionEventItem => ({
+  const createEvent = (
+    overrides: Partial<AnimalReproductionEventItem> = {},
+  ): AnimalReproductionEventItem => ({
     id: 'repro-event-1',
     animalUuid: 'animal-uuid-1',
     reproductionEventType: 'SERVICE',
@@ -40,7 +48,10 @@ describe('AnimalsReproductionEventsService', () => {
     ...overrides,
   });
 
-  const setup = (options: { online: boolean; http?: Partial<Pick<HttpClient, 'get'>> }) => {
+  const setup = (options: {
+    online: boolean;
+    http?: Partial<Pick<HttpClient, 'get' | 'post'>>;
+  }) => {
     TestBed.configureTestingModule({
       providers: [
         AnimalsReproductionEventsService,
@@ -49,6 +60,7 @@ describe('AnimalsReproductionEventsService', () => {
           provide: HttpClient,
           useValue: {
             get: vi.fn(),
+            post: vi.fn(() => of({ results: [] })),
             ...options.http,
           },
         },
@@ -69,7 +81,11 @@ describe('AnimalsReproductionEventsService', () => {
 
     const service = TestBed.inject(AnimalsReproductionEventsService);
     const store = new OfflineStoreService(new InMemoryOfflinePersistenceAdapter());
-    service.configureForTesting({ store, now: () => '2026-04-26T10:05:00.000Z', windowRef: window });
+    service.configureForTesting({
+      store,
+      now: () => '2026-04-26T10:05:00.000Z',
+      windowRef: window,
+    });
     return { service, store };
   };
 
@@ -81,8 +97,14 @@ describe('AnimalsReproductionEventsService', () => {
   it('should request filtered reproduction timeline online and cache the snapshot by operation id', async () => {
     const get = vi.fn(() =>
       of({
-        items: [createEvent({ id: 'repro-event-2', operationId: 'repro-event-2', reproductionEventType: 'BIRTH' })],
-      })
+        items: [
+          createEvent({
+            id: 'repro-event-2',
+            operationId: 'repro-event-2',
+            reproductionEventType: 'BIRTH',
+          }),
+        ],
+      }),
     );
     const { service, store } = setup({ online: true, http: { get: get as never } });
 
@@ -92,19 +114,30 @@ describe('AnimalsReproductionEventsService', () => {
           reproductionEventType: 'BIRTH',
           occurredFrom: '2026-04-26T09:00:00.000Z',
           occurredTo: '2026-04-26T12:30:00.000Z',
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual([
-      expect.objectContaining({ id: 'repro-event-2', reproductionEventType: 'BIRTH', syncState: 'SYNCED', syncMessage: null }),
+      expect.objectContaining({
+        id: 'repro-event-2',
+        reproductionEventType: 'BIRTH',
+        syncState: 'SYNCED',
+        syncMessage: null,
+      }),
     ]);
 
-    const [requestedUrl, options] = get.mock.calls[0] as unknown as [string, { headers: HttpHeaders }];
+    const [requestedUrl, options] = get.mock.calls[0] as unknown as [
+      string,
+      { headers: HttpHeaders },
+    ];
     expect(requestedUrl).toBe(
-      '/api/animals/animal-uuid-1/reproduction-events?reproductionEventType=BIRTH&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z'
+      '/api/animals/animal-uuid-1/reproduction-events?reproductionEventType=BIRTH&occurredFrom=2026-04-26T09%3A00%3A00.000Z&occurredTo=2026-04-26T12%3A30%3A00.000Z',
     );
     expect(options.headers.get('Authorization')).toBe('Bearer token');
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
-      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:repro-event-2', payload: expect.objectContaining({ eventCategory: 'REPRODUCTION', eventType: 'BIRTH' }) }),
+      expect.objectContaining({
+        key: 'ANIMAL_EVENT_LOG:repro-event-2',
+        payload: expect.objectContaining({ eventCategory: 'REPRODUCTION', eventType: 'BIRTH' }),
+      }),
     ]);
   });
 
@@ -114,19 +147,28 @@ describe('AnimalsReproductionEventsService', () => {
       key: 'ANIMAL_REPRODUCTION_EVENT:repro-failed-1',
       entityType: 'ANIMAL_REPRODUCTION_EVENT',
       entityId: 'repro-failed-1',
-      payload: createEvent({ id: 'repro-failed-1', operationId: 'repro-failed-1' }) as unknown as Record<string, unknown>,
+      payload: createEvent({
+        id: 'repro-failed-1',
+        operationId: 'repro-failed-1',
+      }) as unknown as Record<string, unknown>,
       updatedAt: '2026-04-26T10:00:01.000Z',
     });
     const failed = await store.enqueueOperation({
       entityType: 'ANIMAL_REPRODUCTION_EVENT',
       entityId: 'repro-failed-1',
       opType: 'CREATE',
-      payload: createEvent({ id: 'repro-failed-1', operationId: 'repro-failed-1' }) as unknown as Record<string, unknown>,
+      payload: createEvent({
+        id: 'repro-failed-1',
+        operationId: 'repro-failed-1',
+      }) as unknown as Record<string, unknown>,
       clientCreatedAt: '2026-04-26T10:00:00.000Z',
       clientUpdatedAt: '2026-04-26T10:00:00.000Z',
       operationId: 'repro-failed-1',
     });
-    await store.markDeadLetter(failed.operationId, { code: 'REPRO_SYNC_FAILED', message: 'Reproducción no sincronizada.' });
+    await store.markDeadLetter(failed.operationId, {
+      code: 'REPRO_SYNC_FAILED',
+      message: 'Reproducción no sincronizada.',
+    });
 
     await expect(firstValueFrom(service.listEvents('animal-uuid-1'))).resolves.toEqual([
       expect.objectContaining({
@@ -156,8 +198,8 @@ describe('AnimalsReproductionEventsService', () => {
             fatherAnimalUuid: 'father-1',
             offspringAnimalUuids: ['calf-1'],
           }),
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Evento reproductivo encolado. Se enviará al reconectar.',
@@ -173,21 +215,43 @@ describe('AnimalsReproductionEventsService', () => {
           eventType: 'BIRTH',
           reproductionEventType: 'BIRTH',
           sourceChannel: 'OFFLINE',
-          metadata: expect.objectContaining({ offspringCount: 1, offspringAnimalUuids: ['calf-1'] }),
+          metadata: expect.objectContaining({
+            offspringCount: 1,
+            offspringAnimalUuids: ['calf-1'],
+          }),
         }),
-      })
+      }),
     );
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        payload: expect.objectContaining({ eventCategory: 'REPRODUCTION', eventType: 'BIRTH', syncState: 'PENDING_SYNC', syncMessage: 'Pendiente de sync.' }),
+        payload: expect.objectContaining({
+          eventCategory: 'REPRODUCTION',
+          eventType: 'BIRTH',
+          syncState: 'PENDING_SYNC',
+          syncMessage: 'Pendiente de sincronización.',
+        }),
       }),
     ]);
     expect(dispatchEvent).not.toHaveBeenCalled();
   });
 
-  it('should queue service events online and trigger manual sync', async () => {
-    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
-    const { service, store } = setup({ online: true });
+  it('should save service events directly online without outbox retries', async () => {
+    const post = vi.fn(() =>
+      of({
+        results: [
+          {
+            operationId: '66666666-6666-4666-8666-666666666666',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: 'repro-online-1',
+            classification: 'no_conflict',
+          },
+        ],
+      }),
+    );
+    const { service, store } = setup({ online: true, http: { post: post as never } });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '66666666-6666-4666-8666-666666666666',
+    );
 
     await expect(
       firstValueFrom(
@@ -196,52 +260,78 @@ describe('AnimalsReproductionEventsService', () => {
           reproductionEventType: 'SERVICE',
           occurredAt: '2026-04-26T10:15:00.000Z',
           notes: 'Monta controlada',
-          metadata: buildServiceMetadata({ serviceMethod: 'MONTA_NATURAL', fatherAnimalUuid: 'toro-uuid-1' }),
-        })
-      )
+          metadata: buildServiceMetadata({
+            serviceMethod: 'MONTA_NATURAL',
+            fatherAnimalUuid: 'toro-uuid-1',
+          }),
+        }),
+      ),
     ).resolves.toEqual({
-      outcome: 'queued',
-      message: 'Evento reproductivo encolado. Se disparó la sincronización automática.',
+      outcome: 'saved',
+      message: 'Evento reproductivo guardado correctamente.',
     });
 
-    const outbox = await store.listOutbox();
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toEqual(
+    expect(post).toHaveBeenCalledWith(
+      '/api/sync/push',
+      {
+        operations: [
+          expect.objectContaining({
+            operationId: '66666666-6666-4666-8666-666666666666',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: '66666666-6666-4666-8666-666666666666',
+            payload: expect.objectContaining({
+              animalUuid: 'animal-uuid-1',
+              eventCategory: 'REPRODUCTION',
+              eventType: 'SERVICE',
+              performedByUserId: 'user-1',
+              sourceChannel: 'ONLINE',
+              metadata: expect.objectContaining({
+                serviceMethod: 'MONTA_NATURAL',
+                fatherAnimalUuid: 'toro-uuid-1',
+              }),
+            }),
+          }),
+        ],
+      },
+      { headers: expect.any(HttpHeaders) },
+    );
+    await expect(store.listOutbox()).resolves.toEqual([]);
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        entityType: 'ANIMAL_EVENT_LOG',
-        entityId: outbox[0].operationId,
+        key: 'ANIMAL_EVENT_LOG:repro-online-1',
         payload: expect.objectContaining({
-          animalUuid: 'animal-uuid-1',
           eventCategory: 'REPRODUCTION',
           eventType: 'SERVICE',
-          performedByUserId: 'user-1',
-          sourceChannel: 'ONLINE',
-          metadata: expect.objectContaining({ serviceMethod: 'MONTA_NATURAL', fatherAnimalUuid: 'toro-uuid-1' }),
+          syncStatus: 'synced',
+          syncState: 'SYNCED',
         }),
-      })
-    );
-    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: MANUAL_SYNC_EVENT }));
+      }),
+    ]);
   });
 
   it('should build natural mount service metadata with father animal uuid', () => {
-    expect(buildServiceMetadata({
-      serviceMethod: 'MONTA_NATURAL',
-      fatherAnimalUuid: ' toro-uuid-1 ',
-      semenReference: ' debe ignorarse ',
-      bullReference: ' debe ignorarse ',
-    })).toEqual({
+    expect(
+      buildServiceMetadata({
+        serviceMethod: 'MONTA_NATURAL',
+        fatherAnimalUuid: ' toro-uuid-1 ',
+        semenReference: ' debe ignorarse ',
+        bullReference: ' debe ignorarse ',
+      }),
+    ).toEqual({
       serviceMethod: 'MONTA_NATURAL',
       fatherAnimalUuid: 'toro-uuid-1',
     });
   });
 
   it('should build artificial insemination service metadata with optional reference and no father uuid', () => {
-    expect(buildServiceMetadata({
-      serviceMethod: 'INSEMINACION_ARTIFICIAL',
-      fatherAnimalUuid: 'toro-uuid-1',
-      semenReference: ' Pajuela IA-88 ',
-      bullReference: ' Toro catálogo ',
-    })).toEqual({
+    expect(
+      buildServiceMetadata({
+        serviceMethod: 'INSEMINACION_ARTIFICIAL',
+        fatherAnimalUuid: 'toro-uuid-1',
+        semenReference: ' Pajuela IA-88 ',
+        bullReference: ' Toro catálogo ',
+      }),
+    ).toEqual({
       serviceMethod: 'INSEMINACION_ARTIFICIAL',
       semenReference: 'Pajuela IA-88',
       bullReference: 'Toro catálogo',
@@ -262,20 +352,26 @@ describe('AnimalsReproductionEventsService', () => {
             diagnosisDate: '2026-05-10',
             result: PREGNANCY_DIAGNOSIS_RESULT.NO_PRENADA,
           }),
-        })
-      )
+        }),
+      ),
     ).resolves.toEqual({
       outcome: 'queued',
       message: 'Evento reproductivo encolado. Se enviará al reconectar.',
     });
 
     const outbox = await store.listOutbox();
-    expect(outbox[0]).toEqual(expect.objectContaining({
-      payload: expect.objectContaining({
-        reproductionEventType: 'PREGNANCY_DIAGNOSIS',
-        metadata: expect.objectContaining({ result: 'NO_PRENADA', negativeResult: true, status: 'fallo' }),
+    expect(outbox[0]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          metadata: expect.objectContaining({
+            result: 'NO_PRENADA',
+            negativeResult: true,
+            status: 'fallo',
+          }),
+        }),
       }),
-    }));
+    );
   });
 
   it('should queue pregnancy diagnosis with linked service event uuid metadata', async () => {
@@ -292,24 +388,28 @@ describe('AnimalsReproductionEventsService', () => {
           result: PREGNANCY_DIAGNOSIS_RESULT.PRENADA,
           serviceEventUuid: 'service-event-uuid-1',
         }),
-      })
+      }),
     );
 
     const outbox = await store.listOutbox();
-    expect(outbox[0]).toEqual(expect.objectContaining({
-      payload: expect.objectContaining({
-        reproductionEventType: 'PREGNANCY_DIAGNOSIS',
-        metadata: expect.objectContaining({ serviceEventUuid: 'service-event-uuid-1' }),
+    expect(outbox[0]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          reproductionEventType: 'PREGNANCY_DIAGNOSIS',
+          metadata: expect.objectContaining({ serviceEventUuid: 'service-event-uuid-1' }),
+        }),
       }),
-    }));
+    );
   });
 
   it('should build positive pregnancy diagnosis metadata with expected birth date', () => {
-    expect(buildPregnancyDiagnosisMetadata({
-      diagnosisDate: '2026-05-10',
-      result: PREGNANCY_DIAGNOSIS_RESULT.PRENADA,
-      expectedBirthDate: '2027-02-14',
-    })).toEqual({
+    expect(
+      buildPregnancyDiagnosisMetadata({
+        diagnosisDate: '2026-05-10',
+        result: PREGNANCY_DIAGNOSIS_RESULT.PRENADA,
+        expectedBirthDate: '2027-02-14',
+      }),
+    ).toEqual({
       diagnosisDate: '2026-05-10T00:00:00.000Z',
       result: 'PRENADA',
       expectedBirthDate: '2027-02-14T00:00:00.000Z',

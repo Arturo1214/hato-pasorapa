@@ -47,6 +47,6 @@ describe('AdminDashboardPageComponent', () => {
       loadMetrics: () => throwError(() => new Error('boom')),
     });
 
-    expect(fixture.nativeElement.textContent).toContain('No pudimos cargar el dashboard administrativo.');
+    expect(fixture.nativeElement.textContent).toContain('No pudimos cargar el panel administrativo.');
   });
 });

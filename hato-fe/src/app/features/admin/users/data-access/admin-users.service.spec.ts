@@ -137,7 +137,7 @@ describe('AdminUsersService', () => {
     ).resolves.toEqual({
       outcome: 'blocked',
       message:
-        'La creación de usuarios requiere conexión para no persistir credenciales sensibles offline.',
+        'La creación de usuarios requiere conexión para no persistir credenciales sensibles sin conexión.',
     });
     await expect(store.listOutbox()).resolves.toEqual([]);
   });
@@ -148,7 +148,7 @@ describe('AdminUsersService', () => {
     await expect(firstValueFrom(service.resetPassword('user-1', 'Secret123'))).resolves.toEqual({
       outcome: 'blocked',
       message:
-        'El reseteo de contraseñas requiere conexión para no persistir credenciales sensibles offline.',
+        'El restablecimiento de contraseñas requiere conexión para no persistir credenciales sensibles sin conexión.',
     });
     await expect(store.listOutbox()).resolves.toEqual([]);
   });

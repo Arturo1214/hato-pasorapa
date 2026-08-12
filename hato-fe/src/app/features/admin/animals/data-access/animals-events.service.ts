@@ -3,17 +3,20 @@ import { inject, Injectable } from '@angular/core';
 import { firstValueFrom, from, type Observable } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { ApplicationConfigService } from '../../../../core/config/application-config.service';
-import {
-  type AnimalEventOfflineCreatePayload,
-  type AnimalEventLogSnapshotPayload,
-  type AnimalEventOfflineMetadata,
-  type AnimalEventSnapshotPayload,
-  type AnimalOfflineUiStatus,
-  type AnimalOfflineSnapshotPayload,
+import type {
+  AnimalEventOfflineCreatePayload,
+  AnimalEventLogSnapshotPayload,
+  AnimalEventOfflineMetadata,
+  AnimalEventSnapshotPayload,
+  AnimalOfflineUiStatus,
+  AnimalOfflineSnapshotPayload,
 } from '../../../../core/offline/offline-types';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
-import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
+import type { PushSyncResponse } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import {
   compareAnimalEventTimeline,
@@ -21,7 +24,10 @@ import {
   matchesAnimalEventFilters,
   normalizeAnimalEventItem,
 } from './animal-events-timeline.adapter';
-import { animalEventLogToGeneralEventItem, filterAnimalEventLogsByCategory } from './animal-timeline.adapter';
+import {
+  animalEventLogToGeneralEventItem,
+  filterAnimalEventLogsByCategory,
+} from './animal-timeline.adapter';
 
 export interface AnimalEventItem {
   id: string;
@@ -55,12 +61,12 @@ export interface AnimalEventCreateInput {
 }
 
 export interface AnimalEventMutationFeedback {
-  outcome: 'queued' | 'blocked';
+  outcome: 'saved' | 'queued' | 'blocked';
   message: string;
 }
 
 export interface AnimalsEventsServiceDependencies {
-  http: Pick<HttpClient, 'get'>;
+  http: Pick<HttpClient, 'get' | 'post'>;
   appConfig: Pick<ApplicationConfigService, 'config'>;
   authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
   offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
@@ -76,7 +82,7 @@ interface AnimalEventListResponse {
 
 @Injectable({ providedIn: 'root' })
 export class AnimalsEventsService {
-  private http: Pick<HttpClient, 'get'> = inject(HttpClient);
+  private http: Pick<HttpClient, 'get' | 'post'> = inject(HttpClient);
   private appConfig: Pick<ApplicationConfigService, 'config'> = inject(ApplicationConfigService);
   private authService: Pick<AuthService, 'getAccessToken' | 'currentUser'> = inject(AuthService);
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
@@ -96,7 +102,10 @@ export class AnimalsEventsService {
     this.windowRef = dependencies.windowRef ?? this.windowRef;
   }
 
-  listEvents(animalUuid: string, filters: AnimalEventListFilters = {}): Observable<AnimalEventItem[]> {
+  listEvents(
+    animalUuid: string,
+    filters: AnimalEventListFilters = {},
+  ): Observable<AnimalEventItem[]> {
     return from(this.listEventsInternal(animalUuid, filters) as Promise<AnimalEventItem[]>);
   }
 
@@ -106,7 +115,7 @@ export class AnimalsEventsService {
 
   createCastrationEvent(
     animalUuid: string,
-    payload: Pick<AnimalEventCreateInput, 'occurredAt' | 'notes' | 'metadata'>
+    payload: Pick<AnimalEventCreateInput, 'occurredAt' | 'notes' | 'metadata'>,
   ): Observable<AnimalEventMutationFeedback> {
     return this.createEvent({
       animalUuid,
@@ -127,21 +136,28 @@ export class AnimalsEventsService {
     const response = await firstValueFrom(
       this.http.get<AnimalEventListResponse>(
         `${this.appConfig.config().apiBaseUrl}/animals/${animalUuid}/events${buildEventsQuery(filters)}`,
-        { headers: this.buildHeaders() }
-      )
+        { headers: this.buildHeaders() },
+      ),
     );
 
-    const items = (response.items ?? []).map(normalizeAnimalEventItem).filter((item) => matchesAnimalEventFilters(item, filters));
+    const items = (response.items ?? [])
+      .map(normalizeAnimalEventItem)
+      .filter((item) => matchesAnimalEventFilters(item, filters));
     await Promise.all(items.map((item) => this.saveEventSnapshot(item)));
-    return items.sort(compareAnimalEventTimeline).map(
-      (item) => ({ ...item, syncStatus: 'synced', syncMessage: null }) satisfies AnimalEventItem
-    );
+    return items
+      .sort(compareAnimalEventTimeline)
+      .map(
+        (item) => ({ ...item, syncStatus: 'synced', syncMessage: null }) satisfies AnimalEventItem,
+      );
   }
 
   private async createEventInternal(input: AnimalEventCreateInput) {
     const currentUser = this.authService.currentUser();
     if (!currentUser) {
-      return { outcome: 'blocked', message: 'Necesitás sesión activa para registrar eventos animales.' } satisfies AnimalEventMutationFeedback;
+      return {
+        outcome: 'blocked',
+        message: 'Necesitás sesión activa para registrar eventos animales.',
+      } satisfies AnimalEventMutationFeedback;
     }
 
     const now = this.now();
@@ -158,28 +174,42 @@ export class AnimalsEventsService {
       metadata: input.metadata,
     };
 
+    const optimisticSnapshot = createOptimisticEventSnapshot(payload, now);
+
+    if (this.offlineStatus.isOnline()) {
+      const pushResult = await this.pushEventOperation(operationId, optimisticSnapshot, now);
+      if (pushResult.outcome === 'blocked') {
+        return pushResult;
+      }
+
+      await this.saveEventSnapshot({
+        ...optimisticSnapshot,
+        id: pushResult.entityId ?? optimisticSnapshot.id,
+        syncStatus: 'synced',
+        syncMessage: null,
+      });
+      await this.applyOptimisticAnimalProjection(payload, now);
+      await this.refreshPendingState();
+      return {
+        outcome: 'saved',
+        message: 'Evento animal guardado correctamente.',
+      } satisfies AnimalEventMutationFeedback;
+    }
+
     await this.store.enqueueOperation({
       entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: toAnimalEventLogPayload(createOptimisticEventSnapshot(payload, now)),
+      payload: toAnimalEventLogPayload(optimisticSnapshot),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
       operationId,
     });
 
-    await this.saveEventSnapshot(createOptimisticEventSnapshot(payload, now));
+    await this.saveEventSnapshot(optimisticSnapshot);
     await this.applyOptimisticAnimalProjection(payload, now);
     await this.refreshPendingState();
-
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
-      return {
-        outcome: 'queued',
-        message: 'Evento animal encolado. Se disparó la sincronización automática.',
-      } satisfies AnimalEventMutationFeedback;
-    }
 
     return {
       outcome: 'queued',
@@ -193,7 +223,10 @@ export class AnimalsEventsService {
     const outbox = await this.store.listOutbox();
 
     return [
-      ...filterAnimalEventLogsByCategory(unifiedSnapshots.map((snapshot) => snapshot.payload), 'GENERAL').map(animalEventLogToGeneralEventItem),
+      ...filterAnimalEventLogsByCategory(
+        unifiedSnapshots.map((snapshot) => snapshot.payload),
+        'GENERAL',
+      ).map(animalEventLogToGeneralEventItem),
       ...legacySnapshots.map((snapshot) => snapshot.payload as unknown as AnimalEventItem),
     ]
       .filter((item) => item.animalUuid === animalUuid)
@@ -207,11 +240,45 @@ export class AnimalsEventsService {
     return outbox.some(
       (operation) =>
         (operation.entityType === 'ANIMAL_EVENT' ||
-          (operation.entityType === 'ANIMAL_EVENT_LOG' && operation.payload['eventCategory'] === 'GENERAL')) &&
+          (operation.entityType === 'ANIMAL_EVENT_LOG' &&
+            operation.payload['eventCategory'] === 'GENERAL')) &&
         (operation.payload['animalUuid'] as string | undefined) === animalUuid &&
         operation.status !== 'acked' &&
-        operation.status !== 'failed'
+        operation.status !== 'failed',
     );
+  }
+
+  private async pushEventOperation(operationId: string, item: AnimalEventItem, now: string) {
+    const response = await firstValueFrom(
+      this.http.post<PushSyncResponse>(
+        `${this.appConfig.config().apiBaseUrl}/sync/push`,
+        {
+          operations: [
+            {
+              operationId,
+              entityType: 'ANIMAL_EVENT_LOG',
+              entityId: operationId,
+              opType: 'CREATE',
+              payload: toAnimalEventLogPayload(item),
+              baseVersion: 0,
+              clientCreatedAt: now,
+              clientUpdatedAt: now,
+              status: 'pending',
+              attempts: 0,
+            },
+          ],
+        },
+        { headers: this.buildHeaders() },
+      ),
+    );
+    const result = response.results[0];
+    if (!result || result.classification !== 'no_conflict') {
+      return {
+        outcome: 'blocked',
+        message: result?.conflict?.reason ?? 'No pudimos guardar el evento animal.',
+      } satisfies AnimalEventMutationFeedback;
+    }
+    return { outcome: 'saved' as const, entityId: result.entityId };
   }
 
   private async saveEventSnapshot(item: AnimalEventItem) {
@@ -224,10 +291,12 @@ export class AnimalsEventsService {
     });
   }
 
-  private async applyOptimisticAnimalProjection(payload: AnimalEventOfflineCreatePayload, now: string) {
-    const currentSnapshot = (await this.store.getSnapshot('ANIMAL', payload.animalUuid))?.payload as
-      | AnimalOfflineSnapshotPayload
-      | undefined;
+  private async applyOptimisticAnimalProjection(
+    payload: AnimalEventOfflineCreatePayload,
+    now: string,
+  ) {
+    const currentSnapshot = (await this.store.getSnapshot('ANIMAL', payload.animalUuid))
+      ?.payload as AnimalOfflineSnapshotPayload | undefined;
 
     if (!currentSnapshot) {
       return;
@@ -243,7 +312,10 @@ export class AnimalsEventsService {
         payload.type === 'SOLD' || payload.type === 'DECEASED' || payload.type === 'LOST'
           ? false
           : currentSnapshot.active,
-      category: resolveProjectedCategory(currentSnapshot.category as string | null | undefined, payload.type),
+      category: resolveProjectedCategory(
+        currentSnapshot.category as string | null | undefined,
+        payload.type,
+      ),
       updatedAt: now,
     };
 
@@ -267,7 +339,9 @@ export class AnimalsEventsService {
   }
 }
 
-function toAnimalEventLogPayload(item: AnimalEventSnapshotPayload | AnimalEventItem): AnimalEventLogSnapshotPayload {
+function toAnimalEventLogPayload(
+  item: AnimalEventSnapshotPayload | AnimalEventItem,
+): AnimalEventLogSnapshotPayload {
   return {
     ...item,
     id: item.id,
@@ -289,7 +363,10 @@ function toAnimalEventLogPayload(item: AnimalEventSnapshotPayload | AnimalEventI
   };
 }
 
-function createOptimisticEventSnapshot(payload: AnimalEventOfflineCreatePayload, now: string): AnimalEventItem {
+function createOptimisticEventSnapshot(
+  payload: AnimalEventOfflineCreatePayload,
+  now: string,
+): AnimalEventItem {
   return {
     id: payload.operationId,
     animalUuid: payload.animalUuid,
@@ -304,7 +381,7 @@ function createOptimisticEventSnapshot(payload: AnimalEventOfflineCreatePayload,
     createdAt: now,
     updatedAt: now,
     syncStatus: 'pending',
-    syncMessage: 'Pendiente de sync.',
+    syncMessage: 'Pendiente de sincronización.',
   };
 }
 
@@ -334,7 +411,7 @@ function normalizeOccurredAt(value: string) {
 
 function resolveProjectedCategory(
   currentCategory: string | null | undefined,
-  eventType: AnimalEventItem['type']
+  eventType: AnimalEventItem['type'],
 ): AnimalOfflineSnapshotPayload['category'] {
   const safeCategory = currentCategory?.toUpperCase() ?? null;
 
@@ -342,7 +419,12 @@ function resolveProjectedCategory(
     return (safeCategory as AnimalOfflineSnapshotPayload['category'] | null) ?? 'VACA';
   }
 
-  if (safeCategory === 'BULL' || safeCategory === 'CALF' || safeCategory === 'TORO' || safeCategory === 'TERNERO') {
+  if (
+    safeCategory === 'BULL' ||
+    safeCategory === 'CALF' ||
+    safeCategory === 'TORO' ||
+    safeCategory === 'TERNERO'
+  ) {
     return 'BUEY';
   }
 

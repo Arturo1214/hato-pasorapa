@@ -16,7 +16,7 @@ import {
   DEFAULT_OFFLINE_STORE_SERVICE,
   type OfflineStoreService,
 } from '../../../../core/offline/offline-store.service';
-import { triggerManualSync } from '../../../../core/offline/sync-orchestrator.service';
+import type { PushSyncResponse } from '../../../../core/offline/sync-orchestrator.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
 import { AnimalsService } from './animals.service';
 import {
@@ -77,7 +77,7 @@ export interface AnimalHealthEventCreateInput {
 }
 
 export interface AnimalHealthEventMutationFeedback {
-  outcome: 'queued' | 'blocked';
+  outcome: 'saved' | 'queued' | 'blocked';
   message: string;
 }
 
@@ -87,7 +87,7 @@ interface AnimalHealthEventListResponse {
 
 @Injectable({ providedIn: 'root' })
 export class AnimalsHealthEventsService {
-  private http: Pick<HttpClient, 'get'> = inject(HttpClient);
+  private http: Pick<HttpClient, 'get' | 'post'> = inject(HttpClient);
   private appConfig: Pick<ApplicationConfigService, 'config'> = inject(ApplicationConfigService);
   private authService: Pick<AuthService, 'getAccessToken' | 'currentUser'> = inject(AuthService);
   private offlineStatus: Pick<OfflineStatusService, 'isOnline'> = inject(OfflineStatusService);
@@ -101,7 +101,7 @@ export class AnimalsHealthEventsService {
 
   configureForTesting(
     dependencies: Partial<{
-      http: Pick<HttpClient, 'get'>;
+      http: Pick<HttpClient, 'get' | 'post'>;
       appConfig: Pick<ApplicationConfigService, 'config'>;
       authService: Pick<AuthService, 'getAccessToken' | 'currentUser'>;
       offlineStatus: Pick<OfflineStatusService, 'isOnline'>;
@@ -184,28 +184,44 @@ export class AnimalsHealthEventsService {
       metadata: input.metadata,
     };
 
+    const optimisticSnapshot = createOptimisticHealthEventSnapshot(payload, now);
+
+    if (this.offlineStatus.isOnline()) {
+      const pushResult = await this.pushEventOperations([
+        { operationId, item: optimisticSnapshot, now },
+      ]);
+      if (pushResult.outcome === 'blocked') {
+        return pushResult;
+      }
+
+      await this.saveEventSnapshot({
+        ...optimisticSnapshot,
+        id: pushResult.entityIds[0] ?? optimisticSnapshot.id,
+        syncStatus: 'synced',
+        syncMessage: null,
+      });
+      this.emitHealthEventChanges(operationId, input.metadata, sourceChannel);
+      await this.refreshPendingState();
+      return {
+        outcome: 'saved',
+        message: 'Evento sanitario guardado correctamente.',
+      } satisfies AnimalHealthEventMutationFeedback;
+    }
+
     await this.store.enqueueOperation({
       entityType: 'ANIMAL_EVENT_LOG',
       entityId: operationId,
       opType: 'CREATE',
-      payload: toAnimalEventLogPayload(createOptimisticHealthEventSnapshot(payload, now)),
+      payload: toAnimalEventLogPayload(optimisticSnapshot),
       baseVersion: 0,
       clientCreatedAt: now,
       clientUpdatedAt: now,
       operationId,
     });
 
-    await this.saveEventSnapshot(createOptimisticHealthEventSnapshot(payload, now));
+    await this.saveEventSnapshot(optimisticSnapshot);
     this.emitHealthEventChanges(operationId, input.metadata, sourceChannel);
     await this.refreshPendingState();
-
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
-      return {
-        outcome: 'queued',
-        message: 'Evento sanitario encolado. Se disparó la sincronización automática.',
-      } satisfies AnimalHealthEventMutationFeedback;
-    }
 
     return {
       outcome: 'queued',
@@ -242,6 +258,42 @@ export class AnimalsHealthEventsService {
         operation.status !== 'acked' &&
         operation.status !== 'failed',
     );
+  }
+
+  private async pushEventOperations(
+    operations: Array<{ operationId: string; item: AnimalHealthEventItem; now: string }>,
+  ) {
+    const response = await firstValueFrom(
+      this.http.post<PushSyncResponse>(
+        `${this.appConfig.config().apiBaseUrl}/sync/push`,
+        {
+          operations: operations.map(({ operationId, item, now }) => ({
+            operationId,
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: operationId,
+            opType: 'CREATE',
+            payload: toAnimalEventLogPayload(item),
+            baseVersion: 0,
+            clientCreatedAt: now,
+            clientUpdatedAt: now,
+            status: 'pending',
+            attempts: 0,
+          })),
+        },
+        { headers: this.buildHeaders() },
+      ),
+    );
+    const failed = response.results.find((result) => result.classification !== 'no_conflict');
+    if (failed) {
+      return {
+        outcome: 'blocked',
+        message: failed.conflict?.reason ?? 'No pudimos guardar el evento sanitario.',
+      } satisfies AnimalHealthEventMutationFeedback;
+    }
+    return {
+      outcome: 'saved' as const,
+      entityIds: response.results.map((result) => result.entityId),
+    };
   }
 
   private async saveEventSnapshot(item: AnimalHealthEventItem) {
@@ -308,8 +360,7 @@ export class AnimalsHealthEventsService {
 
     const sourceChannel = this.offlineStatus.isOnline() ? 'ONLINE' : 'OFFLINE';
     const metadata = withTargetAnimalCount(input.metadata, activeAnimals.length);
-    const operationIds: string[] = [];
-    for (const animal of activeAnimals) {
+    const operations = activeAnimals.map((animal) => {
       const operationId = globalThis.crypto.randomUUID();
       const payload: AnimalHealthEventOfflineCreatePayload = {
         animalUuid: animal.uuid,
@@ -321,30 +372,53 @@ export class AnimalsHealthEventsService {
         operationId,
         metadata,
       };
+      return {
+        operationId,
+        payload,
+        snapshot: createOptimisticHealthEventSnapshot(payload, now),
+      };
+    });
+    const operationIds = operations.map((operation) => operation.operationId);
 
+    if (this.offlineStatus.isOnline()) {
+      const pushResult = await this.pushEventOperations(
+        operations.map(({ operationId, snapshot }) => ({ operationId, item: snapshot, now })),
+      );
+      if (pushResult.outcome === 'blocked') {
+        return pushResult;
+      }
+
+      await runSequentially(operations, (operation, index) =>
+        this.saveEventSnapshot({
+          ...operation.snapshot,
+          id: pushResult.entityIds[index] ?? operation.snapshot.id,
+          syncStatus: 'synced',
+          syncMessage: null,
+        }),
+      );
+      this.emitHealthEventChanges(operationIds, metadata, sourceChannel);
+      await this.refreshPendingState();
+      return {
+        outcome: 'saved',
+        message: `Campaña veterinaria guardada para ${activeAnimals.length} animales activos.`,
+      } satisfies AnimalHealthEventMutationFeedback;
+    }
+
+    await runSequentially(operations, async (operation) => {
       await this.store.enqueueOperation({
         entityType: 'ANIMAL_EVENT_LOG',
-        entityId: operationId,
+        entityId: operation.operationId,
         opType: 'CREATE',
-        payload: toAnimalEventLogPayload(createOptimisticHealthEventSnapshot(payload, now)),
+        payload: toAnimalEventLogPayload(operation.snapshot),
         baseVersion: 0,
         clientCreatedAt: now,
         clientUpdatedAt: now,
-        operationId,
+        operationId: operation.operationId,
       });
-      await this.saveEventSnapshot(createOptimisticHealthEventSnapshot(payload, now));
-      operationIds.push(operationId);
-    }
+      await this.saveEventSnapshot(operation.snapshot);
+    });
     this.emitHealthEventChanges(operationIds, metadata, sourceChannel);
     await this.refreshPendingState();
-
-    if (this.offlineStatus.isOnline()) {
-      triggerManualSync(this.windowRef);
-      return {
-        outcome: 'queued',
-        message: `Campaña veterinaria encolada para ${activeAnimals.length} animales activos. Se disparó la sincronización automática.`,
-      } satisfies AnimalHealthEventMutationFeedback;
-    }
 
     return {
       outcome: 'queued',
@@ -412,6 +486,16 @@ function readString(record: Record<string, unknown> | null, key: string) {
   return typeof value === 'string' ? value : null;
 }
 
+function runSequentially<T>(
+  items: readonly T[],
+  action: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  return items.reduce(
+    (chain, item, index) => chain.then(() => action(item, index)),
+    Promise.resolve(),
+  );
+}
+
 function readVisitIdFromMetadata(metadata: AnimalHealthEventOfflineMetadata) {
   const record = metadata as Record<string, unknown>;
   const visit =
@@ -471,7 +555,7 @@ function createOptimisticHealthEventSnapshot(
     createdAt: now,
     updatedAt: now,
     syncStatus: 'pending',
-    syncMessage: 'Pendiente de sync.',
+    syncMessage: 'Pendiente de sincronización.',
   };
 }
 

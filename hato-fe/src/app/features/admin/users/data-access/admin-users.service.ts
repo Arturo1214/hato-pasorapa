@@ -119,7 +119,7 @@ export class AdminUsersService {
         Promise.resolve({
           outcome: 'blocked',
           message:
-            'La creación de usuarios requiere conexión para no persistir credenciales sensibles offline.',
+            'La creación de usuarios requiere conexión para no persistir credenciales sensibles sin conexión.',
         } satisfies AdminMutationFeedback),
       );
     }
@@ -178,7 +178,7 @@ export class AdminUsersService {
         Promise.resolve({
           outcome: 'blocked',
           message:
-            'El reseteo de contraseñas requiere conexión para no persistir credenciales sensibles offline.',
+            'El restablecimiento de contraseñas requiere conexión para no persistir credenciales sensibles sin conexión.',
         } satisfies AdminMutationFeedback),
       );
     }

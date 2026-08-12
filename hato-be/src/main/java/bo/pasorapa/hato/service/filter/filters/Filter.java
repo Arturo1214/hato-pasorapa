@@ -3,7 +3,9 @@ package bo.pasorapa.hato.service.filter.filters;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public abstract class Filter<T extends Serializable> implements Serializable {
 
     private T equals;

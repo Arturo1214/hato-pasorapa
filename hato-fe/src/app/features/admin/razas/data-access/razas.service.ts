@@ -113,7 +113,7 @@ export class RazasService {
   private blockedFeedback(): RazaMutationFeedback {
     return {
       outcome: 'blocked',
-      message: 'La gestión de razas requiere conexión. No se guarda información offline.',
+      message: 'La gestión de razas requiere conexión. No se guarda información sin conexión.',
     };
   }
 

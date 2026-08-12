@@ -2,11 +2,13 @@ package bo.pasorapa.hato.service.dto;
 
 import bo.pasorapa.hato.domain.enumeration.AnimalCategory;
 import bo.pasorapa.hato.domain.enumeration.AnimalSex;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@RegisterForReflection
 public record AnimalResponse(
         UUID uuid,
         UUID ownerGanaderoId,

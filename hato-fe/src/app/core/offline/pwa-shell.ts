@@ -25,7 +25,7 @@ export const HATO_PWA_MANIFEST: PwaManifestDefinition = {
   display: 'standalone',
   background_color: '#0f172a',
   theme_color: '#0f172a',
-  description: 'Shell instalable y base offline del panel Hato.',
+  description: 'Aplicación instalable y base sin conexión del panel Hato.',
   icons: [
     {
       src: '/icons/icon-192.svg',
@@ -52,7 +52,7 @@ function isLoopbackHostname(hostname: string | undefined) {
 
 export function createServiceWorkerRegistrationOptions(
   isDevelopmentMode: boolean,
-  hostname = globalThis.location?.hostname
+  hostname = globalThis.location?.hostname,
 ) {
   return {
     enabled: !isDevelopmentMode && !isLoopbackHostname(hostname),

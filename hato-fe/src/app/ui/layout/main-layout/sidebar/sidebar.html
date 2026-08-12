@@ -3,12 +3,6 @@
     <app-brand-lockup size="sidebar" title="Pasorapa" subtitle="Hato" />
   </div>
 
-  <div class="domain-card">
-    <span class="domain-card__label">Tu operación</span>
-    <strong>Todo el establecimiento en un mismo panel</strong>
-    <p>Consultá animales, alertas, agenda y novedades sin salir del flujo diario.</p>
-  </div>
-
   <mat-divider />
 
   <mat-nav-list class="nav-list">
@@ -20,14 +14,14 @@
         [routerLinkActiveOptions]="{ exact: true }"
         class="menu-item"
         (click)="navigate.emit()"
-        >
-          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-          <span matListItemTitle>{{ item.label }}</span>
-          @if (item.badge) {
-            <span class="menu-badge" [attr.data-severity]="item.severity">{{ item.badge }}</span>
-          }
-          <span matListItemLine>{{ item.description }}</span>
-        </a>
+      >
+        <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+        <span matListItemTitle>{{ item.label }}</span>
+        @if (item.badge) {
+          <span class="menu-badge" [attr.data-severity]="item.severity">{{ item.badge }}</span>
+        }
+        <span matListItemLine>{{ item.description }}</span>
+      </a>
     }
   </mat-nav-list>
 

@@ -103,7 +103,7 @@ describe('GanaderoRegistrationPageComponent', () => {
     component.submit();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Usuario creado exitosamente. Entrando al dashboard…');
+    expect(fixture.nativeElement.textContent).toContain('Usuario creado exitosamente. Entrando al panel…');
     expect(navigateByUrl).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(600);

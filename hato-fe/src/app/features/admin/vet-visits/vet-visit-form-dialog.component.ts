@@ -1,9 +1,21 @@
 import { CommonModule } from '@angular/common';
 import { Component, Injectable, inject, signal } from '@angular/core';
-import { FormArray, FormBuilder, ReactiveFormsModule, Validators, type AbstractControl, type FormControl, type ValidationErrors, type ValidatorFn } from '@angular/forms';
+import {
+  type FormArray,
+  FormBuilder,
+  ReactiveFormsModule,
+  Validators,
+  type AbstractControl,
+  type FormControl,
+  type ValidationErrors,
+  type ValidatorFn,
+} from '@angular/forms';
 import { DragDropModule, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideNativeDateAdapter } from '@angular/material/core';
-import { MatAutocompleteModule, type MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import {
+  MatAutocompleteModule,
+  type MatAutocompleteSelectedEvent,
+} from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -16,7 +28,12 @@ import { FormErrorsComponent } from '../../../shared/ui/form-errors/form-errors.
 import { AnimalsService, type AnimalItem } from '../animals/data-access/animals.service';
 
 export type VetVisitDialogMode = 'GLOBAL' | 'SPECIFIC';
-export type VetVisitDialogStatus = 'PENDING' | 'ATTENDED' | 'RESCHEDULED' | 'FINALIZED' | 'CANCELED';
+export type VetVisitDialogStatus =
+  | 'PENDING'
+  | 'ATTENDED'
+  | 'RESCHEDULED'
+  | 'FINALIZED'
+  | 'CANCELED';
 export type VetVisitDialogAction = 'create' | 'attend' | 'reschedule' | 'followUp';
 export type VetVisitFollowUpChoice = 'schedule' | 'finalize';
 export type VetVisitCreationMode = 'scheduled' | 'attendedNow';
@@ -36,6 +53,7 @@ export interface VetVisitDialogData {
   status?: VetVisitDialogStatus;
   creationMode?: VetVisitCreationMode;
   occurredAt?: string | Date | null;
+  initialVisitDate?: string | Date | null;
   nextDueAt?: string | Date | null;
   reason?: string | null;
   veterinarianName?: string | null;
@@ -110,8 +128,16 @@ export interface VetVisitDialogResult {
         @if (form.controls.mode.value === 'SPECIFIC') {
           <mat-form-field appearance="outline" class="form-field--full">
             <mat-label>Animal</mat-label>
-            <input matInput formControlName="animalSearch" [matAutocomplete]="animalAutocomplete" placeholder="Buscar por arete, marca o tatuaje" />
-            <mat-autocomplete #animalAutocomplete="matAutocomplete" (optionSelected)="selectAnimal($event)">
+            <input
+              matInput
+              formControlName="animalSearch"
+              [matAutocomplete]="animalAutocomplete"
+              placeholder="Buscar por arete, marca o tatuaje"
+            />
+            <mat-autocomplete
+              #animalAutocomplete="matAutocomplete"
+              (optionSelected)="selectAnimal($event)"
+            >
               @for (animal of animalOptions(); track animal.uuid) {
                 <mat-option [value]="animal.uuid">{{ animalLabel(animal) }}</mat-option>
               }
@@ -154,17 +180,28 @@ export interface VetVisitDialogResult {
             <textarea matInput formControlName="attentionNotes" rows="3"></textarea>
           </mat-form-field>
 
-          <mat-slide-toggle class="form-field--full" formControlName="hasTreatment">Tiene tratamiento</mat-slide-toggle>
+          <mat-slide-toggle class="form-field--full" formControlName="hasTreatment"
+            >Tiene tratamiento</mat-slide-toggle
+          >
 
           @if (form.controls.hasTreatment.value) {
             <section class="form-section form-field--full">
               <div class="form-section__header">
                 <h3>Plan de tratamiento</h3>
-                <button mat-stroked-button type="button" (click)="addTreatmentPlanStep()" [disabled]="treatmentPlanControls().length >= maxTreatmentPlanSteps">
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="addTreatmentPlanStep()"
+                  [disabled]="treatmentPlanControls().length >= maxTreatmentPlanSteps"
+                >
                   Agregar paso
                 </button>
               </div>
-              <div cdkDropList class="treatment-plan" (cdkDropListDropped)="dropTreatmentPlanStep($event)">
+              <div
+                cdkDropList
+                class="treatment-plan"
+                (cdkDropListDropped)="dropTreatmentPlanStep($event)"
+              >
                 @for (step of treatmentPlanControls(); track $index; let index = $index) {
                   <div class="treatment-plan__row" cdkDrag>
                     <button mat-icon-button type="button" cdkDragHandle aria-label="Reordenar paso">
@@ -174,7 +211,13 @@ export interface VetVisitDialogResult {
                       <mat-label>Paso {{ index + 1 }}</mat-label>
                       <input matInput [formControl]="step" placeholder="Descripción del paso" />
                     </mat-form-field>
-                    <button mat-icon-button type="button" aria-label="Eliminar paso" (click)="removeTreatmentPlanStep(index)" [disabled]="treatmentPlanControls().length === 1">
+                    <button
+                      mat-icon-button
+                      type="button"
+                      aria-label="Eliminar paso"
+                      (click)="removeTreatmentPlanStep(index)"
+                      [disabled]="treatmentPlanControls().length === 1"
+                    >
                       <mat-icon>delete</mat-icon>
                     </button>
                   </div>
@@ -196,7 +239,11 @@ export interface VetVisitDialogResult {
               @if (form.controls.followUpChoice.value === 'schedule') {
                 <mat-form-field appearance="outline">
                   <mat-label>Fecha del próximo control</mat-label>
-                  <input matInput [matDatepicker]="attendNextDueAtPicker" formControlName="nextDueAt" />
+                  <input
+                    matInput
+                    [matDatepicker]="attendNextDueAtPicker"
+                    formControlName="nextDueAt"
+                  />
                   <mat-datepicker-toggle matIconSuffix [for]="attendNextDueAtPicker" />
                   <mat-datepicker #attendNextDueAtPicker />
                 </mat-form-field>
@@ -206,45 +253,115 @@ export interface VetVisitDialogResult {
         }
 
         @if (showAnimalRequiredError()) {
-          <div class="form-alert form-field--full" role="alert">Seleccioná el animal de la visita específica.</div>
+          <div class="form-alert form-field--full" role="alert">
+            Seleccioná el animal de la visita específica.
+          </div>
         }
-        <app-form-errors [control]="form.controls.veterinarianName" [messages]="messages.veterinarianName" />
+        <app-form-errors
+          [control]="form.controls.veterinarianName"
+          [messages]="messages.veterinarianName"
+        />
         <app-form-errors [control]="form.controls.occurredAt" [messages]="messages.occurredAt" />
         <app-form-errors [control]="form.controls.reason" [messages]="messages.reason" />
         <app-form-errors [control]="form.controls.notes" [messages]="messages.notes" />
         <app-form-errors [control]="form.controls.findings" [messages]="messages.findings" />
-        <app-form-errors [control]="form.controls.attentionNotes" [messages]="messages.attentionNotes" />
+        <app-form-errors
+          [control]="form.controls.attentionNotes"
+          [messages]="messages.attentionNotes"
+        />
         <app-form-errors [control]="form.controls.cost" [messages]="messages.cost" />
       </form>
     </mat-dialog-content>
 
     <mat-dialog-actions align="end">
       <button mat-button type="button" (click)="dialogRef.close()">Cancelar</button>
-      <button mat-flat-button color="primary" type="button" [disabled]="form.invalid" (click)="submit()">{{ submitLabel }}</button>
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="form.invalid"
+        (click)="submit()"
+      >
+        {{ submitLabel }}
+      </button>
     </mat-dialog-actions>
   `,
   styles: [
     `
-      .dialog-content { max-height: min(82vh, 52rem); overflow: auto; }
-      .dialog-form { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: .5rem; width: min(72rem, 100%); }
-      .form-field--full { grid-column: 1 / -1; }
-      .form-alert { color: #b3261e; font-weight: 600; }
-      .form-section { border: 1px solid rgba(0, 0, 0, .12); border-radius: .75rem; padding: 1rem; }
-      .form-section__header { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: .75rem; }
-      .form-section__header h3 { font-size: 1rem; margin: 0; }
-      .treatment-plan { display: grid; gap: .75rem; }
-      .treatment-plan__row { align-items: start; display: grid; gap: .5rem; grid-template-columns: auto minmax(0, 1fr) auto; }
-      .treatment-plan__input { width: 100%; }
-      .follow-up-grid { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-      .follow-up-grid__date mat-form-field { width: 100%; }
-      @media (max-width: 720px) { .dialog-form { grid-template-columns: minmax(0, 1fr); } }
-      @media (max-width: 720px) { .follow-up-grid { grid-template-columns: minmax(0, 1fr); } }
+      .dialog-content {
+        max-height: min(82vh, 52rem);
+        overflow: auto;
+      }
+      .dialog-form {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding-top: 0.5rem;
+        width: min(72rem, 100%);
+      }
+      .form-field--full {
+        grid-column: 1 / -1;
+      }
+      .form-alert {
+        color: #b3261e;
+        font-weight: 600;
+      }
+      .form-section {
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 0.75rem;
+        padding: 1rem;
+      }
+      .form-section__header {
+        align-items: center;
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+      }
+      .form-section__header h3 {
+        font-size: 1rem;
+        margin: 0;
+      }
+      .treatment-plan {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .treatment-plan__row {
+        align-items: start;
+        display: grid;
+        gap: 0.5rem;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+      }
+      .treatment-plan__input {
+        width: 100%;
+      }
+      .follow-up-grid {
+        align-items: start;
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+      .follow-up-grid__date mat-form-field {
+        width: 100%;
+      }
+      @media (max-width: 720px) {
+        .dialog-form {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      @media (max-width: 720px) {
+        .follow-up-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
     `,
   ],
 })
 export class VetVisitFormDialogComponent {
   readonly data = inject<VetVisitDialogData>(MAT_DIALOG_DATA, { optional: true }) ?? {};
-  readonly dialogRef = inject(MatDialogRef<VetVisitFormDialogComponent, VetVisitDialogResult | undefined>);
+  readonly dialogRef = inject(
+    MatDialogRef<VetVisitFormDialogComponent, VetVisitDialogResult | undefined>,
+  );
   private readonly formBuilder = inject(FormBuilder);
   private readonly animalsService = inject(AnimalsService);
   private readonly clock = inject(DateTimeClock);
@@ -260,21 +377,38 @@ export class VetVisitFormDialogComponent {
 
   readonly form = this.formBuilder.group(
     {
-      action: [this.data.action ?? 'create' as VetVisitDialogAction],
-      mode: [this.data.mode ?? 'SPECIFIC' as VetVisitDialogMode, [Validators.required]],
-      creationMode: [this.data.creationMode ?? 'scheduled' as VetVisitCreationMode, [Validators.required]],
+      action: [this.data.action ?? ('create' as VetVisitDialogAction)],
+      mode: [this.data.mode ?? ('SPECIFIC' as VetVisitDialogMode), [Validators.required]],
+      creationMode: [
+        this.data.creationMode ?? ('scheduled' as VetVisitCreationMode),
+        [Validators.required],
+      ],
       animalUuid: this.formBuilder.control<string | null>(this.data.animalUuid ?? null),
       animalSearch: [''],
       visitId: [this.data.visitId ?? createUuid(), [Validators.required]],
-      status: [this.data.status ?? (this.isAttendMode ? 'ATTENDED' as VetVisitDialogStatus : 'PENDING' as VetVisitDialogStatus), [Validators.required]],
-      occurredAt: [this.data.occurredAt ?? (this.data.creationMode === 'attendedNow' ? this.clock.nowIso() : currentLocalDateInput()), [Validators.required]],
+      status: [
+        this.data.status ??
+          (this.isAttendMode
+            ? ('ATTENDED' as VetVisitDialogStatus)
+            : ('PENDING' as VetVisitDialogStatus)),
+        [Validators.required],
+      ],
+      occurredAt: [
+        this.data.occurredAt ??
+          (this.data.creationMode === 'attendedNow'
+            ? this.clock.nowIso()
+            : normalizeInitialVisitDate(this.data.initialVisitDate)),
+        [Validators.required],
+      ],
       nextDueAt: this.formBuilder.control<Date | string | null>(this.data.nextDueAt ?? null),
       notes: [''],
       findings: [''],
       attentionNotes: [''],
       cost: this.formBuilder.control<number | null>(null, [nonNegativeCostValidator]),
       hasTreatment: [false],
-      treatmentPlan: this.formBuilder.array<FormControl<string>>([this.createTreatmentPlanControl()]),
+      treatmentPlan: this.formBuilder.array<FormControl<string>>([
+        this.createTreatmentPlanControl(),
+      ]),
       followUpChoice: [null as VetVisitFollowUpChoice | null],
       reason: [this.data.reason ?? '', [Validators.required]],
       veterinarianName: [this.data.veterinarianName ?? '', [Validators.required]],
@@ -282,7 +416,14 @@ export class VetVisitFormDialogComponent {
       targetAnimalCount: [this.data.targetAnimalCount ?? null],
       parentVisitId: [this.data.parentVisitId ?? null],
     },
-    { validators: [specificAnimalValidator, attendedNowValidator, followUpDateValidator, treatmentPlanLimitValidator] },
+    {
+      validators: [
+        specificAnimalValidator,
+        attendedNowValidator,
+        followUpDateValidator,
+        treatmentPlanLimitValidator,
+      ],
+    },
   );
 
   readonly messages = {
@@ -290,14 +431,22 @@ export class VetVisitFormDialogComponent {
     occurredAt: { required: 'Informá cuándo se programa o registra la visita.' },
     reason: { required: 'Ingresá el motivo de la visita.' },
     notes: { attentionRequired: 'Ingresá las notas de atención para una visita atendida.' },
-    findings: { required: 'Ingresá los hallazgos de la atención.', minlength: 'Ingresá al menos 5 caracteres.' },
+    findings: {
+      required: 'Ingresá los hallazgos de la atención.',
+      minlength: 'Ingresá al menos 5 caracteres.',
+    },
     attentionNotes: { required: 'Ingresá las notas de atención.' },
     cost: { min: 'El costo no puede ser negativo.' },
   };
 
   constructor() {
     this.animalsService.listAnimals({ active: true }).subscribe({
-      next: (animals) => this.animalCandidates.set([...animals].filter((animal) => animal.active).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))),
+      next: (animals) =>
+        this.animalCandidates.set(
+          [...animals]
+            .filter((animal) => animal.active)
+            .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+        ),
       error: () => this.animalCandidates.set([]),
     });
 
@@ -310,7 +459,10 @@ export class VetVisitFormDialogComponent {
     });
 
     this.form.controls.animalSearch.valueChanges.subscribe((search) => {
-      const selectedAnimal = this.animalCandidates().find((animal) => animal.uuid === this.form.controls.animalUuid.value) ?? null;
+      const selectedAnimal =
+        this.animalCandidates().find(
+          (animal) => animal.uuid === this.form.controls.animalUuid.value,
+        ) ?? null;
       if (selectedAnimal && search !== animalLabel(selectedAnimal)) {
         this.form.controls.animalUuid.setValue(null);
       }
@@ -390,7 +542,8 @@ export class VetVisitFormDialogComponent {
 
   selectAnimal(event: MatAutocompleteSelectedEvent) {
     const selectedUuid = event.option.value as string;
-    const selectedAnimal = this.animalCandidates().find((animal) => animal.uuid === selectedUuid) ?? null;
+    const selectedAnimal =
+      this.animalCandidates().find((animal) => animal.uuid === selectedUuid) ?? null;
     this.form.controls.animalUuid.setValue(selectedAnimal?.uuid ?? null);
     this.form.controls.animalSearch.setValue(selectedAnimal ? animalLabel(selectedAnimal) : '');
     this.form.updateValueAndValidity();
@@ -409,16 +562,23 @@ export class VetVisitFormDialogComponent {
 
     const value = this.form.getRawValue();
     const isClinicalMode = this.isAttendMode || value.creationMode === 'attendedNow';
-    const attentionNotes = isClinicalMode ? normalizeOptionalText(value.attentionNotes) : normalizeOptionalText(value.notes);
+    const attentionNotes = isClinicalMode
+      ? normalizeOptionalText(value.attentionNotes)
+      : normalizeOptionalText(value.notes);
     const costAmount = normalizeCostAmount(value.cost);
-    const treatmentPlan = value.hasTreatment ? value.treatmentPlan.map((step) => step.trim()).filter(Boolean) : [];
+    const treatmentPlan = value.hasTreatment
+      ? value.treatmentPlan.map((step) => step.trim()).filter(Boolean)
+      : [];
     this.dialogRef.close({
       mode: value.mode ?? 'SPECIFIC',
-      creationMode: this.isAttendMode ? 'attendedNow' : value.creationMode ?? 'scheduled',
+      creationMode: this.isAttendMode ? 'attendedNow' : (value.creationMode ?? 'scheduled'),
       animalUuid: value.mode === 'GLOBAL' ? null : value.animalUuid,
       visitId: value.visitId ?? '',
       status: isClinicalMode ? 'ATTENDED' : 'PENDING',
-      occurredAt: value.creationMode === 'attendedNow' && !this.isAttendMode ? this.clock.nowIso() : normalizeDateValue(value.occurredAt ?? currentLocalDateInput()),
+      occurredAt:
+        value.creationMode === 'attendedNow' && !this.isAttendMode
+          ? this.clock.nowIso()
+          : normalizeDateValue(value.occurredAt ?? currentLocalDateInput()),
       nextDueAt: normalizeOptionalDate(value.nextDueAt),
       notes: attentionNotes,
       reason: normalizeRequiredText(value.reason),
@@ -439,19 +599,27 @@ export class VetVisitFormDialogComponent {
   }
 }
 
-const specificAnimalValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+const specificAnimalValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
   const value = control.value as { mode?: VetVisitDialogMode | null; animalUuid?: string | null };
   return value.mode === 'SPECIFIC' && !value.animalUuid ? { animalRequired: true } : null;
 };
 
-export const attendedNowValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+export const attendedNowValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
   const value = control.value as {
     action?: VetVisitDialogAction | null;
     creationMode?: VetVisitCreationMode | null;
     findings?: string | null;
     attentionNotes?: string | null;
   };
-  const isClinicalMode = value.action === 'attend' || value.creationMode === 'attendedNow' || control.get('status')?.value === 'ATTENDED' && control.get('creationMode')?.value === 'attendedNow';
+  const isClinicalMode =
+    value.action === 'attend' ||
+    value.creationMode === 'attendedNow' ||
+    (control.get('status')?.value === 'ATTENDED' &&
+      control.get('creationMode')?.value === 'attendedNow');
   if (!isClinicalMode) {
     return null;
   }
@@ -466,7 +634,9 @@ export const attendedNowValidator: ValidatorFn = (control: AbstractControl): Val
   return Object.keys(errors).length ? errors : null;
 };
 
-const nonNegativeCostValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+const nonNegativeCostValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
   const value = control.value as number | string | null | undefined;
   if (value === null || value === undefined || value === '') {
     return null;
@@ -476,18 +646,31 @@ const nonNegativeCostValidator: ValidatorFn = (control: AbstractControl): Valida
 };
 
 const followUpDateValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
-  const value = control.value as { action?: VetVisitDialogAction | null; creationMode?: VetVisitCreationMode | null; followUpChoice?: VetVisitFollowUpChoice | null; nextDueAt?: Date | string | null };
-  const isClinicalMode = value.action === 'attend' || value.creationMode === 'attendedNow' || control.get('status')?.value === 'ATTENDED' && control.get('creationMode')?.value === 'attendedNow';
+  const value = control.value as {
+    action?: VetVisitDialogAction | null;
+    creationMode?: VetVisitCreationMode | null;
+    followUpChoice?: VetVisitFollowUpChoice | null;
+    nextDueAt?: Date | string | null;
+  };
+  const isClinicalMode =
+    value.action === 'attend' ||
+    value.creationMode === 'attendedNow' ||
+    (control.get('status')?.value === 'ATTENDED' &&
+      control.get('creationMode')?.value === 'attendedNow');
   if (!isClinicalMode) {
     return null;
   }
   if (!value.followUpChoice) {
     return { followUpChoiceRequired: true };
   }
-  return value.followUpChoice === 'schedule' && !value.nextDueAt ? { nextDueAtRequired: true } : null;
+  return value.followUpChoice === 'schedule' && !value.nextDueAt
+    ? { nextDueAtRequired: true }
+    : null;
 };
 
-const treatmentPlanLimitValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
+const treatmentPlanLimitValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
   const treatmentPlan = control.get('treatmentPlan') as FormArray<FormControl<string>> | null;
   if (!treatmentPlan || treatmentPlan.length > 20) {
     return { treatmentPlanLimit: true };
@@ -513,7 +696,11 @@ function animalSearchText(animal: AnimalItem) {
 }
 
 function animalLabel(animal: AnimalItem) {
-  return [animal.arete, animal.marca, animal.tatuaje].filter((value): value is string => Boolean(value)).join(' · ') || 'animal sin identificador';
+  return (
+    [animal.arete, animal.marca, animal.tatuaje]
+      .filter((value): value is string => Boolean(value))
+      .join(' · ') || 'animal sin identificador'
+  );
 }
 
 function normalizeSearchText(value: string | null | undefined) {
@@ -543,9 +730,24 @@ function normalizeCostAmount(value: number | string | null | undefined) {
 
 function normalizeDateValue(value: Date | string) {
   if (value instanceof Date) {
-    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())).toISOString();
+    return new Date(
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+    ).toISOString();
   }
   return value;
+}
+
+function normalizeInitialVisitDate(value: Date | string | null | undefined) {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const [year, month, day] = value.split('-').map(Number);
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      return new Date(year, month - 1, day);
+    }
+  }
+  return currentLocalDateInput();
 }
 
 function currentLocalDateInput() {

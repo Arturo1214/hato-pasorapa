@@ -1,9 +1,11 @@
 package bo.pasorapa.hato.service.dto.raza;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import bo.pasorapa.hato.domain.enumeration.RazaTipo;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+@RegisterForReflection
 public record RazaResponse(
         UUID uuid,
         String nombre,

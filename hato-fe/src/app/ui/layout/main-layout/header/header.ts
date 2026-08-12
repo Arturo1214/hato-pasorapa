@@ -5,7 +5,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { ActivatedRoute, ActivatedRouteSnapshot, NavigationEnd, PRIMARY_OUTLET, Router } from '@angular/router';
+import {
+  ActivatedRoute,
+  type ActivatedRouteSnapshot,
+  NavigationEnd,
+  PRIMARY_OUTLET,
+  Router,
+} from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
 import { OfflineStatusService } from '../../../../core/offline/offline-status.service';
@@ -18,7 +24,7 @@ interface RouteViewMeta {
 }
 
 const DEFAULT_ROUTE_VIEW_META: RouteViewMeta = {
-  title: 'Dashboard',
+  title: 'Panel',
   subtitle: 'Resumen operativo del establecimiento, su rodeo y las tareas prioritarias del día.',
 };
 
@@ -41,19 +47,19 @@ export class HeaderComponent {
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
-      map(() => this.resolveRouteViewMeta())
+      map(() => this.resolveRouteViewMeta()),
     ),
     {
       initialValue: DEFAULT_ROUTE_VIEW_META,
-    }
+    },
   );
 
   readonly greeting = computed(() => this.authService.currentUser()?.displayName ?? 'Equipo Hato');
   readonly isGanadero = computed(() => this.authService.currentUser()?.role === 'GANADERO');
   readonly isOnline = computed(() => this.offlineStatus.isOnline());
   readonly connectivityLabel = computed(() => (this.isOnline() ? 'En línea' : 'Sin conexión'));
-  readonly connectivityAriaLabel = computed(() =>
-    `Estado de conexión: ${this.isOnline() ? 'en línea' : 'sin conexión'}`
+  readonly connectivityAriaLabel = computed(
+    () => `Estado de conexión: ${this.isOnline() ? 'en línea' : 'sin conexión'}`,
   );
 
   constructor() {
@@ -67,7 +73,8 @@ export class HeaderComponent {
   }
 
   private resolveRouteViewMeta(): RouteViewMeta {
-    const rootSnapshot = this.router.routerState.snapshot?.root ?? this.activatedRoute.snapshot ?? null;
+    const rootSnapshot =
+      this.router.routerState.snapshot?.root ?? this.activatedRoute.snapshot ?? null;
     const routeChain = this.collectPrimaryRouteChain(rootSnapshot);
 
     for (let index = routeChain.length - 1; index >= 0; index -= 1) {
@@ -86,7 +93,9 @@ export class HeaderComponent {
     };
   }
 
-  private collectPrimaryRouteChain(snapshot: ActivatedRouteSnapshot | null): ActivatedRouteSnapshot[] {
+  private collectPrimaryRouteChain(
+    snapshot: ActivatedRouteSnapshot | null,
+  ): ActivatedRouteSnapshot[] {
     const routeChain: ActivatedRouteSnapshot[] = [];
     let currentSnapshot = snapshot;
 

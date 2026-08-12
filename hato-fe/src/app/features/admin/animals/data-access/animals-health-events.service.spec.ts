@@ -1,4 +1,4 @@
-import { HttpClient, type HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom, of } from 'rxjs';
 import { AuthService, type SessionUser } from '../../../../core/auth/data-access/auth.service';
@@ -8,7 +8,6 @@ import { OfflineStatusService } from '../../../../core/offline/offline-status.se
 import { OfflineEntityChangeBus } from '../../../../core/offline/offline-entity-change-bus.service';
 import { OfflineStoreService } from '../../../../core/offline/offline-store.service';
 import { SyncMetricsStore } from '../../../../core/offline/sync-metrics.store';
-import { MANUAL_SYNC_EVENT } from '../../../../core/offline/sync-orchestrator.service';
 import { AnimalsService, type AnimalItem } from './animals.service';
 import {
   AnimalsHealthEventsService,
@@ -80,7 +79,7 @@ describe('AnimalsHealthEventsService', () => {
 
   const setup = (options: {
     online: boolean;
-    http?: Partial<Pick<HttpClient, 'get'>>;
+    http?: Partial<Pick<HttpClient, 'get' | 'post'>>;
     user?: SessionUser;
     animalsService?: Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
   }) => {
@@ -92,6 +91,7 @@ describe('AnimalsHealthEventsService', () => {
           provide: HttpClient,
           useValue: {
             get: vi.fn(),
+            post: vi.fn(() => of({ results: [] })),
             ...options.http,
           },
         },
@@ -343,7 +343,7 @@ describe('AnimalsHealthEventsService', () => {
           eventCategory: 'HEALTH',
           eventType: 'DISEASE_REPORTED',
           syncStatus: 'pending',
-          syncMessage: 'Pendiente de sync.',
+          syncMessage: 'Pendiente de sincronización.',
         }),
       }),
     ]);
@@ -393,7 +393,25 @@ describe('AnimalsHealthEventsService', () => {
   });
 
   it('should emit online mutation changes for online field vet visit creation', async () => {
-    const { service, store, entityChangeBus } = setup({ online: true });
+    const post = vi.fn(() =>
+      of({
+        results: [
+          {
+            operationId: '22222222-2222-4222-8222-222222222222',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: 'health-online-visit-1',
+            classification: 'no_conflict',
+          },
+        ],
+      }),
+    );
+    const { service, store, entityChangeBus } = setup({
+      online: true,
+      http: { post: post as never },
+    });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '22222222-2222-4222-8222-222222222222',
+    );
     const changes: Array<unknown> = [];
     entityChangeBus.changes$.subscribe((change) => changes.push(change));
 
@@ -412,13 +430,13 @@ describe('AnimalsHealthEventsService', () => {
       }),
     );
 
-    const [operation] = await store.listOutbox();
+    await expect(store.listOutbox()).resolves.toEqual([]);
     expect(changes).toEqual([
       expect.objectContaining({
         entity: 'ANIMAL_EVENT_LOG',
         source: 'online-mutation',
         operation: 'create',
-        ids: [operation.operationId],
+        ids: ['22222222-2222-4222-8222-222222222222'],
       }),
       expect.objectContaining({
         entity: 'VET_VISIT',
@@ -429,9 +447,23 @@ describe('AnimalsHealthEventsService', () => {
     ]);
   });
 
-  it('should queue health events offline and trigger manual sync when online', async () => {
-    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
-    const { service, store } = setup({ online: true });
+  it('should save health events directly online without outbox retries', async () => {
+    const post = vi.fn(() =>
+      of({
+        results: [
+          {
+            operationId: '33333333-3333-4333-8333-333333333333',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: 'health-online-1',
+            classification: 'no_conflict',
+          },
+        ],
+      }),
+    );
+    const { service, store } = setup({ online: true, http: { post: post as never } });
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(
+      '33333333-3333-4333-8333-333333333333',
+    );
 
     await expect(
       firstValueFrom(
@@ -447,44 +479,64 @@ describe('AnimalsHealthEventsService', () => {
         }),
       ),
     ).resolves.toEqual({
-      outcome: 'queued',
-      message: 'Evento sanitario encolado. Se disparó la sincronización automática.',
+      outcome: 'saved',
+      message: 'Evento sanitario guardado correctamente.',
     });
 
-    const outbox = await store.listOutbox();
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]).toEqual(
+    expect(post).toHaveBeenCalledWith(
+      '/api/sync/push',
       expect.objectContaining({
-        entityType: 'ANIMAL_EVENT_LOG',
-        entityId: outbox[0].operationId,
-        opType: 'CREATE',
-        payload: expect.objectContaining({
-          animalUuid: 'animal-uuid-1',
-          eventCategory: 'HEALTH',
-          eventType: 'TREATMENT_STARTED',
-          performedByUserId: 'user-1',
-          sourceChannel: 'ONLINE',
-        }),
+        operations: [
+          expect.objectContaining({
+            operationId: '33333333-3333-4333-8333-333333333333',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: '33333333-3333-4333-8333-333333333333',
+            opType: 'CREATE',
+            payload: expect.objectContaining({
+              animalUuid: 'animal-uuid-1',
+              eventCategory: 'HEALTH',
+              eventType: 'TREATMENT_STARTED',
+              performedByUserId: 'user-1',
+              sourceChannel: 'ONLINE',
+            }),
+          }),
+        ],
       }),
+      { headers: expect.any(HttpHeaders) },
     );
+    await expect(store.listOutbox()).resolves.toEqual([]);
     await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
       expect.objectContaining({
-        key: `ANIMAL_EVENT_LOG:${outbox[0].operationId}`,
+        key: 'ANIMAL_EVENT_LOG:health-online-1',
         payload: expect.objectContaining({
           eventCategory: 'HEALTH',
           eventType: 'TREATMENT_STARTED',
           healthEventType: 'TREATMENT_STARTED',
-          syncStatus: 'pending',
+          syncStatus: 'synced',
         }),
       }),
     ]);
-    expect(dispatchEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
-    );
   });
 
-  it('should fan out global veterinary visits to all active animals of the authenticated ganadero', async () => {
-    const dispatchEvent = vi.spyOn(window, 'dispatchEvent');
+  it('should save global veterinary visits directly online for all active animals of the authenticated ganadero', async () => {
+    const post = vi.fn(() =>
+      of({
+        results: [
+          {
+            operationId: '44444444-4444-4444-8444-444444444444',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: 'global-health-online-1',
+            classification: 'no_conflict',
+          },
+          {
+            operationId: '55555555-5555-4555-8555-555555555555',
+            entityType: 'ANIMAL_EVENT_LOG',
+            entityId: 'global-health-online-2',
+            classification: 'no_conflict',
+          },
+        ],
+      }),
+    );
     const animalsService = {
       listActiveAnimals: vi.fn(() =>
         of([
@@ -502,7 +554,15 @@ describe('AnimalsHealthEventsService', () => {
       ),
       listAnimals: vi.fn(() => of([])),
     } satisfies Pick<AnimalsService, 'listActiveAnimals' | 'listAnimals'>;
-    const { service, store } = setup({ online: true, user: ganaderoUser, animalsService });
+    const { service, store } = setup({
+      online: true,
+      user: ganaderoUser,
+      animalsService,
+      http: { post: post as never },
+    });
+    vi.spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce('44444444-4444-4444-8444-444444444444')
+      .mockReturnValueOnce('55555555-5555-4555-8555-555555555555');
 
     await expect(
       firstValueFrom(
@@ -529,30 +589,32 @@ describe('AnimalsHealthEventsService', () => {
         }),
       ),
     ).resolves.toEqual({
-      outcome: 'queued',
-      message:
-        'Campaña veterinaria encolada para 2 animales activos. Se disparó la sincronización automática.',
+      outcome: 'saved',
+      message: 'Campaña veterinaria guardada para 2 animales activos.',
     });
 
     expect(animalsService.listActiveAnimals).toHaveBeenCalledWith('gan-1', 0, 1000);
-    const outbox = await store.listOutbox();
-    expect(outbox).toHaveLength(2);
-    expect(outbox.map((operation) => operation.payload['animalUuid']).sort()).toEqual([
-      'animal-active-1',
-      'animal-active-2',
-    ]);
-    expect(
-      outbox.map(
-        (operation) => (operation.payload['metadata'] as Record<string, unknown>)['visit'],
-      ),
-    ).toEqual([
-      expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
-      expect.objectContaining({ visitId: 'VISIT-GLOBAL-1', mode: 'GLOBAL', targetAnimalCount: 2 }),
-    ]);
-    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toHaveLength(2);
-    expect(dispatchEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ type: MANUAL_SYNC_EVENT }),
+    expect(post).toHaveBeenCalledWith(
+      '/api/sync/push',
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            operationId: '44444444-4444-4444-8444-444444444444',
+            payload: expect.objectContaining({ animalUuid: 'animal-active-1' }),
+          }),
+          expect.objectContaining({
+            operationId: '55555555-5555-4555-8555-555555555555',
+            payload: expect.objectContaining({ animalUuid: 'animal-active-2' }),
+          }),
+        ],
+      }),
+      { headers: expect.any(HttpHeaders) },
     );
+    await expect(store.listOutbox()).resolves.toEqual([]);
+    await expect(store.listSnapshots('ANIMAL_EVENT_LOG')).resolves.toEqual([
+      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:global-health-online-1' }),
+      expect.objectContaining({ key: 'ANIMAL_EVENT_LOG:global-health-online-2' }),
+    ]);
   });
 
   it('should block global veterinary campaigns when the authenticated ganadero has no active animals', async () => {

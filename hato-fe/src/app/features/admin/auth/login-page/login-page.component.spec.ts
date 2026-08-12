@@ -125,7 +125,7 @@ describe('LoginPageComponent', () => {
 
     const expiredFixture = TestBed.createComponent(LoginPageComponent);
     expiredFixture.detectChanges();
-    expect(expiredFixture.nativeElement.textContent).toContain('Tu sesión offline expiró.');
+    expect(expiredFixture.nativeElement.textContent).toContain('Tu sesión sin conexión expiró.');
 
     await TestBed.resetTestingModule();
     installStorageMock();

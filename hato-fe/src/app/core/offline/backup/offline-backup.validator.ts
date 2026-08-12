@@ -1,5 +1,12 @@
-import { CURRENT_OFFLINE_SCHEMA_VERSION, isOfflineSchemaVersionSupported } from '../offline-store.migrations';
-import type { OfflineOperationEnvelope, OfflineSnapshotRecord, PersistedOfflineState } from '../offline-types';
+import {
+  CURRENT_OFFLINE_SCHEMA_VERSION,
+  isOfflineSchemaVersionSupported,
+} from '../offline-store.migrations';
+import type {
+  OfflineOperationEnvelope,
+  OfflineSnapshotRecord,
+  PersistedOfflineState,
+} from '../offline-types';
 import {
   BACKUP_DIGEST_ALGORITHM,
   BACKUP_VERSION_V1,
@@ -19,14 +26,18 @@ export interface BackupValidationOptions {
 
 export async function validateBackupEnvelope(
   candidate: unknown,
-  options: BackupValidationOptions = {}
+  options: BackupValidationOptions = {},
 ): Promise<BackupEnvelopeV1> {
   const issues: BackupValidationIssue[] = [];
   const currentSchemaVersion = options.currentSchemaVersion ?? CURRENT_OFFLINE_SCHEMA_VERSION;
 
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    throw new BackupValidationError('El archivo de backup no tiene un objeto JSON válido.', [
-      createBackupValidationIssue('BACKUP_FILE_CORRUPT', '$', 'Se esperaba un objeto JSON en la raíz del backup.'),
+    throw new BackupValidationError('El archivo de respaldo no tiene un objeto JSON válido.', [
+      createBackupValidationIssue(
+        'BACKUP_FILE_CORRUPT',
+        '$',
+        'Se esperaba un objeto JSON en la raíz del respaldo.',
+      ),
     ]);
   }
 
@@ -36,31 +47,50 @@ export async function validateBackupEnvelope(
       createBackupValidationIssue(
         'BACKUP_VERSION_UNSUPPORTED',
         'backupVersion',
-        `La versión ${String(envelope.backupVersion ?? 'desconocida')} no es compatible con V1.`
-      )
+        `La versión ${String(envelope.backupVersion ?? 'desconocida')} no es compatible con V1.`,
+      ),
     );
   }
 
   if (!isIsoDate(envelope.createdAt)) {
-    issues.push(createBackupValidationIssue('BACKUP_CREATED_AT_INVALID', 'createdAt', 'El backup debe incluir una fecha ISO válida.'));
+    issues.push(
+      createBackupValidationIssue(
+        'BACKUP_CREATED_AT_INVALID',
+        'createdAt',
+        'El respaldo debe incluir una fecha ISO válida.',
+      ),
+    );
   }
 
   if (!Number.isInteger(envelope.sourceSchemaVersion)) {
     issues.push(
-      createBackupValidationIssue('BACKUP_SCHEMA_VERSION_INVALID', 'sourceSchemaVersion', 'El backup debe incluir un schemaVersion entero.')
+      createBackupValidationIssue(
+        'BACKUP_SCHEMA_VERSION_INVALID',
+        'sourceSchemaVersion',
+        'El respaldo debe incluir un schemaVersion entero.',
+      ),
     );
-  } else if (!isOfflineSchemaVersionSupported(envelope.sourceSchemaVersion as number) || (envelope.sourceSchemaVersion as number) > currentSchemaVersion) {
+  } else if (
+    !isOfflineSchemaVersionSupported(envelope.sourceSchemaVersion as number) ||
+    (envelope.sourceSchemaVersion as number) > currentSchemaVersion
+  ) {
     issues.push(
       createBackupValidationIssue(
         'BACKUP_SCHEMA_VERSION_UNSUPPORTED',
         'sourceSchemaVersion',
-        `El schemaVersion ${String(envelope.sourceSchemaVersion)} no es compatible con este dispositivo.`
-      )
+        `El schemaVersion ${String(envelope.sourceSchemaVersion)} no es compatible con este dispositivo.`,
+      ),
     );
   }
 
   if (!envelope.manifest || typeof envelope.manifest !== 'object') {
-    issues.push(createBackupValidationIssue('BACKUP_MANIFEST_REQUIRED', 'manifest', 'El backup debe incluir manifest.'));
+    issues.push(
+      createBackupValidationIssue(
+        'BACKUP_MANIFEST_REQUIRED',
+        'manifest',
+        'El respaldo debe incluir manifest.',
+      ),
+    );
   }
 
   if (!isPersistedOfflineState(envelope.offlineState)) {
@@ -68,17 +98,23 @@ export async function validateBackupEnvelope(
       createBackupValidationIssue(
         'BACKUP_OFFLINE_STATE_INVALID',
         'offlineState',
-        'El backup debe incluir un estado offline estructuralmente válido.'
-      )
+        'El respaldo debe incluir un estado sin conexión estructuralmente válido.',
+      ),
     );
   }
 
   if (!envelope.integrity || typeof envelope.integrity !== 'object') {
-    issues.push(createBackupValidationIssue('BACKUP_INTEGRITY_REQUIRED', 'integrity', 'El backup debe incluir metadatos de integridad.'));
+    issues.push(
+      createBackupValidationIssue(
+        'BACKUP_INTEGRITY_REQUIRED',
+        'integrity',
+        'El respaldo debe incluir metadatos de integridad.',
+      ),
+    );
   }
 
   if (issues.length > 0) {
-    throw new BackupValidationError('El archivo de backup tiene errores estructurales.', issues);
+    throw new BackupValidationError('El archivo de respaldo tiene errores estructurales.', issues);
   }
 
   const manifest = envelope.manifest as BackupEnvelopeV1['manifest'];
@@ -87,13 +123,25 @@ export async function validateBackupEnvelope(
 
   if (typeof manifest.imagesExcluded !== 'boolean') {
     issues.push(
-      createBackupValidationIssue('BACKUP_IMAGES_EXCLUDED_INVALID', 'manifest.imagesExcluded', 'manifest.imagesExcluded debe ser booleano.')
+      createBackupValidationIssue(
+        'BACKUP_IMAGES_EXCLUDED_INVALID',
+        'manifest.imagesExcluded',
+        'manifest.imagesExcluded debe ser booleano.',
+      ),
     );
   }
 
-  if (!manifest.entityCounts || typeof manifest.entityCounts !== 'object' || Array.isArray(manifest.entityCounts)) {
+  if (
+    !manifest.entityCounts ||
+    typeof manifest.entityCounts !== 'object' ||
+    Array.isArray(manifest.entityCounts)
+  ) {
     issues.push(
-      createBackupValidationIssue('BACKUP_ENTITY_COUNTS_INVALID', 'manifest.entityCounts', 'manifest.entityCounts debe ser un mapa clave→cantidad.')
+      createBackupValidationIssue(
+        'BACKUP_ENTITY_COUNTS_INVALID',
+        'manifest.entityCounts',
+        'manifest.entityCounts debe ser un mapa clave→cantidad.',
+      ),
     );
   }
 
@@ -102,14 +150,18 @@ export async function validateBackupEnvelope(
       createBackupValidationIssue(
         'BACKUP_DIGEST_ALGORITHM_INVALID',
         'integrity.digestAlgorithm',
-        'El backup debe usar SHA-256 como algoritmo de digest.'
-      )
+        'El respaldo debe usar SHA-256 como algoritmo de digest.',
+      ),
     );
   }
 
   if (typeof integrity.digest !== 'string' || !/^[a-f0-9]{64}$/i.test(integrity.digest)) {
     issues.push(
-      createBackupValidationIssue('BACKUP_DIGEST_REQUIRED', 'integrity.digest', 'El backup debe incluir un digest SHA-256 hexadecimal válido.')
+      createBackupValidationIssue(
+        'BACKUP_DIGEST_REQUIRED',
+        'integrity.digest',
+        'El respaldo debe incluir un digest SHA-256 hexadecimal válido.',
+      ),
     );
   }
 
@@ -118,14 +170,16 @@ export async function validateBackupEnvelope(
       createBackupValidationIssue(
         'BACKUP_IMAGE_OPERATION_IDS_INVALID',
         'integrity.imageOperationIds',
-        'integrity.imageOperationIds debe ser un arreglo.'
-      )
+        'integrity.imageOperationIds debe ser un arreglo.',
+      ),
     );
   }
 
   const referencedImageIds = collectReferencedImageOperationIds(offlineState);
   const expectedChecksums = collectExpectedImageChecksums(offlineState);
-  const providedImages = Array.isArray(envelope.images) ? (envelope.images as BackupImageBinaryEntry[]) : [];
+  const providedImages = Array.isArray(envelope.images)
+    ? (envelope.images as BackupImageBinaryEntry[])
+    : [];
   const providedImageIds = new Set(providedImages.map((entry) => entry.operationId));
 
   if (manifest.imagesExcluded) {
@@ -134,8 +188,8 @@ export async function validateBackupEnvelope(
         createBackupValidationIssue(
           'BACKUP_IMAGES_EXCLUDED_WITH_BINARIES',
           'images',
-          'Si imagesExcluded=true, el backup no puede incluir blobs de imágenes.'
-        )
+          'Si imagesExcluded=true, el respaldo no puede incluir blobs de imágenes.',
+        ),
       );
     }
 
@@ -144,8 +198,8 @@ export async function validateBackupEnvelope(
         createBackupValidationIssue(
           'BACKUP_IMAGES_EXCLUDED_WITH_REFERENCES',
           'offlineState',
-          'Si imagesExcluded=true, el estado offline no puede conservar referencias ANIMAL_IMAGE.'
-        )
+          'Si imagesExcluded=true, el estado sin conexión no puede conservar referencias ANIMAL_IMAGE.',
+        ),
       );
     }
 
@@ -154,8 +208,8 @@ export async function validateBackupEnvelope(
         createBackupValidationIssue(
           'BACKUP_IMAGES_EXCLUDED_WITH_INTEGRITY_LINKS',
           'integrity.imageOperationIds',
-          'Si imagesExcluded=true, integrity.imageOperationIds debe quedar vacío.'
-        )
+          'Si imagesExcluded=true, integrity.imageOperationIds debe quedar vacío.',
+        ),
       );
     }
   } else {
@@ -165,8 +219,8 @@ export async function validateBackupEnvelope(
           createBackupValidationIssue(
             'BACKUP_IMAGE_REFERENCE_MISSING',
             `images.${operationId}`,
-            `Falta el binario para la referencia de imagen ${operationId}.`
-          )
+            `Falta el binario para la referencia de imagen ${operationId}.`,
+          ),
         );
       }
     }
@@ -177,8 +231,8 @@ export async function validateBackupEnvelope(
           createBackupValidationIssue(
             'BACKUP_IMAGE_INTEGRITY_REFERENCE_ORPHAN',
             'integrity.imageOperationIds',
-            `La referencia ${operationId} no existe en el offlineState restaurable.`
-          )
+            `La referencia ${operationId} no existe en el offlineState restaurable.`,
+          ),
         );
       }
     }
@@ -189,19 +243,25 @@ export async function validateBackupEnvelope(
           createBackupValidationIssue(
             'BACKUP_IMAGE_REFERENCE_INVALID',
             `images.${image.operationId || 'unknown'}`,
-            'Cada imagen debe apuntar a un operationId ANIMAL_IMAGE válido dentro del backup.'
-          )
+            'Cada imagen debe apuntar a un operationId ANIMAL_IMAGE válido dentro del respaldo.',
+          ),
         );
         continue;
       }
 
-      if (!image.mimeType || !image.base64 || !Number.isInteger(image.sizeBytes) || image.sizeBytes < 0 || !isIsoDate(image.capturedAt)) {
+      if (
+        !image.mimeType ||
+        !image.base64 ||
+        !Number.isInteger(image.sizeBytes) ||
+        image.sizeBytes < 0 ||
+        !isIsoDate(image.capturedAt)
+      ) {
         issues.push(
           createBackupValidationIssue(
             'BACKUP_IMAGE_ENTRY_INVALID',
             `images.${image.operationId}`,
-            'Cada imagen debe incluir mimeType, sizeBytes, capturedAt y base64 válidos.'
-          )
+            'Cada imagen debe incluir mimeType, sizeBytes, capturedAt y base64 válidos.',
+          ),
         );
         continue;
       }
@@ -212,8 +272,8 @@ export async function validateBackupEnvelope(
           createBackupValidationIssue(
             'BACKUP_IMAGE_SIZE_MISMATCH',
             `images.${image.operationId}.sizeBytes`,
-            `La imagen ${image.operationId} no coincide entre sizeBytes y el blob serializado.`
-          )
+            `La imagen ${image.operationId} no coincide entre sizeBytes y el blob serializado.`,
+          ),
         );
       }
 
@@ -224,8 +284,8 @@ export async function validateBackupEnvelope(
           createBackupValidationIssue(
             'BACKUP_IMAGE_CHECKSUM_MISMATCH',
             `images.${image.operationId}`,
-            `La imagen ${image.operationId} no coincide con el checksum declarado en offlineState.`
-          )
+            `La imagen ${image.operationId} no coincide con el checksum declarado en offlineState.`,
+          ),
         );
       }
     }
@@ -242,21 +302,26 @@ export async function validateBackupEnvelope(
   };
 
   if (integrity.digest) {
-    const digestSource = serializeBackupEnvelopeCanonical(cloneBackupEnvelopeForDigest(normalizedEnvelope));
+    const digestSource = serializeBackupEnvelopeCanonical(
+      cloneBackupEnvelopeForDigest(normalizedEnvelope),
+    );
     const computedDigest = await computeSha256Hex(digestSource);
     if (computedDigest !== integrity.digest) {
       issues.push(
         createBackupValidationIssue(
           'BACKUP_DIGEST_MISMATCH',
           'integrity.digest',
-          'El digest SHA-256 del backup no coincide con el contenido real del archivo.'
-        )
+          'El digest SHA-256 del respaldo no coincide con el contenido real del archivo.',
+        ),
       );
     }
   }
 
   if (issues.length > 0) {
-    throw new BackupValidationError('El archivo de backup no pasó la validación fuerte previa al restore.', issues);
+    throw new BackupValidationError(
+      'El archivo de respaldo no pasó la validación fuerte previa a la restauración.',
+      issues,
+    );
   }
 
   return normalizedEnvelope;
@@ -321,7 +386,10 @@ function collectExpectedImageChecksums(state: PersistedOfflineState) {
     .filter((operation) => operation.entityType === 'ANIMAL_IMAGE')
     .forEach((operation) => {
       const payload = operation.payload as Record<string, unknown>;
-      saveChecksum(payload['operationId'] ?? payload['binaryRef'] ?? operation.operationId, payload);
+      saveChecksum(
+        payload['operationId'] ?? payload['binaryRef'] ?? operation.operationId,
+        payload,
+      );
     });
 
   state.snapshots

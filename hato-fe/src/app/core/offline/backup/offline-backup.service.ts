@@ -2,10 +2,10 @@ import { inject, Injectable } from '@angular/core';
 import { AuthService } from '../../auth/data-access/auth.service';
 import {
   DEFAULT_OFFLINE_IMAGE_BINARY_STORE,
-  OfflineImageBinaryStoreService,
+  type OfflineImageBinaryStoreService,
 } from '../offline-image-binary-store.service';
 import { CURRENT_OFFLINE_SCHEMA_VERSION } from '../offline-store.migrations';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../offline-store.service';
+import { DEFAULT_OFFLINE_STORE_SERVICE, type OfflineStoreService } from '../offline-store.service';
 import type { PersistedOfflineState } from '../offline-types';
 import {
   BACKUP_DIGEST_ALGORITHM,
@@ -39,7 +39,7 @@ export class OfflineBackupService {
       now: () => string;
       runtimeRehydrator: () => Promise<void>;
       downloadJson: (fileName: string, json: string) => void;
-    }>
+    }>,
   ) {
     this.store = dependencies.store ?? this.store;
     this.imageBinaryStore = dependencies.imageBinaryStore ?? this.imageBinaryStore;
@@ -49,9 +49,15 @@ export class OfflineBackupService {
     this.downloadJson = dependencies.downloadJson ?? this.downloadJson;
   }
 
-  async exportBackup(options: BackupExportOptions = { includeImages: true }): Promise<BackupEnvelopeV1> {
-    const sourceState = await this.store.getStateSnapshotForBackup({ excludeSessionSecurity: true });
-    const offlineState = options.includeImages ? sourceState : stripAnimalImageArtifacts(sourceState);
+  async exportBackup(
+    options: BackupExportOptions = { includeImages: true },
+  ): Promise<BackupEnvelopeV1> {
+    const sourceState = await this.store.getStateSnapshotForBackup({
+      excludeSessionSecurity: true,
+    });
+    const offlineState = options.includeImages
+      ? sourceState
+      : stripAnimalImageArtifacts(sourceState);
     const images = options.includeImages ? await this.imageBinaryStore.listForBackup() : [];
     const envelope: BackupEnvelopeV1 = {
       backupVersion: BACKUP_VERSION_V1,
@@ -70,7 +76,9 @@ export class OfflineBackupService {
       },
     };
 
-    const digest = await computeSha256Hex(serializeBackupEnvelopeCanonical(cloneBackupEnvelopeForDigest(envelope)));
+    const digest = await computeSha256Hex(
+      serializeBackupEnvelopeCanonical(cloneBackupEnvelopeForDigest(envelope)),
+    );
     return {
       ...envelope,
       integrity: {
@@ -101,7 +109,7 @@ export class OfflineBackupService {
       throw new BackupImportError(
         'BACKUP_FILE_CORRUPT',
         'No pudimos leer el archivo. Verificá que sea un JSON exportado desde Hato.',
-        error
+        error,
       );
     }
   }
@@ -114,7 +122,7 @@ export class OfflineBackupService {
       throw new BackupImportError(
         'BACKUP_FILE_CORRUPT',
         'El archivo no contiene JSON válido. Exportalo nuevamente antes de restaurar.',
-        error
+        error,
       );
     }
 
@@ -126,7 +134,9 @@ export class OfflineBackupService {
       currentSchemaVersion: CURRENT_OFFLINE_SCHEMA_VERSION,
     });
 
-    const previousState = await this.store.getStateSnapshotForBackup({ excludeSessionSecurity: false });
+    const previousState = await this.store.getStateSnapshotForBackup({
+      excludeSessionSecurity: false,
+    });
     const previousImages = await this.imageBinaryStore.listForBackup();
 
     try {
@@ -145,8 +155,8 @@ export class OfflineBackupService {
       await this.imageBinaryStore.restoreBinarySetTx(previousImages);
       throw new BackupImportError(
         'BACKUP_RESTORE_FAILED',
-        'No pudimos restaurar el backup sin dejar estado parcial. Se recuperó el estado previo del dispositivo.',
-        error
+        'No pudimos restaurar el respaldo sin dejar estado parcial. Se recuperó el estado previo del dispositivo.',
+        error,
       );
     }
   }
@@ -180,7 +190,9 @@ function stripAnimalImageArtifacts(state: PersistedOfflineState): PersistedOffli
     syncState: {
       ...state.syncState,
       checkpoints: Object.fromEntries(
-        Object.entries(state.syncState.checkpoints).filter(([entityType, checkpoint]) => entityType !== 'ANIMAL_IMAGE' && !!checkpoint)
+        Object.entries(state.syncState.checkpoints).filter(
+          ([entityType, checkpoint]) => entityType !== 'ANIMAL_IMAGE' && !!checkpoint,
+        ),
       ),
     },
   };

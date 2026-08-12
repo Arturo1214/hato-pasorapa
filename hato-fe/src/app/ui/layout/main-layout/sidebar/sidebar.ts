@@ -31,7 +31,7 @@ interface StaticMenuItem {
 
 const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Panel',
     icon: 'space_dashboard',
     route: '/admin/dashboard',
     description: 'Resumen administrativo para seguir métricas y prioridades del establecimiento.',
@@ -70,7 +70,7 @@ const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
 
 const GANADERO_MENU_ITEMS: StaticMenuItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Panel',
     icon: 'space_dashboard',
     route: '/ganadero/dashboard',
     description: 'Resumen diario del trabajo de campo con foco en tus animales y alertas.',
@@ -127,9 +127,9 @@ export class SidebarComponent {
   readonly navigate = output<void>();
 
   readonly menuItems = computed(() =>
-    (this.authService.currentUser()?.role === 'ADMIN' ? ADMIN_MENU_ITEMS : GANADERO_MENU_ITEMS).map((item) =>
-      this.enrichMenuItem(item)
-    )
+    (this.authService.currentUser()?.role === 'ADMIN' ? ADMIN_MENU_ITEMS : GANADERO_MENU_ITEMS).map(
+      (item) => this.enrichMenuItem(item),
+    ),
   );
 
   private enrichMenuItem(item: StaticMenuItem): MenuItem {

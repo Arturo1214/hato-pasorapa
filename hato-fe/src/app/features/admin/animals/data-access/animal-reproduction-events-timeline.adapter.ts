@@ -105,7 +105,7 @@ function resolveReproductionSyncMessage(status: AnimalOfflineUiStatus, operation
     return operation?.lastErrorMessage ?? 'No se pudo sincronizar.';
   }
   if (status === 'pending' || status === 'local_only') {
-    return 'Pendiente de sync.';
+    return 'Pendiente de sincronización.';
   }
   return null;
 }

@@ -2,7 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
 import { ChartsLazyComponent } from '../charts/charts-lazy.component';
-import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admin-dashboard.service';
+import {
+  type AdminDashboardMetrics,
+  AdminDashboardService,
+} from './data-access/admin-dashboard.service';
 
 @Component({
   selector: 'app-admin-dashboard-page',
@@ -18,7 +21,7 @@ import { AdminDashboardMetrics, AdminDashboardService } from './data-access/admi
           <app-charts-lazy [metrics]="metrics()!" />
         } @placeholder {
           <mat-card appearance="outlined">
-            <p>Preparando gráficos del dashboard…</p>
+            <p>Preparando gráficos del panel…</p>
           </mat-card>
         }
       }
@@ -48,7 +51,7 @@ export class AdminDashboardPageComponent {
   constructor() {
     this.dashboardService.loadMetrics().subscribe({
       next: (metrics) => this.metrics.set(metrics),
-      error: () => this.errorMessage.set('No pudimos cargar el dashboard administrativo.'),
+      error: () => this.errorMessage.set('No pudimos cargar el panel administrativo.'),
     });
   }
 }

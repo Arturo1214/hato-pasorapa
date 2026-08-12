@@ -3,7 +3,9 @@ package bo.pasorapa.hato.service.page;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class Sort {
 
     public enum Direction {
@@ -42,6 +44,7 @@ public class Sort {
         return Objects.hash(orders);
     }
 
+    @RegisterForReflection
     public static class Order {
 
         private final Direction direction;

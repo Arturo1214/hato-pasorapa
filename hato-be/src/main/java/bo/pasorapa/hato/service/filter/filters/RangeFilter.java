@@ -2,7 +2,9 @@ package bo.pasorapa.hato.service.filter.filters;
 
 import java.io.Serializable;
 import java.util.Objects;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class RangeFilter<T extends Comparable<? super T> & Serializable> extends Filter<T> {
 
     private T greaterThan;

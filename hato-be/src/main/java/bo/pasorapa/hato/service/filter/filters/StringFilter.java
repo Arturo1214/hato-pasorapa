@@ -1,7 +1,9 @@
 package bo.pasorapa.hato.service.filter.filters;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import java.util.Objects;
 
+@RegisterForReflection
 public class StringFilter extends Filter<String> {
 
     private String contains;
@@ -36,4 +38,3 @@ public class StringFilter extends Filter<String> {
         return Objects.hash(super.hashCode(), contains);
     }
 }
-

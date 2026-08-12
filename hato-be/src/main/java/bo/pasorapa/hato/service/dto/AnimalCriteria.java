@@ -7,7 +7,9 @@ import bo.pasorapa.hato.service.filter.filters.LocalDateFilter;
 import bo.pasorapa.hato.service.filter.filters.LongFilter;
 import bo.pasorapa.hato.service.filter.filters.StringFilter;
 import bo.pasorapa.hato.service.filter.filters.UuidFilter;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class AnimalCriteria {
 
     private LongFilter id;

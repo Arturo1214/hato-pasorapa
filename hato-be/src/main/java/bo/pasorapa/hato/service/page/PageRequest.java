@@ -1,7 +1,9 @@
 package bo.pasorapa.hato.service.page;
 
 import java.util.Objects;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class PageRequest implements Pageable {
 
     private final int pageNumber;

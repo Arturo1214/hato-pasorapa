@@ -1,12 +1,15 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, Inject, Injectable, Optional, signal } from '@angular/core';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
-import {
-  type CalendarAlertPreferences,
-  type CalendarDerivedAgendaItem,
-  type CalendarDerivedState,
-  type CalendarRange,
+import type {
+  CalendarAlertPreferences,
+  CalendarDerivedAgendaItem,
+  CalendarDerivedState,
+  CalendarRange,
 } from '../../../../core/offline/offline-types';
-import { DEFAULT_OFFLINE_STORE_SERVICE, OfflineStoreService } from '../../../../core/offline/offline-store.service';
+import {
+  DEFAULT_OFFLINE_STORE_SERVICE,
+  type OfflineStoreService,
+} from '../../../../core/offline/offline-store.service';
 import { CALENDAR_ALERTS_REFRESH_EVENT } from '../../../../core/offline/sync-orchestrator.service';
 import { projectCalendarAlerts, selectCalendarTimeline } from './calendar-alerts-projection';
 import { BrowserNotificationGateway } from './browser-notification.gateway';
@@ -16,13 +19,21 @@ import {
   isCalendarStateStale,
 } from './calendar-alerts.utils';
 
-export type CalendarRefreshReason = 'startup' | 'post-sync' | 'prefs-change' | 'manual' | 'stale-guard';
+export type CalendarRefreshReason =
+  | 'startup'
+  | 'post-sync'
+  | 'prefs-change'
+  | 'manual'
+  | 'stale-guard';
 
 @Injectable({ providedIn: 'root' })
 export class CalendarAlertsStore {
   // V1 exclusions: no push remota, no motor experto y sin estado compartido entre dispositivos.
   private offlineStore: OfflineStoreService = DEFAULT_OFFLINE_STORE_SERVICE;
-  private authService: Pick<AuthService, 'currentUser'> = { currentUser: () => null } as Pick<AuthService, 'currentUser'>;
+  private authService: Pick<AuthService, 'currentUser'> = { currentUser: () => null } as Pick<
+    AuthService,
+    'currentUser'
+  >;
   private gateway = new BrowserNotificationGateway();
   private now: () => string = () => new Date().toISOString();
   private windowRef: Pick<Window, 'addEventListener'> | undefined = globalThis.window;
@@ -49,6 +60,7 @@ export class CalendarAlertsStore {
   readonly preferences = computed(() => this.state().preferences);
   readonly windows = computed(() => this.state().windows);
   readonly counts = computed(() => this.state().counts);
+  readonly agendaItems = computed(() => this.state().items);
   readonly totalPending = computed(() => this.state().counts.total);
   readonly badgeSeverity = computed(() => {
     const counts = this.state().counts.byStatus;
@@ -60,11 +72,15 @@ export class CalendarAlertsStore {
     }
     return counts.upcoming > 0 ? ('upcoming' as const) : null;
   });
-  readonly timeline = computed(() => selectCalendarTimeline(this.state(), this.activeRange(), this.now()));
-  readonly stale = computed(() => isCalendarStateStale(this.state().lastComputedAt, this.now(), CALENDAR_STALE_TIME_MS));
+  readonly timeline = computed(() =>
+    selectCalendarTimeline(this.state(), this.activeRange(), this.now()),
+  );
+  readonly stale = computed(() =>
+    isCalendarStateStale(this.state().lastComputedAt, this.now(), CALENDAR_STALE_TIME_MS),
+  );
   readonly inAppAlerts = this.inAppAlertsState.asReadonly();
 
-  constructor(authService?: AuthService) {
+  constructor(@Optional() @Inject(AuthService) authService: AuthService | null = null) {
     this.authService = authService ?? this.authService;
   }
 
@@ -75,7 +91,7 @@ export class CalendarAlertsStore {
       gateway: BrowserNotificationGateway;
       now: () => string;
       windowRef: Pick<Window, 'addEventListener'>;
-    }>
+    }>,
   ) {
     this.offlineStore = dependencies.offlineStore ?? this.offlineStore;
     this.authService = dependencies.authService ?? this.authService;
@@ -137,17 +153,28 @@ export class CalendarAlertsStore {
     this.errorState.set(null);
 
     try {
-      const animals = this.filterAnimalsForCurrentGanadero(await this.offlineStore.listSnapshots('ANIMAL'));
+      const animals = this.filterAnimalsForCurrentGanadero(
+        await this.offlineStore.listSnapshots('ANIMAL'),
+      );
       const allowedAnimalUuids = new Set(animals.map((snapshot) => snapshot.entityId));
       const state = projectCalendarAlerts({
         now: this.now(),
         preferences: this.state().preferences,
         animals,
-        animalEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_EVENT'), allowedAnimalUuids),
-        healthEvents: this.filterClosedGlobalVetVisitChains(
-          this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'), allowedAnimalUuids)
+        animalEvents: this.filterAnimalScopedSnapshots(
+          await this.offlineStore.listSnapshots('ANIMAL_EVENT'),
+          allowedAnimalUuids,
         ),
-        reproductionEvents: this.filterAnimalScopedSnapshots(await this.offlineStore.listSnapshots('ANIMAL_REPRODUCTION_EVENT'), allowedAnimalUuids),
+        healthEvents: this.filterClosedGlobalVetVisitChains(
+          this.filterAnimalScopedSnapshots(
+            await this.offlineStore.listSnapshots('ANIMAL_HEALTH_EVENT'),
+            allowedAnimalUuids,
+          ),
+        ),
+        reproductionEvents: this.filterAnimalScopedSnapshots(
+          await this.offlineStore.listSnapshots('ANIMAL_REPRODUCTION_EVENT'),
+          allowedAnimalUuids,
+        ),
       });
 
       this.state.set(state);
@@ -156,7 +183,7 @@ export class CalendarAlertsStore {
 
       const notifications = await this.gateway.dispatchAlerts(
         [...state.windows.overdue, ...state.windows.due_today, ...state.windows.upcoming],
-        state.preferences
+        state.preferences,
       );
       this.inAppAlertsState.set(notifications.inAppItems);
     } catch {
@@ -177,7 +204,9 @@ export class CalendarAlertsStore {
     await this.rebuild('prefs-change');
   }
 
-  private filterAnimalsForCurrentGanadero(animals: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>) {
+  private filterAnimalsForCurrentGanadero(
+    animals: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>,
+  ) {
     const currentUser = this.authService.currentUser();
     if (currentUser?.role !== 'GANADERO') {
       return animals;
@@ -195,7 +224,7 @@ export class CalendarAlertsStore {
 
   private filterAnimalScopedSnapshots(
     snapshots: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>,
-    allowedAnimalUuids: Set<string>
+    allowedAnimalUuids: Set<string>,
   ) {
     const currentUser = this.authService.currentUser();
     if (currentUser?.role !== 'GANADERO') {
@@ -208,20 +237,34 @@ export class CalendarAlertsStore {
     });
   }
 
-  private filterClosedGlobalVetVisitChains(snapshots: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>) {
-    const globalVisitsById = new Map<string, Awaited<ReturnType<OfflineStoreService['listSnapshots']>>>();
+  private filterClosedGlobalVetVisitChains(
+    snapshots: Awaited<ReturnType<OfflineStoreService['listSnapshots']>>,
+  ) {
+    const globalVisitsById = new Map<
+      string,
+      Awaited<ReturnType<OfflineStoreService['listSnapshots']>>
+    >();
     for (const snapshot of snapshots) {
       const visit = readGlobalVisitBlock(snapshot.payload);
       if (!visit?.visitId) {
         continue;
       }
-      globalVisitsById.set(visit.visitId, [...(globalVisitsById.get(visit.visitId) ?? []), snapshot]);
+      globalVisitsById.set(visit.visitId, [
+        ...(globalVisitsById.get(visit.visitId) ?? []),
+        snapshot,
+      ]);
     }
 
     const closedVisitIds = new Set(
       [...globalVisitsById.entries()]
-        .filter(([, chain]) => chain.length > 0 && chain.every((snapshot) => isTerminalVisitStatus(readGlobalVisitBlock(snapshot.payload)?.status)))
-        .map(([visitId]) => visitId)
+        .filter(
+          ([, chain]) =>
+            chain.length > 0 &&
+            chain.every((snapshot) =>
+              isTerminalVisitStatus(readGlobalVisitBlock(snapshot.payload)?.status),
+            ),
+        )
+        .map(([visitId]) => visitId),
     );
 
     return snapshots.filter((snapshot) => {
@@ -251,5 +294,10 @@ function readGlobalVisitBlock(payload: Record<string, unknown>) {
 }
 
 function isTerminalVisitStatus(status: unknown) {
-  return status === 'FINALIZED' || status === 'CANCELED' || status === 'FINALIZADA' || status === 'CANCELADA';
+  return (
+    status === 'FINALIZED' ||
+    status === 'CANCELED' ||
+    status === 'FINALIZADA' ||
+    status === 'CANCELADA'
+  );
 }

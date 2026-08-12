@@ -15,61 +15,140 @@
     }
   </mat-card>
 
-  <mat-card appearance="outlined">
-    <div class="toolbar-row">
-      <div class="toolbar-group">
-        <button mat-stroked-button type="button" (click)="useRange('today')">Día</button>
-        <button mat-stroked-button type="button" (click)="useRange('next_7_days')">Semana</button>
-        <button mat-stroked-button type="button" (click)="useRange('next_30_days')">Mes</button>
+  <mat-card appearance="outlined" class="calendar-card">
+    <div class="calendar-toolbar">
+      <div>
+        <p class="eyebrow">Vista mensual</p>
+        <h2>{{ monthView().monthLabel }}</h2>
       </div>
-      <button mat-flat-button color="primary" type="button" (click)="refresh()">Refresh manual</button>
+      <div class="toolbar-group" aria-label="Navegación de calendario">
+        <button mat-stroked-button type="button" (click)="previousMonth()">Anterior</button>
+        <button mat-stroked-button type="button" (click)="goToToday()">Hoy</button>
+        <button mat-stroked-button type="button" (click)="nextMonth()">Siguiente</button>
+      </div>
     </div>
 
-    <div class="toolbar-row">
-      <div class="toolbar-group">
-        <button mat-button type="button" (click)="setHorizon(1)">Horizonte 1d</button>
-        <button mat-button type="button" (click)="setHorizon(3)">Horizonte 3d</button>
-        <button mat-button type="button" (click)="setHorizon(7)">Horizonte 7d</button>
-      </div>
-      <div class="toolbar-group">
-        <button mat-button type="button" (click)="toggleNotifications()">
-          {{ preferences().notificationsEnabled ? 'Browser notifications ON' : 'Browser notifications OFF' }}
+    <div class="view-toggle" aria-label="Vista móvil de calendario">
+      <button
+        mat-stroked-button
+        type="button"
+        [class.active]="mobileViewMode() === 'month'"
+        (click)="setMobileViewMode('month')"
+      >
+        Mes
+      </button>
+      <button
+        mat-stroked-button
+        type="button"
+        [class.active]="mobileViewMode() === 'agenda'"
+        (click)="setMobileViewMode('agenda')"
+      >
+        Agenda del mes
+      </button>
+    </div>
+
+    <div
+      class="calendar-grid"
+      [class.mobile-hidden]="mobileViewMode() === 'agenda'"
+      role="grid"
+      aria-label="Calendario mensual"
+    >
+      @for (weekday of weekdayLabels; track weekday) {
+        <div class="weekday" role="columnheader">{{ weekday }}</div>
+      }
+
+      @for (day of calendarDays(); track day.date) {
+        <button
+          class="day-cell"
+          type="button"
+          role="gridcell"
+          [class.outside-month]="!day.inCurrentMonth"
+          [class.today]="day.isToday"
+          [class.selected]="day.isSelected"
+          [class.has-items]="day.counts.total > 0"
+          [attr.aria-label]="'Día ' + day.date + ', ' + day.counts.total + ' ítems'"
+          (click)="selectDay(day.date)"
+        >
+          <span class="day-number">{{ day.dayOfMonth }}</span>
+          @if (day.counts.total > 0) {
+            <span class="day-count">{{ day.counts.total }}</span>
+            <span class="day-dots" aria-hidden="true">
+              @if (day.counts.overdue > 0) {
+                <span class="dot overdue"></span>
+              }
+              @if (day.counts.dueToday > 0) {
+                <span class="dot due-today"></span>
+              }
+              @if (day.counts.upcoming > 0) {
+                <span class="dot upcoming"></span>
+              }
+            </span>
+          }
         </button>
-        <button mat-button type="button" (click)="snooze()">Silenciar local 3h</button>
-        <button mat-button type="button" (click)="clearSnooze()">Quitar silencio</button>
-      </div>
+      }
+    </div>
+
+    <div class="agenda-month" [class.mobile-visible]="mobileViewMode() === 'agenda'">
+      @if (agendaGroups().length === 0) {
+        <p class="state-message">No hay agenda para este mes.</p>
+      } @else {
+        @for (group of agendaGroups(); track group.date) {
+          <section class="agenda-group">
+            <h3>{{ group.label }}</h3>
+            <div class="agenda-list">
+              @for (item of group.items; track item.id) {
+                <article class="agenda-item" [class.overdue]="item.status === 'overdue'">
+                  <div>
+                    <strong>{{ item.title }}</strong>
+                    <p>{{ item.detail || item.animalLabel || item.animalUuid }}</p>
+                  </div>
+                  <div class="agenda-meta">
+                    <span>{{ itemSourceLabel(item) }}</span>
+                    <span>{{ itemStatusLabel(item) }}</span>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+      }
     </div>
   </mat-card>
 
-  <mat-card appearance="outlined" class="table-card">
-    <h2>Timeline {{ range() === 'today' ? 'día' : range() === 'next_7_days' ? 'semana' : 'mes' }}</h2>
+  <mat-card appearance="outlined" class="detail-card" [class.open]="dayDetailOpen()">
+    <div class="detail-header">
+      <div>
+        <p class="eyebrow">Día seleccionado</p>
+        <h2>{{ selectedDay()?.date || 'Sin fecha' }}</h2>
+      </div>
+      <div class="detail-actions">
+        <strong>{{ selectedDayItems().length }} ítems</strong>
+        <button mat-flat-button color="primary" type="button" (click)="openScheduleVisitDialog()">
+          Agendar visita
+        </button>
+        <button mat-button type="button" class="detail-close" (click)="closeDayDetail()">
+          Cerrar
+        </button>
+      </div>
+    </div>
 
-    @if (isEmpty()) {
-      <p class="state-message">No hay ítems visibles para la ventana seleccionada.</p>
+    @if (selectedDayItems().length === 0) {
+      <p class="state-message">No hay agenda para este día.</p>
     } @else {
-      <app-data-table
-        [columns]="timelineColumns"
-        [data]="timelineRows()"
-        [filters]="timelineFilters()"
-        [loading]="loading()"
-        emptyMessage="No hay ítems visibles para la ventana seleccionada."
-        (filterChange)="timelineFilters.set($event)"
-      />
-    }
-  </mat-card>
-
-  <mat-card appearance="outlined" class="table-card">
-    <h2>Alertas in-app</h2>
-    @if (inAppAlerts().length === 0) {
-      <p class="state-message">No hay alertas in-app activas.</p>
-    } @else {
-      <app-data-table
-        [columns]="inAppAlertColumns"
-        [data]="inAppAlertRows()"
-        [filters]="inAppAlertFilters()"
-        emptyMessage="No hay alertas in-app activas."
-        (filterChange)="inAppAlertFilters.set($event)"
-      />
+      <div class="agenda-list">
+        @for (item of selectedDayItems(); track item.id) {
+          <article class="agenda-item" [class.overdue]="item.status === 'overdue'">
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.detail || item.animalLabel || item.animalUuid }}</p>
+            </div>
+            <div class="agenda-meta">
+              <span>{{ itemSourceLabel(item) }}</span>
+              <span>{{ itemStatusLabel(item) }}</span>
+            </div>
+          </article>
+        }
+      </div>
     }
   </mat-card>
 </section>

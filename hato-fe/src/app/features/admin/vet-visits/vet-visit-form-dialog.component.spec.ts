@@ -2,8 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
-import { AnimalsService, ANIMAL_CATEGORY, ANIMAL_SEX, type AnimalItem } from '../animals/data-access/animals.service';
-import { DateTimeClock, VetVisitFormDialogComponent, type VetVisitDialogData, type VetVisitDialogResult } from './vet-visit-form-dialog.component';
+import {
+  AnimalsService,
+  ANIMAL_CATEGORY,
+  ANIMAL_SEX,
+  type AnimalItem,
+} from '../animals/data-access/animals.service';
+import {
+  DateTimeClock,
+  VetVisitFormDialogComponent,
+  type VetVisitDialogData,
+  type VetVisitDialogResult,
+} from './vet-visit-form-dialog.component';
 
 describe('VetVisitFormDialogComponent', () => {
   const dialogRef = { close: vi.fn() };
@@ -75,6 +85,12 @@ describe('VetVisitFormDialogComponent', () => {
     );
   });
 
+  it('should prefill scheduled visit date from calendar selection', async () => {
+    const { component } = await configure([], { mode: 'GLOBAL', initialVisitDate: '2026-06-15' });
+
+    expect(component.form.controls.occurredAt.value).toEqual(new Date(2026, 5, 15));
+  });
+
   it('should show visit date only for scheduled creation and hide next control plus clinical decisions', async () => {
     const { fixture } = await configure();
 
@@ -90,7 +106,10 @@ describe('VetVisitFormDialogComponent', () => {
     const { fixture, component } = await configure();
 
     const text = fixture.nativeElement.textContent as string;
-    expect(component.creationModeOptions.map((option) => option.label)).toEqual(['Programada', 'Atendida inmediata']);
+    expect(component.creationModeOptions.map((option) => option.label)).toEqual([
+      'Programada',
+      'Atendida inmediata',
+    ]);
     expect(component.form.controls.creationMode.value).toBe('scheduled');
     expect(text).not.toContain('Estado');
     expect(text).not.toContain('Reprogramada');
@@ -110,11 +129,20 @@ describe('VetVisitFormDialogComponent', () => {
     });
     expect(component.form.valid).toBe(true);
 
-    component.form.patchValue({ creationMode: 'attendedNow', findings: '', attentionNotes: '', followUpChoice: null });
+    component.form.patchValue({
+      creationMode: 'attendedNow',
+      findings: '',
+      attentionNotes: '',
+      followUpChoice: null,
+    });
     component.form.updateValueAndValidity();
     expect(component.form.valid).toBe(false);
 
-    component.form.patchValue({ findings: 'Fiebre persistente', attentionNotes: 'Se aplicó tratamiento inmediato.', followUpChoice: 'finalize' });
+    component.form.patchValue({
+      findings: 'Fiebre persistente',
+      attentionNotes: 'Se aplicó tratamiento inmediato.',
+      followUpChoice: 'finalize',
+    });
     component.form.updateValueAndValidity();
     expect(component.form.valid).toBe(true);
   });
@@ -141,7 +169,9 @@ describe('VetVisitFormDialogComponent', () => {
     expect(text).not.toContain('Plan de tratamiento');
     expect(text).not.toContain('Agregar paso');
     expect(component.treatmentPlanControls()).toHaveLength(1);
-    expect(fixture.nativeElement.querySelector('input[type="number"][formControlName="cost"]')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('input[type="number"][formControlName="cost"]'),
+    ).toBeNull();
 
     component.form.controls.hasTreatment.setValue(true);
     fixture.detectChanges();
@@ -152,7 +182,10 @@ describe('VetVisitFormDialogComponent', () => {
   });
 
   it('should render attended-now creation with current moment and no visit date picker', async () => {
-    const { fixture, component } = await configure([], { mode: 'GLOBAL', creationMode: 'attendedNow' });
+    const { fixture, component } = await configure([], {
+      mode: 'GLOBAL',
+      creationMode: 'attendedNow',
+    });
 
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Hallazgos / descripción');
@@ -259,19 +292,21 @@ describe('VetVisitFormDialogComponent', () => {
       parentVisitId: null,
     });
 
-    expect(component.form.getRawValue()).toEqual(expect.objectContaining({
-      mode: 'GLOBAL',
-      animalUuid: null,
-      visitId: 'VISIT-GLOBAL',
-      status: 'ATTENDED',
-      occurredAt: '2026-05-01T10:00:00.000Z',
-      nextDueAt: '2026-05-08T10:00:00.000Z',
-      reason: 'Campaña anual',
-      veterinarianName: 'Dra. Luna',
-      veterinarianLicense: 'MV-1',
-      targetAnimalCount: 12,
-      parentVisitId: null,
-    }));
+    expect(component.form.getRawValue()).toEqual(
+      expect.objectContaining({
+        mode: 'GLOBAL',
+        animalUuid: null,
+        visitId: 'VISIT-GLOBAL',
+        status: 'ATTENDED',
+        occurredAt: '2026-05-01T10:00:00.000Z',
+        nextDueAt: '2026-05-08T10:00:00.000Z',
+        reason: 'Campaña anual',
+        veterinarianName: 'Dra. Luna',
+        veterinarianLicense: 'MV-1',
+        targetAnimalCount: 12,
+        parentVisitId: null,
+      }),
+    );
   });
 
   it('should add and remove dynamic treatment plan steps', async () => {
@@ -288,7 +323,10 @@ describe('VetVisitFormDialogComponent', () => {
 
     component.removeTreatmentPlanStep(1);
 
-    expect(component.treatmentPlanControls().map((control) => control.value)).toEqual(['', 'Controlar apetito']);
+    expect(component.treatmentPlanControls().map((control) => control.value)).toEqual([
+      '',
+      'Controlar apetito',
+    ]);
   });
 
   it('should submit attend mode with follow-up or finalize choice', async () => {
@@ -326,19 +364,28 @@ describe('VetVisitFormDialogComponent', () => {
     component.submit();
 
     expect(dialogRef.close).toHaveBeenCalledWith(
-      expect.objectContaining({ followUpChoice: 'finalize', nextDueAt: null } satisfies Partial<VetVisitDialogResult>),
+      expect.objectContaining({
+        followUpChoice: 'finalize',
+        nextDueAt: null,
+      } satisfies Partial<VetVisitDialogResult>),
     );
   });
 
   it('should require an animal in specific mode with an explicit Spanish validation message', async () => {
     const { component, fixture } = await configure();
 
-    component.form.patchValue({ mode: 'SPECIFIC', animalUuid: null, veterinarianName: 'Dra. Luna' });
+    component.form.patchValue({
+      mode: 'SPECIFIC',
+      animalUuid: null,
+      veterinarianName: 'Dra. Luna',
+    });
     component.submit();
     fixture.detectChanges();
 
     expect(dialogRef.close).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.textContent).toContain('Seleccioná el animal de la visita específica.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Seleccioná el animal de la visita específica.',
+    );
   });
 
   it('should show latest 10 active animals by default and filter autocomplete by arete, marca, or tatuaje', async () => {

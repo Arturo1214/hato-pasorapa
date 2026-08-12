@@ -1,45 +1,103 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
+import { of } from 'rxjs';
+import { AnimalsHealthEventsService } from '../animals/data-access/animals-health-events.service';
 import { CalendarPageComponent } from './calendar-page.component';
 import { CalendarAlertsStore } from './data-access/calendar-alerts.store';
 
 describe('CalendarPageComponent', () => {
   let fixture: ComponentFixture<CalendarPageComponent>;
   let fakeStore: ReturnType<typeof createFakeStore>;
+  let dialogOpen: ReturnType<typeof vi.fn>;
+  let createEvent: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     fakeStore = createFakeStore();
+    dialogOpen = vi.fn(() => ({ afterClosed: () => of(createVetVisitResult()) }));
+    createEvent = vi.fn(() => of({ message: 'Visita guardada' }));
 
     await TestBed.configureTestingModule({
       imports: [CalendarPageComponent],
-      providers: [{ provide: CalendarAlertsStore, useValue: fakeStore }],
+      providers: [
+        { provide: CalendarAlertsStore, useValue: fakeStore },
+        { provide: MatDialog, useValue: { open: dialogOpen } },
+        { provide: AnimalsHealthEventsService, useValue: { createEvent } },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(CalendarPageComponent);
     fixture.detectChanges();
   });
 
-  it('should switch day week and month timeline windows', async () => {
+  it('should render a visual month calendar and select agenda days', () => {
+    fixture.componentInstance.visibleMonth.set(new Date(2026, 3, 1));
+    fixture.componentInstance.selectDay('2026-04-28');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Vista mensual');
+    expect(fixture.nativeElement.textContent).toContain('1 ítems');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Vacunación');
+    expect(fixture.nativeElement.textContent).toContain('Día seleccionado');
+  });
+
+  it('should navigate between months and return to today', () => {
+    const initialMonth = fixture.componentInstance.monthView().monthKey;
+
+    fixture.componentInstance.nextMonth();
+    expect(fixture.componentInstance.monthView().monthKey).not.toBe(initialMonth);
+
+    fixture.componentInstance.previousMonth();
+    expect(fixture.componentInstance.monthView().monthKey).toBe(initialMonth);
+  });
+
+  it('should switch mobile month and agenda modes and close day detail', () => {
+    fixture.componentInstance.visibleMonth.set(new Date(2026, 3, 1));
+    fixture.componentInstance.selectDay('2026-04-28');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Agenda del mes');
+    expect(fixture.componentInstance.dayDetailOpen()).toBe(true);
+
+    fixture.componentInstance.setMobileViewMode('agenda');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Martes, 28 de abril');
     expect(fixture.nativeElement.textContent).toContain('Vacunación');
 
-    await fixture.componentInstance.useRange('next_7_days');
+    fixture.componentInstance.closeDayDetail();
     fixture.detectChanges();
-    expect(fakeStore.setRange).toHaveBeenCalledWith('next_7_days');
 
-    await fixture.componentInstance.useRange('next_30_days');
-    fixture.detectChanges();
-    expect(fakeStore.setRange).toHaveBeenCalledWith('next_30_days');
+    expect(fixture.componentInstance.dayDetailOpen()).toBe(false);
+  });
+
+  it('should open the vet visit dialog for the selected calendar date', () => {
+    fixture.componentInstance.selectDay('2026-06-15');
+
+    fixture.componentInstance.openScheduleVisitDialog();
+
+    expect(dialogOpen).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        data: expect.objectContaining({ initialVisitDate: '2026-06-15' }),
+      }),
+    );
+    expect(createEvent).toHaveBeenCalled();
+    expect(fakeStore.rebuild).toHaveBeenCalledWith('manual');
   });
 
   it('should render loading stale and empty states from the store', () => {
     fakeStore.loadingState.set(false);
     fakeStore.timelineState.set([]);
+    fakeStore.agendaItemsState.set([]);
     fakeStore.staleState.set(true);
     fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('La agenda estaba stale');
-    expect(text).toContain('No hay ítems visibles');
+    expect(text).toContain('No hay agenda para este día');
   });
 
   it('should render loading state while a recomputation is running', () => {
@@ -49,23 +107,35 @@ describe('CalendarPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Actualizando agenda local');
   });
 
-  it('should trigger manual refresh and allow editing reminder preferences', async () => {
-    await fixture.componentInstance.refresh();
-    await fixture.componentInstance.setHorizon(7);
-    await fixture.componentInstance.snooze();
+  it('should not render legacy alert preference controls or in-app alert table', () => {
+    fixture.detectChanges();
 
-    expect(fakeStore.rebuild).toHaveBeenCalledWith('manual');
-    expect(fakeStore.setHorizonDays).toHaveBeenCalledWith(7);
-    expect(fakeStore.snooze).toHaveBeenCalledTimes(1);
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Horizonte 1d');
+    expect(text).not.toContain('Browser notifications');
+    expect(text).not.toContain('Alertas in-app');
   });
 });
 
+function createVetVisitResult() {
+  return {
+    mode: 'GLOBAL' as const,
+    creationMode: 'scheduled' as const,
+    animalUuid: null,
+    visitId: 'visit-1',
+    status: 'PENDING' as const,
+    occurredAt: '2026-06-15T00:00:00.000Z',
+    nextDueAt: null,
+    notes: null,
+    reason: 'Control preventivo',
+    veterinarianName: 'Dra. Luna',
+    veterinarianLicense: null,
+    targetAnimalCount: null,
+    parentVisitId: null,
+  };
+}
+
 function createFakeStore() {
-  const preferencesState = signal<{
-    horizonDays: 1 | 3 | 7;
-    snoozedUntil: string | null;
-    notificationsEnabled: boolean;
-  }>({ horizonDays: 3, snoozedUntil: null, notificationsEnabled: false });
   const countsState = signal({ total: 1, byStatus: { upcoming: 1, due_today: 0, overdue: 0 } });
   const timelineState = signal([
     {
@@ -80,7 +150,7 @@ function createFakeStore() {
       sortKey: 'ANIMAL_HEALTH_EVENT:health-1',
     },
   ]);
-  const inAppAlertsState = signal(timelineState());
+  const agendaItemsState = signal(timelineState());
   const staleState = signal(false);
   const loadingState = signal(false);
   const rangeState = signal<'today' | 'next_7_days' | 'next_30_days'>('today');
@@ -88,23 +158,16 @@ function createFakeStore() {
   return {
     counts: countsState.asReadonly(),
     timeline: timelineState.asReadonly(),
+    agendaItems: agendaItemsState.asReadonly(),
     stale: staleState.asReadonly(),
     loading: loadingState.asReadonly(),
     range: rangeState.asReadonly(),
-    preferences: preferencesState.asReadonly(),
-    inAppAlerts: inAppAlertsState.asReadonly(),
     ensureFresh: vi.fn(async () => undefined),
     setRange: vi.fn((range: 'today' | 'next_7_days' | 'next_30_days') => rangeState.set(range)),
     rebuild: vi.fn(async () => undefined),
-    setHorizonDays: vi.fn(async (days: 1 | 3 | 7) => preferencesState.update((current) => ({ ...current, horizonDays: days }))),
-    snooze: vi.fn(async () => undefined),
-    clearSnooze: vi.fn(async () => undefined),
-    setNotificationsEnabled: vi.fn(async (enabled: boolean) =>
-      preferencesState.update((current) => ({ ...current, notificationsEnabled: enabled }))
-    ),
-    requestBrowserPermission: vi.fn(async () => 'default'),
     loadingState,
     staleState,
     timelineState,
+    agendaItemsState,
   };
 }

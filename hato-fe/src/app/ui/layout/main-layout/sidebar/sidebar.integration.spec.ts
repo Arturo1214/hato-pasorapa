@@ -1,6 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { AuthService } from '../../../../core/auth/data-access/auth.service';
@@ -23,9 +23,15 @@ describe('SidebarComponent integration', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         provideRouter([]),
-        { provide: CalendarAlertsStore, useValue: { totalPending: () => 2, badgeSeverity: () => 'overdue' } },
+        {
+          provide: CalendarAlertsStore,
+          useValue: { totalPending: () => 2, badgeSeverity: () => 'overdue' },
+        },
         { provide: AdminConflictResolutionStore, useValue: { unresolvedCount: () => 3 } },
-        { provide: ApplicationConfigService, useValue: { config: () => ({ apiBaseUrl: '/api', offlineBackupV1Enabled: true }) } },
+        {
+          provide: ApplicationConfigService,
+          useValue: { config: () => ({ apiBaseUrl: '/api', offlineBackupV1Enabled: true }) },
+        },
         { provide: AuthService, useValue: { currentUser: currentUserState, logout: vi.fn() } },
       ],
     }).compileComponents();
@@ -39,8 +45,10 @@ describe('SidebarComponent integration', () => {
       'Panel',
       'Usuarios',
       'Ganaderos',
+      'Animales',
       'Razas',
       'Notificaciones',
+      'Calendario',
       'Reportes',
     ]);
 

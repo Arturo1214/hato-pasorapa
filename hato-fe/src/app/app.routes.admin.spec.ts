@@ -41,6 +41,7 @@ describe('admin routes', () => {
       'admin/razas',
       'admin/conflictos',
       'admin/notificaciones',
+      'admin/calendario',
       'admin/animales',
       'admin/animales/nuevo',
       'admin/animales/:uuid/editar',
@@ -62,9 +63,7 @@ describe('admin routes', () => {
         title: route.data?.['title'],
         subtitle: route.data?.['subtitle'],
       }))
-      .filter(
-        ({ title, subtitle }) => !isNonEmptyString(title) || !isNonEmptyString(subtitle)
-      );
+      .filter(({ title, subtitle }) => !isNonEmptyString(title) || !isNonEmptyString(subtitle));
 
     expect(routesMissingHeaderMeta).toEqual([]);
   });

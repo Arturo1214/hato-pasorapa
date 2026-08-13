@@ -1,8 +1,11 @@
 package bo.pasorapa.hato.service.dto.sync;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
 import java.util.List;
 import java.util.Map;
 
+@RegisterForReflection
 public record SyncObservabilityResponse(
         String window,
         List<SyncMetricDictionaryEntry> dictionary,
@@ -14,13 +17,16 @@ public record SyncObservabilityResponse(
         LatencySummary latency,
         List<RecentIssue> recentIssues
 ) {
-    public record TopReason(String reason, long count, String source) {
+    @RegisterForReflection
+public record TopReason(String reason, long count, String source) {
     }
 
-    public record ConflictSummary(long open, long resolved, long blockedOperations) {
+    @RegisterForReflection
+public record ConflictSummary(long open, long resolved, long blockedOperations) {
     }
 
-    public record EntityHealth(
+    @RegisterForReflection
+public record EntityHealth(
             String cursorUpdatedAt,
             String lastSuccessAt,
             Long stalenessMs,
@@ -28,14 +34,16 @@ public record SyncObservabilityResponse(
     ) {
     }
 
-    public record LatencySummary(
+    @RegisterForReflection
+public record LatencySummary(
             String latestReceiptAt,
             String oldestIssueAt,
             long staleThresholdMs
     ) {
     }
 
-    public record RecentIssue(
+    @RegisterForReflection
+public record RecentIssue(
             String source,
             String operationId,
             String entityType,

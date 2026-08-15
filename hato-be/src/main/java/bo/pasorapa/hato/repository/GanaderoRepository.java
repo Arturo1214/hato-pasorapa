@@ -27,6 +27,10 @@ public class GanaderoRepository implements PanacheRepositoryBase<Ganadero, UUID>
         return find("active", io.quarkus.panache.common.Sort.by("createdAt").ascending(), active).list();
     }
 
+    public long countByActive(boolean active) {
+        return count("active", active);
+    }
+
     public List<Ganadero> listChangedSince(LocalDateTime cursorUpdatedAt, UUID cursorId, int limitPlusOne) {
         if (cursorUpdatedAt == null) {
             return find("from Ganadero order by updatedAt asc, id asc").page(0, limitPlusOne).list();

@@ -41,7 +41,6 @@ describe('admin routes', () => {
       'admin/razas',
       'admin/conflictos',
       'admin/notificaciones',
-      'admin/calendario',
       'admin/animales',
       'admin/animales/nuevo',
       'admin/animales/:uuid/editar',

@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { ChartsLazyComponent } from './charts-lazy.component';
 
 describe('ChartsLazyComponent', () => {
@@ -20,8 +20,8 @@ describe('ChartsLazyComponent', () => {
   it('should render the bar and doughnut chart containers', () => {
     const canvases = fixture.nativeElement.querySelectorAll('canvas');
 
-    expect(fixture.nativeElement.textContent).toContain('Usuarios por rol');
-    expect(fixture.nativeElement.textContent).toContain('Estado de ganaderos');
+    expect(fixture.nativeElement.textContent).toContain('Administradores y ganaderos registrados');
+    expect(fixture.nativeElement.textContent).toContain('Estado de ganaderos registrados');
     expect(canvases).toHaveLength(2);
   });
 });

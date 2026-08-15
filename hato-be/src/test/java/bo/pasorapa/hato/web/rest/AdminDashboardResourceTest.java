@@ -45,7 +45,9 @@ class AdminDashboardResourceTest {
             userRepository.persist(buildUser("root-admin", Role.ADMIN, UserStatus.ACTIVE, "RootAdmin9"));
             userRepository.persist(buildUser("admin-baja", Role.ADMIN, UserStatus.INACTIVE, "AdminBaja9"));
             userRepository.persist(buildUser("ganadero-activo", Role.GANADERO, UserStatus.ACTIVE, "Ganadero9"));
-            ganaderoRepository.persist(buildGanadero("NIT-DASHBOARD-ACTIVO", "ganadero-activo@hato.bo"));
+            ganaderoRepository.persist(buildGanadero("NIT-DASHBOARD-ACTIVO", "ganadero-activo@hato.bo", true));
+            ganaderoRepository.persist(buildGanadero("NIT-DASHBOARD-BAJA", "ganadero-baja@hato.bo", false));
+            ganaderoRepository.persist(buildGanadero("NIT-DASHBOARD-SIN-USUARIO", "ganadero-sin-usuario@hato.bo", true));
             userRepository.persist(buildUser("ganadero-bloqueado", Role.GANADERO, UserStatus.BLOCKED, "Ganadero8"));
         });
     }
@@ -64,10 +66,10 @@ class AdminDashboardResourceTest {
                 .body("admins.active", equalTo(1))
                 .body("admins.inactive", equalTo(1))
                 .body("admins.blocked", equalTo(0))
-                .body("ganaderos.total", equalTo(2))
-                .body("ganaderos.active", equalTo(1))
-                .body("ganaderos.inactive", equalTo(0))
-                .body("ganaderos.blocked", equalTo(1));
+                .body("ganaderos.total", equalTo(3))
+                .body("ganaderos.active", equalTo(2))
+                .body("ganaderos.inactive", equalTo(1))
+                .body("ganaderos.blocked", equalTo(0));
     }
 
     @Test
@@ -111,13 +113,13 @@ class AdminDashboardResourceTest {
         return user;
     }
 
-    private Ganadero buildGanadero(String businessIdentifier, String email) {
+    private Ganadero buildGanadero(String businessIdentifier, String email, boolean active) {
         Ganadero ganadero = new Ganadero();
         ganadero.setId(UUID.randomUUID());
         ganadero.setBusinessIdentifier(businessIdentifier);
         ganadero.setName(businessIdentifier);
         ganadero.setEmail(email);
-        ganadero.setActive(true);
+        ganadero.setActive(active);
         return ganadero;
     }
 }

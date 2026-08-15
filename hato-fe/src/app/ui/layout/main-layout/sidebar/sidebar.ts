@@ -49,12 +49,6 @@ const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
     description: 'Padrón ganadero con seguimiento administrativo y soporte operativo.',
   },
   {
-    label: 'Animales',
-    icon: 'pets',
-    route: '/admin/animales',
-    description: 'Consulta y actualización del rodeo con foco en la operación diaria.',
-  },
-  {
     label: 'Razas',
     icon: 'cruelty_free',
     route: '/admin/razas',
@@ -65,13 +59,6 @@ const ADMIN_MENU_ITEMS: StaticMenuItem[] = [
     icon: 'notifications',
     route: '/admin/notificaciones',
     description: 'Administrá envíos, creación e historial de notificaciones internas.',
-  },
-  {
-    label: 'Calendario',
-    icon: 'calendar_month',
-    route: '/admin/calendario',
-    description: 'Agenda administrativa de eventos, vencimientos y visitas del rodeo.',
-    badgeKey: 'calendar',
   },
   {
     label: 'Reportes',

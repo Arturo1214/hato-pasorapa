@@ -45,10 +45,8 @@ describe('SidebarComponent integration', () => {
       'Panel',
       'Usuarios',
       'Ganaderos',
-      'Animales',
       'Razas',
       'Notificaciones',
-      'Calendario',
       'Reportes',
     ]);
 

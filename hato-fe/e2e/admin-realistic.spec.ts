@@ -29,41 +29,22 @@ test.describe('admin realistic operations smoke', () => {
     await api.dispose();
 
     const targetGanadero = dataset.at(-1)!;
-    const targetAnimal = targetGanadero.animals.at(-1)!;
 
     await loginViaUi(page);
 
-    await expect(page.getByRole('heading', { name: 'Panel' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Panel', level: 1 })).toBeVisible();
+    await expect(page.getByRole('navigation').getByRole('link', { name: /Animales/ })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByRole('navigation').getByRole('link', { name: /Calendario/ }),
+    ).toHaveCount(0);
 
     await navigateFromSidebar(page, /Ganaderos/);
-    await expect(page.getByRole('heading', { name: 'Ganaderos' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ganaderos', level: 1 })).toBeVisible();
     await filterDataTable(page, 'identificador', targetGanadero.businessIdentifier);
     await expect(page.getByText(targetGanadero.businessIdentifier)).toBeVisible();
     await expect(page.getByText(targetGanadero.name)).toBeVisible();
-
-    await navigateFromSidebar(page, /Animales/);
-    await expect(page.getByRole('heading', { name: 'Animales' })).toBeVisible();
-    await filterDataTable(page, 'animal', targetAnimal.arete);
-    await expect(page.getByText(targetAnimal.arete)).toBeVisible();
-
-    await page.getByRole('button', { name: /Ver ficha/ }).click();
-    await expect(page.getByRole('heading', { name: 'Ficha animal' })).toBeVisible();
-    await expect(page.getByText(targetAnimal.arete)).toBeVisible();
-    await expect(page.getByText(/Genealogía|Madre|Padre/)).toBeVisible();
-
-    await navigateFromSidebar(page, /Calendario/);
-    await expect(page.getByRole('heading', { name: 'Calendario' })).toBeVisible();
-    await expect(page.getByRole('grid', { name: 'Calendario mensual' })).toBeVisible();
-    await page.getByRole('button', { name: 'Agendar visita' }).click();
-    await scheduleSpecificVetVisit(page, targetAnimal.arete, runId);
-
-    await navigateFromSidebar(page, /Animales/);
-    await filterDataTable(page, 'animal', targetAnimal.arete);
-    await page.getByRole('button', { name: /Ver ficha/ }).click();
-    await page.getByRole('tab', { name: 'Salud' }).click();
-    await expect(page.getByText('Visita veterinaria')).toBeVisible();
-    await page.getByRole('button', { name: 'Detalles' }).first().click();
-    await expect(page.getByRole('dialog').getByText(`Control e2e ${runId}`)).toBeVisible();
   });
 });
 
@@ -334,31 +315,13 @@ async function pushSyncOperation(
 }
 
 async function navigateFromSidebar(page: Page, name: RegExp) {
-  await page.getByRole('link', { name }).click();
+  await page.getByRole('navigation').getByRole('link', { name }).click();
 }
 
 async function filterDataTable(page: Page, columnLabel: string, value: string) {
   await page.getByRole('button', { name: `Filtrar ${columnLabel}` }).click();
   await page.getByRole('textbox', { name: `Filtrar ${columnLabel}` }).fill(value);
   await page.keyboard.press('Escape');
-}
-
-async function scheduleSpecificVetVisit(page: Page, animalArete: string, runId: string) {
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByLabel('Modo').click();
-  await page.getByRole('option', { name: 'Específica' }).click();
-  await page.getByLabel('Animal').fill(animalArete);
-  await page.getByRole('option', { name: new RegExp(animalArete) }).click();
-  await page.getByLabel('Veterinario').fill('Dra. Playwright');
-  await page.getByLabel('Matrícula veterinaria').fill('VET-PW');
-  await page.getByLabel('Motivo').fill(`Control e2e ${runId}`);
-  const pushResponse = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/sync/push') && response.request().method() === 'POST',
-  );
-  await page.getByRole('button', { name: /Agendar|Guardar|Registrar/ }).click();
-  await expect(page.getByRole('dialog')).toBeHidden();
-  expect((await pushResponse).ok()).toBeTruthy();
 }
 
 function authHeaders(token: string, operationId?: string) {

@@ -135,18 +135,6 @@ export const routes: Routes = [
         },
       },
       {
-        path: 'admin/calendario',
-        canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
-        loadComponent: () =>
-          import('./features/admin/calendar/calendar-page.component').then(
-            (m) => m.CalendarPageComponent,
-          ),
-        data: {
-          title: 'Calendario',
-          subtitle: 'Agenda administrativa de eventos, vencimientos y visitas del rodeo.',
-        },
-      },
-      {
         path: 'admin/animales',
         canActivate: [roleGuard([...ADMIN_ONLY_ROLES])],
         loadComponent: () =>

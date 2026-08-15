@@ -15,16 +15,26 @@ ensureChartJsRegistered();
   template: `
     <div class="charts-grid">
       <mat-card appearance="outlined">
-        <h2>Usuarios por rol</h2>
+        <h2>Administradores y ganaderos registrados</h2>
         <div class="chart-frame">
-          <canvas baseChart [data]="rolesChartData()" [options]="chartOptions" [type]="'bar'"></canvas>
+          <canvas
+            baseChart
+            [data]="rolesChartData()"
+            [options]="chartOptions"
+            [type]="'bar'"
+          ></canvas>
         </div>
       </mat-card>
 
       <mat-card appearance="outlined">
-        <h2>Estado de ganaderos</h2>
+        <h2>Estado de ganaderos registrados</h2>
         <div class="chart-frame">
-          <canvas baseChart [data]="ganaderosChartData()" [options]="chartOptions" [type]="'doughnut'"></canvas>
+          <canvas
+            baseChart
+            [data]="ganaderosChartData()"
+            [options]="chartOptions"
+            [type]="'doughnut'"
+          ></canvas>
         </div>
       </mat-card>
     </div>
@@ -53,7 +63,7 @@ export class ChartsLazyComponent {
   };
 
   readonly rolesChartData = computed<ChartConfiguration<'bar'>['data']>(() => ({
-    labels: ['ADMIN', 'GANADERO'],
+    labels: ['Administradores', 'Ganaderos registrados'],
     datasets: [
       {
         data: [this.metrics().admins.total, this.metrics().ganaderos.total],

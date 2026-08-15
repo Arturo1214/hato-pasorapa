@@ -38,7 +38,7 @@ describe('AdminDashboardPageComponent', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Usuarios por rol');
+    expect(fixture.nativeElement.textContent).toContain('Administradores y ganaderos registrados');
     expect(fixture.nativeElement.querySelectorAll('canvas')).toHaveLength(2);
   });
 
@@ -47,6 +47,8 @@ describe('AdminDashboardPageComponent', () => {
       loadMetrics: () => throwError(() => new Error('boom')),
     });
 
-    expect(fixture.nativeElement.textContent).toContain('No pudimos cargar el panel administrativo.');
+    expect(fixture.nativeElement.textContent).toContain(
+      'No pudimos cargar el panel administrativo.',
+    );
   });
 });

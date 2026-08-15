@@ -72,13 +72,11 @@ describe('SidebarComponent', () => {
       'Panel',
       'Usuarios',
       'Ganaderos',
-      'Animales',
       'Razas',
       'Notificaciones',
-      'Calendario',
       'Reportes',
     ]);
-    expect(labels).toHaveLength(8);
+    expect(labels).toHaveLength(6);
   });
 
   it('should expose the role-ordered ganadero sidebar entries', async () => {
